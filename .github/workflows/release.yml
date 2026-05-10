@@ -11,6 +11,8 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     permissions:
       contents: write # Needed to create GitHub Releases
@@ -22,7 +24,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22 # Note: setup-node@v4 may not fully support node 24 if it's very new, 22 is LTS and very safe
+          node-version: 24
           cache: 'npm'
           cache-dependency-path: desktop/package-lock.json
 
