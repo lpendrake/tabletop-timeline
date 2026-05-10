@@ -4,20 +4,17 @@ import * as chokidar from 'chokidar';
 
 export class FileWatcher {
   private watcher: chokidar.FSWatcher | null = null;
-  private readonly targetDir: string;
 
-  constructor(targetDir: string) {
-    this.targetDir = targetDir;
-  }
+  constructor() {}
 
-  public async start(mainWindow: BrowserWindow) {
-    if (this.watcher) return;
+  public async start(targetDir: string, mainWindow: BrowserWindow) {
+    this.stop(); // Ensure old watcher is stopped
 
-    if (!fs.existsSync(this.targetDir)) {
-      fs.mkdirSync(this.targetDir, { recursive: true });
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
     }
 
-    this.watcher = chokidar.watch(this.targetDir, {
+    this.watcher = chokidar.watch(targetDir, {
       ignored: /(^|[/\\])\../,
       persistent: true,
       ignoreInitial: true,
@@ -33,7 +30,7 @@ export class FileWatcher {
         mainWindow.webContents.send('fs:changed', { event: 'unlink', path: filePath }),
       );
 
-    console.log(`[FileWatcher] Started watching ${this.targetDir}`);
+    console.log(`[FileWatcher] Started watching ${targetDir}`);
   }
 
   public stop() {

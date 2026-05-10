@@ -1,18 +1,25 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import pkg from 'electron-updater';
 const { autoUpdater } = pkg;
 import { windowManager } from './windowManager.js';
 import { registerIpcHandlers } from './ipcHandlers.js';
 import { FileWatcher } from './fileWatcher.js';
 
-const TARGET_DIR = 'C:\\Users\\lauri\\Google Drive\\tabletop-timeline';
-const fileWatcher = new FileWatcher(TARGET_DIR);
+const fileWatcher = new FileWatcher();
+registerIpcHandlers();
 
-app.whenReady().then(async () => {
-  registerIpcHandlers();
-
+app.whenReady().then(() => {
   const mainWindow = windowManager.createMainWindow();
-  await fileWatcher.start(mainWindow);
+
+  ipcMain.handle('campaign:open', async (event, campaignPath: string) => {
+    await fileWatcher.start(campaignPath, mainWindow);
+    return true;
+  });
+
+  ipcMain.handle('campaign:close', async () => {
+    fileWatcher.stop();
+    return true;
+  });
 
   // Automatically check for updates silently
   if (app.isPackaged) {

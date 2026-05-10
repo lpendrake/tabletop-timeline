@@ -5,9 +5,10 @@ export type ViewType = 'notes' | 'timeline' | 'relationships';
 interface FooterProps {
   currentView: ViewType;
   onChangeView: (view: ViewType) => void;
+  onBackToCampaigns: () => void;
 }
 
-export function Footer({ currentView, onChangeView }: FooterProps) {
+export function Footer({ currentView, onChangeView, onBackToCampaigns }: FooterProps) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const viewNames: Record<ViewType, string> = {
@@ -107,6 +108,37 @@ export function Footer({ currentView, onChangeView }: FooterProps) {
                 {viewNames[v]}
               </button>
             ))}
+
+            <div style={{ height: '1px', backgroundColor: '#27272a', margin: '4px 8px' }} />
+
+            <button
+              onClick={() => {
+                onBackToCampaigns();
+                setMenuOpen(false);
+              }}
+              style={{
+                background: 'transparent',
+                color: '#71717a',
+                border: 'none',
+                padding: '10px 12px',
+                borderRadius: '4px',
+                textAlign: 'left',
+                cursor: 'pointer',
+                fontWeight: 500,
+                fontSize: '14px',
+                transition: 'all 0.2s',
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.background = '#1f1f22';
+                e.currentTarget.style.color = '#e0e0e0';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.color = '#71717a';
+              }}
+            >
+              ← Back to Campaigns
+            </button>
           </div>
         </>
       )}

@@ -11,4 +11,13 @@ contextBridge.exposeInMainWorld('fsApi', {
     ipcRenderer.on('fs:changed', listener);
     return () => ipcRenderer.removeListener('fs:changed', listener);
   },
+  // Campaign Management
+  selectDirectory: () => ipcRenderer.invoke('dialog:selectDirectory'),
+  getRootDir: () => ipcRenderer.invoke('settings:getRootDir'),
+  setRootDir: (path: string) => ipcRenderer.invoke('settings:setRootDir', path),
+  scanCampaigns: (rootDir: string) => ipcRenderer.invoke('campaign:scan', rootDir),
+  createCampaign: (rootDir: string, name: string, description: string) =>
+    ipcRenderer.invoke('campaign:create', rootDir, name, description),
+  openCampaign: (path: string) => ipcRenderer.invoke('campaign:open', path),
+  closeCampaign: () => ipcRenderer.invoke('campaign:close'),
 });

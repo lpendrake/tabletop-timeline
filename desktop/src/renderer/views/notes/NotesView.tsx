@@ -4,7 +4,8 @@ import { Sidebar } from './Sidebar';
 import { Editor } from '../../components/Editor';
 import { FooterPortal } from '../../components/FooterPortal';
 
-export function NotesView() {
+export function NotesView({ campaignPath }: { campaignPath: string }) {
+  const notesDir = campaignPath.includes('\\') ? `${campaignPath}\\notes` : `${campaignPath}/notes`;
   const {
     files,
     activeFile,
@@ -14,7 +15,7 @@ export function NotesView() {
     handleCreateNew,
     handleAddLine,
     handleDelete,
-  } = useFiles();
+  } = useFiles(notesDir);
 
   const [bgColor, setBgColor] = useState('transparent');
 

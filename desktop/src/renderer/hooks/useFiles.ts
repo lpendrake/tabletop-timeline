@@ -1,14 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 
-const TARGET_DIR = 'C:\\Users\\lauri\\Google Drive\\tabletop-timeline';
-
 export interface FileEntry {
   name: string;
   isDirectory: boolean;
   path: string;
 }
 
-export function useFiles() {
+export function useFiles(targetDir: string) {
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [content, setContent] = useState<string>('');
@@ -16,13 +14,14 @@ export function useFiles() {
 
   const fetchDir = useCallback(async () => {
     try {
-      const dirContents = await window.fsApi.readDir(TARGET_DIR);
+      if (!targetDir) return;
+      const dirContents = await window.fsApi.readDir(targetDir);
       const mdFiles = dirContents.filter((f) => !f.isDirectory && f.name.endsWith('.md'));
       setFiles(mdFiles);
     } catch (error) {
       console.error('Error reading directory:', error);
     }
-  }, []);
+  }, [targetDir]);
 
   const fetchFile = useCallback(async (filePath: string) => {
     setIsLoading(true);
@@ -43,8 +42,8 @@ export function useFiles() {
   }, [fetchDir]);
 
   useEffect(() => {
-    const unsubscribe = window.fsApi.onFileChange(({ event, path }) => {
-      console.log(`File event detected: ${event} on ${path}`);
+    const unsubscribe = window.fsApi.onFileChange(({ event, path: changedPath }) => {
+      console.log(`File event detected: ${event} on ${changedPath}`);
 
       if (event === 'add' || event === 'unlink') {
         fetchDir();
@@ -53,7 +52,7 @@ export function useFiles() {
       if (
         event === 'change' &&
         activeFile &&
-        path.replace(/\\/g, '/') === activeFile.replace(/\\/g, '/')
+        changedPath.replace(/\\/g, '/') === activeFile.replace(/\\/g, '/')
       ) {
         window.fsApi.readFile(activeFile).then((data) => setContent(data || ''));
       }
@@ -61,7 +60,7 @@ export function useFiles() {
       if (
         event === 'unlink' &&
         activeFile &&
-        path.replace(/\\/g, '/') === activeFile.replace(/\\/g, '/')
+        changedPath.replace(/\\/g, '/') === activeFile.replace(/\\/g, '/')
       ) {
         setActiveFile(null);
         setContent('');
@@ -72,8 +71,10 @@ export function useFiles() {
   }, [activeFile, fetchDir]);
 
   const handleCreateNew = async () => {
+    if (!targetDir) return;
     const fileName = `Note-${Date.now()}.md`;
-    const filePath = `${TARGET_DIR}\\${fileName}`;
+    const separator = targetDir.includes('\\') ? '\\' : '/';
+    const filePath = `${targetDir}${separator}${fileName}`;
     await window.fsApi.writeFile(filePath, `# ${fileName}\n\n`);
     setActiveFile(filePath);
     setContent(`# ${fileName}\n\n`);
