@@ -16,7 +16,7 @@ function getSettings() {
   return {};
 }
 
-function saveSettings(settings: Record<string, any>) {
+function saveSettings(settings: Record<string, unknown>) {
   try {
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(settings, null, 2));
   } catch (e) {
