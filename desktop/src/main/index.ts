@@ -1,8 +1,9 @@
 import { app, BrowserWindow } from 'electron';
-import { autoUpdater } from 'electron-updater';
-import { windowManager } from './windowManager';
-import { registerIpcHandlers } from './ipcHandlers';
-import { FileWatcher } from './fileWatcher';
+import pkg from 'electron-updater';
+const { autoUpdater } = pkg;
+import { windowManager } from './windowManager.js';
+import { registerIpcHandlers } from './ipcHandlers.js';
+import { FileWatcher } from './fileWatcher.js';
 
 const TARGET_DIR = "C:\\Users\\lauri\\Google Drive\\tabletop-timeline";
 const fileWatcher = new FileWatcher(TARGET_DIR);

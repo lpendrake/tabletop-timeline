@@ -1,27 +1,31 @@
 import { app, BrowserWindow } from 'electron';
 import * as path from 'path';
+import { fileURLToPath, pathToFileURL } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export class WindowManager {
   private mainWindow: BrowserWindow | null = null;
 
   public createMainWindow(): BrowserWindow {
     this.mainWindow = new BrowserWindow({
-      width: 1000,
-      height: 700,
-      autoHideMenuBar: true,
+      fullscreen: true,
+      autoHideMenuBar: false, // Temporary: show menu so we can open DevTools if it's blank
+      icon: path.join(app.getAppPath(), 'src/assets/images/icon.ico'),
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
-        preload: path.join(__dirname, '../preload/index.js'),
+        preload: path.join(app.getAppPath(), 'dist/preload/index.cjs'),
       },
     });
 
-    const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged;
+    const isDev = !app.isPackaged;
 
     if (isDev) {
       this.mainWindow.loadURL('http://localhost:5173');
     } else {
-      this.mainWindow.loadFile(path.join(__dirname, '../index.html'));
+      this.mainWindow.loadFile(path.join(app.getAppPath(), 'dist/index.html'));
     }
 
     return this.mainWindow;

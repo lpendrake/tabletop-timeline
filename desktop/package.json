@@ -1,6 +1,7 @@
 {
   "name": "last-gasp-desktop",
   "version": "1.0.0",
+  "type": "module",
   "description": "Last Gasp Desktop App",
   "main": "dist/main/index.js",
   "scripts": {
@@ -9,7 +10,8 @@
     "build:renderer": "vite build",
     "build": "npm run build:renderer && npm run build:main",
     "package": "npm run build && electron-builder build -mwl",
-    "package:win": "npm run build && electron-builder build -w"
+    "package:win": "npm run build && electron-builder build -w",
+    "rebuild:win": "taskkill /F /IM \"Last Gasp.exe\" /T /FI \"STATUS eq RUNNING\" & npm run package:win && start \"\" \"release/Last Gasp Setup 1.0.0.exe\""
   },
   "build": {
     "appId": "com.lastgasp.desktop",
@@ -21,13 +23,19 @@
         "repo": "last-gasp"
       }
     ],
+    "icon": "src/assets/images/icon",
     "directories": {
       "output": "release"
     },
     "files": [
       "dist/**/*",
+      "src/assets/images/icon.ico",
+      "src/assets/images/icon.png",
       "package.json"
-    ]
+    ],
+    "win": {
+      "icon": "src/assets/images/icon.ico"
+    }
   },
   "dependencies": {
     "chokidar": "^5.0.0",

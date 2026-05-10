@@ -1,9 +1,9 @@
 import * as fs from 'fs';
 import { BrowserWindow } from 'electron';
-import type * as chokidarType from 'chokidar';
+import * as chokidar from 'chokidar';
 
 export class FileWatcher {
-  private watcher: chokidarType.FSWatcher | null = null;
+  private watcher: chokidar.FSWatcher | null = null;
   private readonly targetDir: string;
 
   constructor(targetDir: string) {
@@ -16,11 +16,6 @@ export class FileWatcher {
     if (!fs.existsSync(this.targetDir)) {
       fs.mkdirSync(this.targetDir, { recursive: true });
     }
-
-    // Bypass TypeScript's ESM transpilation by using Function constructor
-    // This forces the dynamic import to remain untouched in the output JS
-    const loadChokidar = new Function("return import('chokidar')");
-    const chokidar = await loadChokidar();
 
     this.watcher = chokidar.watch(this.targetDir, {
       ignored: /(^|[\/\\])\../,
