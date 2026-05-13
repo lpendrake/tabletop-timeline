@@ -24,6 +24,13 @@
   "build": {
     "appId": "com.lpendrake.tabletop-timeline",
     "productName": "TableTop Timeline",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "lpendrake",
+        "repo": "last-gasp"
+      }
+    ],
     "directories": {
       "output": "release"
     },
