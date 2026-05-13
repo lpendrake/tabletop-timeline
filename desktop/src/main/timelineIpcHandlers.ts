@@ -198,7 +198,15 @@ export function registerTimelineIpcHandlers() {
     if (!fs.existsSync(filePath)) {
       return {
         theme: {},
-        weekdays: { monday: '', tuesday: '', wednesday: '', thursday: '', friday: '', saturday: '', sunday: '' },
+        weekdays: {
+          monday: '',
+          tuesday: '',
+          wednesday: '',
+          thursday: '',
+          friday: '',
+          saturday: '',
+          sunday: '',
+        },
       };
     }
     return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Palette;

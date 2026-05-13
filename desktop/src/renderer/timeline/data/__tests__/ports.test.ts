@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { timelinePort, ConflictError } from '../ports';
-import type { EventListItem, EventWithMtime, Session, State, TagsRegistry, Palette } from '../types';
+import type {
+  EventListItem,
+  EventWithMtime,
+  Session,
+  State,
+  TagsRegistry,
+  Palette,
+} from '../types';
 
 const mockFsApi = {
   timelineListEvents: vi.fn(),
@@ -81,7 +88,13 @@ describe('updateEvent', () => {
   it('throws ConflictError when the file was concurrently modified', async () => {
     mockFsApi.timelineUpdateEvent.mockResolvedValue({ conflict: true });
     await expect(
-      timelinePort.updateEvent(CAMPAIGN, ITEM.filename, { title: 'T', date: '4726-03-01' }, '', MTIME),
+      timelinePort.updateEvent(
+        CAMPAIGN,
+        ITEM.filename,
+        { title: 'T', date: '4726-03-01' },
+        '',
+        MTIME,
+      ),
     ).rejects.toBeInstanceOf(ConflictError);
   });
 });
@@ -89,16 +102,14 @@ describe('updateEvent', () => {
 describe('deleteEvent', () => {
   it('resolves on success', async () => {
     mockFsApi.timelineDeleteEvent.mockResolvedValue({ ok: true });
-    await expect(
-      timelinePort.deleteEvent(CAMPAIGN, ITEM.filename, MTIME),
-    ).resolves.toBeUndefined();
+    await expect(timelinePort.deleteEvent(CAMPAIGN, ITEM.filename, MTIME)).resolves.toBeUndefined();
   });
 
   it('throws ConflictError when the file was concurrently modified', async () => {
     mockFsApi.timelineDeleteEvent.mockResolvedValue({ conflict: true });
-    await expect(
-      timelinePort.deleteEvent(CAMPAIGN, ITEM.filename, MTIME),
-    ).rejects.toBeInstanceOf(ConflictError);
+    await expect(timelinePort.deleteEvent(CAMPAIGN, ITEM.filename, MTIME)).rejects.toBeInstanceOf(
+      ConflictError,
+    );
   });
 });
 
@@ -130,7 +141,11 @@ describe('putSessions', () => {
 
 describe('getState', () => {
   it('delegates to fsApi', async () => {
-    const state: State = { in_game_now: '4726-03-01T00:00:00', current_session: null, campaign_start: '4726-01-01' };
+    const state: State = {
+      in_game_now: '4726-03-01T00:00:00',
+      current_session: null,
+      campaign_start: '4726-01-01',
+    };
     mockFsApi.timelineGetState.mockResolvedValue(state);
     expect(await timelinePort.getState(CAMPAIGN)).toEqual(state);
   });
@@ -139,7 +154,11 @@ describe('getState', () => {
 describe('putState', () => {
   it('delegates to fsApi', async () => {
     mockFsApi.timelinePutState.mockResolvedValue({ ok: true });
-    const state: State = { in_game_now: '4726-03-01', current_session: null, campaign_start: '4726-01-01' };
+    const state: State = {
+      in_game_now: '4726-03-01',
+      current_session: null,
+      campaign_start: '4726-01-01',
+    };
     await timelinePort.putState(CAMPAIGN, state);
     expect(mockFsApi.timelinePutState).toHaveBeenCalledWith(CAMPAIGN, state);
   });
@@ -157,7 +176,15 @@ describe('loadPalette', () => {
   it('delegates to fsApi', async () => {
     const palette: Palette = {
       theme: { background: '#1a1a1a' },
-      weekdays: { monday: '#8da8c4', tuesday: '#a07850', wednesday: '#d4a850', thursday: '#5a8090', friday: '#c06040', saturday: '#7560a0', sunday: '#e5b860' },
+      weekdays: {
+        monday: '#8da8c4',
+        tuesday: '#a07850',
+        wednesday: '#d4a850',
+        thursday: '#5a8090',
+        friday: '#c06040',
+        saturday: '#7560a0',
+        sunday: '#e5b860',
+      },
     };
     mockFsApi.timelineLoadPalette.mockResolvedValue(palette);
     expect(await timelinePort.loadPalette(CAMPAIGN)).toEqual(palette);

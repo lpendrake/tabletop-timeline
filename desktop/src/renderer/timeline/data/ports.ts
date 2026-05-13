@@ -16,9 +16,7 @@ export class ConflictError extends Error {
   }
 }
 
-function assertNotConflict<T>(
-  result: T | ConflictResult,
-): asserts result is T {
+function assertNotConflict<T>(result: T | ConflictResult): asserts result is T {
   if (result !== null && typeof result === 'object' && 'conflict' in result) {
     throw new ConflictError();
   }
