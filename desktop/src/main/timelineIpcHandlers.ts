@@ -17,6 +17,11 @@ import type {
 
 const SAFE_FILENAME_RE = /^[A-Za-z0-9._-]+\.md$/;
 
+function dateToIso(val: unknown): string {
+  if (val instanceof Date) return val.toISOString();
+  return String(val ?? '');
+}
+
 function assertSafeFilename(dir: string, filename: string): void {
   if (!SAFE_FILENAME_RE.test(filename)) {
     throw new Error(`Unsafe event filename: ${filename}`);
@@ -50,7 +55,7 @@ function parseEventFile(
   const event: Event = {
     filename,
     title: String(data.title ?? ''),
-    date: String(data.date ?? ''),
+    date: dateToIso(data.date),
     tags: Array.isArray(data.tags) ? data.tags : [],
     ...(data.color !== undefined ? { color: String(data.color) } : {}),
     ...(data.status !== undefined ? { status: data.status as Event['status'] } : {}),
@@ -74,7 +79,7 @@ export function registerTimelineIpcHandlers() {
         return {
           filename,
           title: String(data.title ?? ''),
-          date: String(data.date ?? ''),
+          date: dateToIso(data.date),
           tags: Array.isArray(data.tags) ? data.tags : [],
           ...(data.color !== undefined ? { color: String(data.color) } : {}),
           ...(data.status !== undefined ? { status: data.status as EventListItem['status'] } : {}),
