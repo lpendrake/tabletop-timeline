@@ -3,7 +3,6 @@ import { listEvents, getEvent, deleteEvent, updateEvent } from '../data/http/eve
 import { getState, putState, getTags, getSessions, putSessions } from '../data/http/state.http.ts';
 import { ApiError } from '../data/http/client.ts';
 import { parseISOString, toAbsoluteSeconds, fromAbsoluteSeconds, toISOString } from '../calendar/golarian.ts';
-import { formatNowMarker } from '../calendar/format.ts';
 import { openAdvanceTimePopover } from '../panels/toolbar.ts';
 import {
   type ViewState, type ViewportSize,
@@ -16,6 +15,7 @@ import { createSessionMode } from './interactions/session-mode.ts';
 import { createSessionTooltip } from './interactions/session-tooltip.ts';
 import { renderAxis } from './render/axis.ts';
 import { layoutCards, renderCards, type CardExpansion } from './render/cards.ts';
+import { renderNowMarker } from './render/now-marker.ts';
 import {
   computeSessionBandsFromSessions,
   renderSessionRail,
@@ -125,38 +125,7 @@ export async function createTimelineApp(): Promise<TimelineApp> {
     cardsLayer.classList.toggle('is-session-mode', appState.sessionMode);
     container.classList.toggle('is-session-mode', appState.sessionMode);
 
-    const existing = container.querySelector('.now-marker');
-    if (existing) existing.remove();
-    const nowX = (appState.inGameNowSeconds - appState.view.centerSeconds) / appState.view.secondsPerPixel + size.width / 2;
-    if (nowX >= 0 && nowX <= size.width) {
-      const axisY = Math.floor(size.height * 0.8);
-      const nowDate = parseISOString(appState.inGameNow);
-      const [dayMonth, year, time] = formatNowMarker(nowDate);
-      const marker = document.createElement('div');
-      marker.className = 'now-marker';
-      marker.style.left = `${nowX}px`;
-      const labels = document.createElement('div');
-      labels.className = 'now-marker-labels';
-      labels.style.top = `${axisY + 66}px`;
-      labels.innerHTML = `
-        <div class="now-marker-date">${dayMonth}</div>
-        <div class="now-marker-year">${year}</div>
-        ${time ? `<div class="now-marker-time">${time}</div>` : ''}
-      `;
-      labels.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        openAdvanceTimePopover(labels as unknown as HTMLButtonElement, appState.inGameNow, async (newNow) => {
-          const newState: State = { ...appState.state, in_game_now: newNow };
-          await putState(newState);
-          appState.state = newState;
-          appState.inGameNow = newNow;
-          appState.inGameNowSeconds = toAbsoluteSeconds(parseISOString(newNow));
-          renderTimeline();
-        });
-      });
-      marker.appendChild(labels);
-      container.appendChild(marker);
-    }
+    renderNowMarker(container, appState.inGameNowSeconds, appState.view, size);
   }
 
   function renderSidebar() {

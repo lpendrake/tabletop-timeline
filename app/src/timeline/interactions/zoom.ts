@@ -60,3 +60,11 @@ export const SECONDS_PER_DAY = 86400;
 
 /** Default: one day takes up ~200px */
 export const DEFAULT_SECONDS_PER_PIXEL = SECONDS_PER_DAY / 200;
+
+/** Fraction of viewport height at which the horizontal axis line sits. */
+export const AXIS_Y_RATIO = 0.8;
+
+/** Returns the y-pixel of the horizontal axis line for the given viewport. */
+export function axisY(size: ViewportSize): number {
+  return Math.floor(size.height * AXIS_Y_RATIO);
+}
