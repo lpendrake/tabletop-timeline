@@ -5,7 +5,7 @@ import {
   toggleOrderedList,
   toggleBlockquote,
   linesInRange,
-} from '../toggleBlock';
+} from '../toggle-block';
 
 // ---- linesInRange --------------------------------------------------------
 

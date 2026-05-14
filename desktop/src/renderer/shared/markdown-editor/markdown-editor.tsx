@@ -25,9 +25,9 @@ import { languages } from '@codemirror/language-data';
 import { lastGaspThemeExtensions } from './theme';
 import { wikiLinks, setKnownIds, type WikiLinkSuggestion } from './extensions/wiki-links';
 import { markdownDecorations } from './extensions/decorations';
-import { imagePaste } from './extensions/image-paste';
+import { imagePaste, type ImagePasteConfig } from './extensions/image-paste';
 import { imageDecorations } from './extensions/image-decorations';
-import { dropLink } from './extensions/dropLink';
+import { dropLink, type DropLinkConfig } from './extensions/drop-link';
 import { formattingKeymap } from './commands';
 
 /**
@@ -40,52 +40,58 @@ export interface SavedEditorInstance {
   modeCompartment: Compartment;
 }
 
-interface NoteEditorProps {
-  content: string;
-  onChange: (content: string) => void;
-  onOpenNote: (id: string) => void;
-  suggestLinks: (query: string) => Promise<WikiLinkSuggestion[]>;
-  isSourceMode?: boolean;
+export interface WikiLinksHostConfig {
+  suggest: (query: string) => Promise<WikiLinkSuggestion[]>;
+  onOpen: (id: string) => void;
   knownIds?: Set<string>;
-  savedInstance?: SavedEditorInstance;
-  onSaveInstance?: (instance: SavedEditorInstance) => void;
-  folder: string;
-  campaignPath: string;
-  /** Optional ref that will be populated with the live EditorView on mount. */
-  viewRef?: React.MutableRefObject<EditorView | null>;
 }
 
-export const NoteEditor: React.FC<NoteEditorProps> = ({
+export interface MarkdownEditorProps {
+  content: string;
+  onChange: (content: string) => void;
+
+  isSourceMode?: boolean;
+
+  savedInstance?: SavedEditorInstance;
+  onSaveInstance?: (instance: SavedEditorInstance) => void;
+
+  /** Imperative handle for toolbars and focus management. */
+  viewRef?: React.MutableRefObject<EditorView | null>;
+
+  /** Enables wiki-link parsing, completion, and click-to-open. Omit to disable. */
+  wikiLinks?: WikiLinksHostConfig;
+
+  /** Enables image paste-to-disk. Omit to drop pasted images silently. */
+  imagePaste?: ImagePasteConfig;
+
+  /** Enables drag-and-drop link insertion. Omit to disable. */
+  dropLink?: DropLinkConfig;
+}
+
+export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   content,
   onChange,
-  onOpenNote,
-  suggestLinks,
   isSourceMode = false,
-  knownIds,
   savedInstance,
   onSaveInstance,
-  folder,
-  campaignPath,
   viewRef,
+  wikiLinks: wikiLinksConfig,
+  imagePaste: imagePasteConfig,
+  dropLink: dropLinkConfig,
 }) => {
   const editorRef = useRef<HTMLDivElement>(null);
   const internalViewRef = useRef<EditorView | null>(null);
 
   // Stable refs so effects/callbacks always call the latest version.
   const onChangeRef = useRef(onChange);
-  const suggestRef = useRef(suggestLinks);
-  const onOpenRef = useRef(onOpenNote);
   const onSaveInstanceRef = useRef(onSaveInstance);
   const isSourceModeRef = useRef(isSourceMode);
+  const wikiLinksRef = useRef(wikiLinksConfig);
   onChangeRef.current = onChange;
-  suggestRef.current = suggestLinks;
-  onOpenRef.current = onOpenNote;
   onSaveInstanceRef.current = onSaveInstance;
   isSourceModeRef.current = isSourceMode;
+  wikiLinksRef.current = wikiLinksConfig;
 
-  // The compartment is paired with the EditorState it belongs to.
-  // When restoring a saved instance the compartment is reused so that
-  // reconfigure() dispatches work on the right state.
   const modeCompartmentRef = useRef<Compartment>(
     savedInstance?.modeCompartment ?? new Compartment(),
   );
@@ -93,14 +99,16 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   /** Extensions that differ between live and source mode. */
   function buildModeExtensions(sourceMode: boolean): Extension[] {
     if (sourceMode) return [];
-    return [
-      markdownDecorations(),
-      imageDecorations(),
-      wikiLinks({
-        suggest: (q) => suggestRef.current(q),
-        onOpen: (id) => onOpenRef.current(id),
-      }),
-    ];
+    const exts: Extension[] = [markdownDecorations(), imageDecorations()];
+    if (wikiLinksRef.current) {
+      exts.push(
+        wikiLinks({
+          suggest: (q) => wikiLinksRef.current!.suggest(q),
+          onOpen: (id) => wikiLinksRef.current!.onOpen(id),
+        }),
+      );
+    }
+    return exts;
   }
 
   // Mount / unmount — runs exactly once per component instance.
@@ -142,14 +150,18 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
           onChangeRef.current(update.state.doc.toString());
         }
       }),
-      imagePaste({ folder, campaignPath }),
-      dropLink({ campaignPath }),
       Prec.high(formattingKeymap),
       compartment.of(buildModeExtensions(isSourceModeRef.current)),
     ];
 
+    if (imagePasteConfig) {
+      baseExtensions.push(imagePaste(imagePasteConfig));
+    }
+    if (dropLinkConfig) {
+      baseExtensions.push(dropLink(dropLinkConfig));
+    }
+
     // Restore a previously saved instance (preserves doc, selection, undo history).
-    // If the mode changed while this tab was backgrounded, reconfigure immediately.
     const initialState = savedInstance
       ? savedInstance.state
       : EditorState.create({ doc: content, extensions: baseExtensions });
@@ -159,8 +171,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     if (viewRef) viewRef.current = view;
 
     if (savedInstance) {
-      // The saved state has the compartment set to whatever mode was active
-      // when the tab was last in the foreground. Sync it to the current mode.
+      // Sync mode in case it changed while this tab was backgrounded.
       view.dispatch({
         effects: compartment.reconfigure(buildModeExtensions(isSourceModeRef.current)),
       });
@@ -173,8 +184,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Mode toggle — reconfigures the compartment in-place. No editor recreation,
-  // no caret jump, no flash. Re-focus so the caret reappears immediately.
+  // Mode toggle — reconfigures the compartment in-place without editor recreation.
   useEffect(() => {
     const view = internalViewRef.current;
     if (!view) return;
@@ -182,7 +192,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
       effects: modeCompartmentRef.current.reconfigure(buildModeExtensions(isSourceMode)),
     });
     view.focus();
-  }, [isSourceMode]);
+  }, [isSourceMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // External content update (e.g. file reloaded from disk).
   useEffect(() => {
@@ -197,10 +207,10 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   // Keep wiki-link completions aware of the current known IDs.
   useEffect(() => {
     const view = internalViewRef.current;
-    if (view && knownIds && !isSourceMode) {
-      view.dispatch({ effects: setKnownIds.of(knownIds) });
+    if (view && wikiLinksConfig?.knownIds && !isSourceMode) {
+      view.dispatch({ effects: setKnownIds.of(wikiLinksConfig.knownIds) });
     }
-  }, [knownIds, isSourceMode]);
+  }, [wikiLinksConfig?.knownIds, isSourceMode]);
 
-  return <div ref={editorRef} className="note-editor-container" />;
+  return <div ref={editorRef} className="markdown-editor-container" />;
 };

@@ -7,7 +7,7 @@
  *   3. Dispatches only the minimal changed range (not a full-doc replacement).
  *   4. Returns true (always handles the event).
  *
- * `formattingKeymap` is an Extension ready to drop into NoteEditor's base
+ * `formattingKeymap` is an Extension ready to drop into MarkdownEditor's base
  * extensions. The FormatToolbar calls the same Command functions directly
  * against a forwarded EditorView ref.
  */
@@ -19,20 +19,20 @@ import {
   toggleItalic,
   toggleCode,
   toggleStrike,
-} from '../domain/markdown/toggleInline';
+} from './domain/markdown/toggle-inline';
 import {
   toggleHeading,
   toggleBulletList,
   toggleOrderedList,
   toggleBlockquote,
-} from '../domain/markdown/toggleBlock';
+} from './domain/markdown/toggle-block';
 import {
   linkTemplate,
   imageTemplate,
   tableTemplate,
   codeBlockTemplate,
-} from '../domain/markdown/insertTemplates';
-import type { TemplateResult } from '../domain/markdown/insertTemplates';
+} from './domain/markdown/insert-templates';
+import type { TemplateResult } from './domain/markdown/insert-templates';
 
 // ---- Helpers -------------------------------------------------------------
 

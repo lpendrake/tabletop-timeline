@@ -1,3 +1,4 @@
+import React from 'react';
 import { type EditorView } from '@codemirror/view';
 import {
   boldCommand,
@@ -11,16 +12,17 @@ import {
   insertLinkCommand,
   insertTableCommand,
   insertCodeBlockCommand,
-} from '../editor/commands';
+} from './commands';
 
-interface FormatToolbarProps {
+export interface FormatToolbarProps {
   viewRef: React.MutableRefObject<EditorView | null>;
-  /** Only render formatting buttons when an editable note is active. */
+  /** Only render formatting buttons when an editable surface is active. */
   isEditable: boolean;
-  renderMode: 'live' | 'source';
-  onToggleMode: () => void;
-  metaOpen: boolean;
-  onToggleMeta: () => void;
+  /**
+   * Host-supplied content rendered in the right slot of the toolbar footer.
+   * Use this to inject surface-specific controls (e.g. mode toggle, meta panel button).
+   */
+  footerSlot?: React.ReactNode;
 }
 
 function run(viewRef: React.MutableRefObject<EditorView | null>, cmd: (v: EditorView) => boolean) {
@@ -31,17 +33,10 @@ function run(viewRef: React.MutableRefObject<EditorView | null>, cmd: (v: Editor
   }
 }
 
-export function FormatToolbar({
-  viewRef,
-  isEditable,
-  renderMode,
-  onToggleMode,
-  metaOpen,
-  onToggleMeta,
-}: FormatToolbarProps) {
+export function FormatToolbar({ viewRef, isEditable, footerSlot }: FormatToolbarProps) {
   return (
     <div className="format-toolbar">
-      {/* Centre: formatting groups — only shown for editable notes */}
+      {/* Centre: formatting groups — only shown for editable surfaces */}
       <div className="ftb-centre">
         {isEditable && (
           <>
@@ -146,27 +141,8 @@ export function FormatToolbar({
         )}
       </div>
 
-      {/* Right: meta toggle + live/source toggle */}
-      <div className="ftb-right">
-        {isEditable && (
-          <button
-            className={`ftb-btn${metaOpen ? ' is-active' : ''}`}
-            title="Toggle metadata panel"
-            onClick={onToggleMeta}
-          >
-            Meta
-          </button>
-        )}
-        <div className="view-switcher">
-          <button
-            className={renderMode === 'source' ? 'is-active' : ''}
-            title="Toggle editor mode"
-            onClick={onToggleMode}
-          >
-            {renderMode === 'live' ? 'Live' : 'Source'}
-          </button>
-        </div>
-      </div>
+      {/* Right: host-injected footer controls */}
+      <div className="ftb-right">{footerSlot}</div>
     </div>
   );
 }
