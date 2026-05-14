@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { toggleBold, toggleItalic, toggleCode, toggleStrike, toggleInline } from '../toggleInline';
+import { toggleBold, toggleItalic, toggleCode, toggleStrike, toggleInline } from '../toggle-inline';
 
 // Helper: build a call where [from,to] selects `content` inside `text`
 // by locating the first occurrence of `content` in `text`.

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { linkTemplate, imageTemplate, tableTemplate, codeBlockTemplate } from '../insertTemplates';
+import { linkTemplate, imageTemplate, tableTemplate, codeBlockTemplate } from '../insert-templates';
 
 describe('linkTemplate', () => {
   it('inserts standard markdown link syntax', () => {

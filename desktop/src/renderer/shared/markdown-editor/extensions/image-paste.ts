@@ -1,16 +1,13 @@
 import { EditorView } from '@codemirror/view';
 import type { Extension } from '@codemirror/state';
-import { notesData } from '../../data';
 
 export interface ImagePasteConfig {
-  folder: string;
-  campaignPath: string;
-}
-
-/** Builds the campaign-relative asset path and notes-asset URL for a pasted filename. */
-export function assetLocation(folder: string, filename: string): { relPath: string; url: string } {
-  const relPath = `notes/${folder}/assets/${filename}`;
-  return { relPath, url: `notes-asset://current/${relPath}` };
+  /**
+   * Persist the pasted image and return a markdown image src URL
+   * (e.g. "notes-asset://current/notes/foo/assets/pasted-123.png").
+   * Return null to abort the paste insertion.
+   */
+  onImagePaste: (blob: Blob, mimeType: string) => Promise<string | null>;
 }
 
 /** Extracts the first image item from a DataTransferItemList, or null. */
@@ -34,15 +31,13 @@ export function imagePaste(config: ImagePasteConfig): Extension {
         const blob = imageItem.getAsFile();
         if (!blob) return;
 
-        const ext = imageItem.type.split('/')[1] ?? 'png';
-        const filename = `pasted-${Date.now()}.${ext}`;
-        const { relPath, url } = assetLocation(config.folder, filename);
-        const fullPath = `${config.campaignPath}/${relPath}`;
+        const mimeType = imageItem.type;
+        const url = await config.onImagePaste(blob, mimeType);
+        if (!url) return;
 
-        const buffer = await blob.arrayBuffer();
-        await notesData.saveImage(fullPath, new Uint8Array(buffer));
-
-        const label = filename.replace(/\.[^.]+$/, ''); // strip extension for alt text
+        // Derive alt text from the last path segment of the URL, minus extension
+        const filename = url.split('/').pop() ?? 'image';
+        const label = filename.replace(/\.[^.]+$/, '');
         const markdown = `![${label}](${url})`;
         const { from, to } = view.state.selection.main;
         view.dispatch({

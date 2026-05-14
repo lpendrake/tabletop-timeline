@@ -1,15 +1,14 @@
 import { useMemo, useRef, useState } from 'react';
 import { type EditorView } from '@codemirror/view';
 import { useNotesController } from './hooks/useNotesController';
-import { type SavedEditorInstance } from './editor/note-editor.tsx';
+import { MarkdownEditor, FormatToolbar, type SavedEditorInstance } from '../shared/markdown-editor';
+import { makeImagePasteConfig, makeDropLinkConfig } from './editor-bindings';
 import { QuickAdd } from './components/quick-add.tsx';
 import { NoteContextMenu } from './components/note-context-menu.tsx';
 import { EditorTabs } from './components/editor-tabs.tsx';
 import { BreadcrumbNav } from './components/breadcrumb-nav.tsx';
-import { NoteEditor } from './editor/note-editor.tsx';
 import { FolderSidebar } from './components/folder-sidebar.tsx';
 import { MetaPanel } from './components/meta-panel.tsx';
-import { FormatToolbar } from './components/format-toolbar.tsx';
 import { FooterPortal } from '../components/footer-portal.tsx';
 
 import './styles/index.css';
@@ -39,6 +38,13 @@ export function NotesApp({ campaignId, campaignPath }: NotesAppProps) {
   const activeTabKey = ctrl.activeTab ? `${ctrl.activeTab.folder}/${ctrl.activeTab.path}` : null;
   const isEditableNote =
     ctrl.activeTab?.fileKind !== 'asset' && ctrl.activeTab?.fileKind !== 'unsupported';
+
+  const imagePasteConfig = useMemo(
+    () => (ctrl.activeTab ? makeImagePasteConfig(ctrl.activeTab.folder, campaignPath) : undefined),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ctrl.activeTab?.folder, campaignPath],
+  );
+  const dropLinkConfig = useMemo(() => makeDropLinkConfig(), []);
 
   function handleFrontmatterChange(value: string) {
     if (!ctrl.activeTab) return;
@@ -106,21 +112,23 @@ export function NotesApp({ campaignId, campaignPath }: NotesAppProps) {
             {activeTabKey && ctrl.activeTab?.fileKind === 'unsupported' ? (
               <div className="editor-placeholder">File type not supported</div>
             ) : activeTabKey && ctrl.activeFile && ctrl.activeFile.content !== null ? (
-              <NoteEditor
+              <MarkdownEditor
                 key={activeTabKey}
                 content={ctrl.activeFile.content}
                 onChange={(val) =>
                   ctrl.handleContentChange(ctrl.activeTab!.folder, ctrl.activeTab!.path, val)
                 }
-                onOpenNote={ctrl.handleOpenLink}
-                suggestLinks={ctrl.suggestLinks}
                 isSourceMode={ctrl.renderMode === 'source'}
-                knownIds={knownIds}
                 savedInstance={editorStateCache.current.get(activeTabKey)}
                 onSaveInstance={(inst) => editorStateCache.current.set(activeTabKey, inst)}
-                folder={ctrl.activeTab!.folder}
-                campaignPath={campaignPath}
                 viewRef={editorViewRef}
+                wikiLinks={{
+                  suggest: ctrl.suggestLinks,
+                  onOpen: ctrl.handleOpenLink,
+                  knownIds,
+                }}
+                imagePaste={imagePasteConfig}
+                dropLink={dropLinkConfig}
               />
             ) : ctrl.activeTab ? (
               <div className="editor-placeholder">Loading...</div>
@@ -135,12 +143,30 @@ export function NotesApp({ campaignId, campaignPath }: NotesAppProps) {
         <FormatToolbar
           viewRef={editorViewRef}
           isEditable={!!isEditableNote && !!ctrl.activeTab}
-          renderMode={ctrl.renderMode}
-          onToggleMode={() =>
-            ctrl.handleSetRenderMode(ctrl.renderMode === 'live' ? 'source' : 'live')
+          footerSlot={
+            <>
+              {isEditableNote && (
+                <button
+                  className={`ftb-btn${metaOpen ? ' is-active' : ''}`}
+                  title="Toggle metadata panel"
+                  onClick={() => setMetaOpen((v) => !v)}
+                >
+                  Meta
+                </button>
+              )}
+              <div className="view-switcher">
+                <button
+                  className={ctrl.renderMode === 'source' ? 'is-active' : ''}
+                  title="Toggle editor mode"
+                  onClick={() =>
+                    ctrl.handleSetRenderMode(ctrl.renderMode === 'live' ? 'source' : 'live')
+                  }
+                >
+                  {ctrl.renderMode === 'live' ? 'Live' : 'Source'}
+                </button>
+              </div>
+            </>
           }
-          metaOpen={metaOpen}
-          onToggleMeta={() => setMetaOpen((v) => !v)}
         />
       </FooterPortal>
 
