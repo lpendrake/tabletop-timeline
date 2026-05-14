@@ -38,8 +38,18 @@ const DEFAULT_COLOR = '#6b7c5a';
 
 // Short real-world month names — used for session labels derived from realStart.
 export const MONTHS_SHORT = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
 ];
 
 export function computeSessionBandsFromSessions(
@@ -72,13 +82,7 @@ export function computeSessionLabel(session: Session, allSessions: Session[]): s
   const sameDaySessions = allSessions
     .filter((s) => s.realStart.slice(0, 10) === day)
     .sort((a, b) =>
-      a.inGameStart < b.inGameStart
-        ? -1
-        : a.inGameStart > b.inGameStart
-          ? 1
-          : a.id < b.id
-            ? -1
-            : 1,
+      a.inGameStart < b.inGameStart ? -1 : a.inGameStart > b.inGameStart ? 1 : a.id < b.id ? -1 : 1,
     );
 
   if (sameDaySessions.length <= 1) return base;
@@ -163,7 +167,11 @@ export function computeSessionPills(
     const rightFlat = !!(nextBand && nextBand.startSeconds === band.endSeconds);
 
     const label =
-      pillW > LABEL_MIN_W ? (session ? computeSessionLabel(session, sessions) : band.sessionId) : null;
+      pillW > LABEL_MIN_W
+        ? session
+          ? computeSessionLabel(session, sessions)
+          : band.sessionId
+        : null;
 
     result.push({
       sessionId: band.sessionId,

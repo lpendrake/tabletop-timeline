@@ -57,9 +57,7 @@ interface SessionPillProps {
 
 function SessionPill({ pill, session, onHover }: SessionPillProps): ReactElement {
   const className =
-    'session-pill' +
-    (pill.leftFlat ? ' left-flat' : '') +
-    (pill.rightFlat ? ' right-flat' : '');
+    'session-pill' + (pill.leftFlat ? ' left-flat' : '') + (pill.rightFlat ? ' right-flat' : '');
 
   return (
     <div
@@ -123,22 +121,13 @@ export function SessionBands({
           const session = sessionMap.get(pill.sessionId);
           if (!session) return null;
           return (
-            <SessionPill
-              key={pill.sessionId}
-              pill={pill}
-              session={session}
-              onHover={setTooltip}
-            />
+            <SessionPill key={pill.sessionId} pill={pill} session={session} onHover={setTooltip} />
           );
         })}
       </div>
       {tooltip !== null &&
         createPortal(
-          <SessionTooltip
-            session={tooltip.session}
-            left={tooltip.left}
-            bottom={tooltip.bottom}
-          />,
+          <SessionTooltip session={tooltip.session} left={tooltip.left} bottom={tooltip.bottom} />,
           document.body,
         )}
     </>

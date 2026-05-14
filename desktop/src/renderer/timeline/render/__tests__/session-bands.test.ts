@@ -114,20 +114,44 @@ describe('computeSessionLabel', () => {
   });
 
   it('returns plain base label for the first session on a shared real day', () => {
-    const s1 = makeSession({ id: 's1', realStart: '2024-02-10T19:00:00', inGameStart: '4726-05-04' });
-    const s2 = makeSession({ id: 's2', realStart: '2024-02-10T19:00:00', inGameStart: '4726-05-07' });
+    const s1 = makeSession({
+      id: 's1',
+      realStart: '2024-02-10T19:00:00',
+      inGameStart: '4726-05-04',
+    });
+    const s2 = makeSession({
+      id: 's2',
+      realStart: '2024-02-10T19:00:00',
+      inGameStart: '4726-05-07',
+    });
     expect(computeSessionLabel(s1, [s1, s2])).toBe('Feb 10');
   });
 
   it('appends "(2)" for the second session on the same real day', () => {
-    const s1 = makeSession({ id: 's1', realStart: '2024-02-10T19:00:00', inGameStart: '4726-05-04' });
-    const s2 = makeSession({ id: 's2', realStart: '2024-02-10T19:00:00', inGameStart: '4726-05-07' });
+    const s1 = makeSession({
+      id: 's1',
+      realStart: '2024-02-10T19:00:00',
+      inGameStart: '4726-05-04',
+    });
+    const s2 = makeSession({
+      id: 's2',
+      realStart: '2024-02-10T19:00:00',
+      inGameStart: '4726-05-07',
+    });
     expect(computeSessionLabel(s2, [s1, s2])).toBe('Feb 10 (2)');
   });
 
   it('uses id as tiebreaker when two sessions share the same inGameStart and real day', () => {
-    const s1 = makeSession({ id: 'aaa', realStart: '2024-03-01T19:00:00', inGameStart: '4726-05-04' });
-    const s2 = makeSession({ id: 'zzz', realStart: '2024-03-01T19:00:00', inGameStart: '4726-05-04' });
+    const s1 = makeSession({
+      id: 'aaa',
+      realStart: '2024-03-01T19:00:00',
+      inGameStart: '4726-05-04',
+    });
+    const s2 = makeSession({
+      id: 'zzz',
+      realStart: '2024-03-01T19:00:00',
+      inGameStart: '4726-05-04',
+    });
     expect(computeSessionLabel(s1, [s1, s2])).toBe('Mar 1');
     expect(computeSessionLabel(s2, [s1, s2])).toBe('Mar 1 (2)');
   });
@@ -160,7 +184,12 @@ describe('computeSessionPills', () => {
   });
 
   it('positions pill left edge at secondsToX of session start when unclamped', () => {
-    const s = makeSession({ id: 's1', inGameStart: REF_DATE, inGameEnd: '4726-05-06', color: '#abc' });
+    const s = makeSession({
+      id: 's1',
+      inGameStart: REF_DATE,
+      inGameEnd: '4726-05-06',
+      color: '#abc',
+    });
     const bands = computeSessionBandsFromSessions([s], []);
     const [pill] = computeSessionPills(bands, [s], VIEW, SIZE);
     const expectedStartX = secondsToX(REF_SECS, VIEW, SIZE);
@@ -180,7 +209,9 @@ describe('computeSessionPills', () => {
     const offsetSecs = 200 * VIEW.secondsPerPixel; // 200px worth of seconds
     const sessionStart = REF_SECS - (SIZE.width / 2 + 200) * VIEW.secondsPerPixel;
     const sessionEnd = sessionStart + offsetSecs;
-    const bands = [{ sessionId: 's1', startSeconds: sessionStart, endSeconds: sessionEnd, eventCount: 0 }];
+    const bands = [
+      { sessionId: 's1', startSeconds: sessionStart, endSeconds: sessionEnd, eventCount: 0 },
+    ];
     const s = makeSession({ id: 's1', inGameStart: '', inGameEnd: '', color: '#abc' });
     const [pill] = computeSessionPills(bands, [s], VIEW, SIZE);
     expect(pill.left).toBeCloseTo(-4, 1);
@@ -189,15 +220,29 @@ describe('computeSessionPills', () => {
 
   it('skips pills entirely off-screen to the left', () => {
     const farLeft = toAbsoluteSeconds(parseISOString('4725-05-04'));
-    const bands = [{ sessionId: 's1', startSeconds: farLeft, endSeconds: farLeft + 86400, eventCount: 0 }];
-    const s = makeSession({ id: 's1', color: '#abc', inGameStart: '4725-05-04', inGameEnd: '4725-05-05' });
+    const bands = [
+      { sessionId: 's1', startSeconds: farLeft, endSeconds: farLeft + 86400, eventCount: 0 },
+    ];
+    const s = makeSession({
+      id: 's1',
+      color: '#abc',
+      inGameStart: '4725-05-04',
+      inGameEnd: '4725-05-05',
+    });
     expect(computeSessionPills(bands, [s], VIEW, SIZE)).toHaveLength(0);
   });
 
   it('skips pills entirely off-screen to the right', () => {
     const farRight = toAbsoluteSeconds(parseISOString('4727-05-04'));
-    const bands = [{ sessionId: 's1', startSeconds: farRight, endSeconds: farRight + 86400, eventCount: 0 }];
-    const s = makeSession({ id: 's1', color: '#abc', inGameStart: '4727-05-04', inGameEnd: '4727-05-05' });
+    const bands = [
+      { sessionId: 's1', startSeconds: farRight, endSeconds: farRight + 86400, eventCount: 0 },
+    ];
+    const s = makeSession({
+      id: 's1',
+      color: '#abc',
+      inGameStart: '4727-05-04',
+      inGameEnd: '4727-05-05',
+    });
     expect(computeSessionPills(bands, [s], VIEW, SIZE)).toHaveLength(0);
   });
 
@@ -230,7 +275,12 @@ describe('computeSessionPills', () => {
 
   it('shows label when pill is wide enough (> 60px)', () => {
     const wideView: ViewState = { centerSeconds: REF_SECS, secondsPerPixel: 86400 / 200 };
-    const s = makeSession({ id: 's1', inGameStart: REF_DATE, inGameEnd: '4726-05-10', realStart: '2024-01-15T19:00:00' });
+    const s = makeSession({
+      id: 's1',
+      inGameStart: REF_DATE,
+      inGameEnd: '4726-05-10',
+      realStart: '2024-01-15T19:00:00',
+    });
     const bands = computeSessionBandsFromSessions([s], []);
     const [pill] = computeSessionPills(bands, [s], wideView, SIZE);
     expect(pill.label).not.toBeNull();
@@ -266,7 +316,12 @@ describe('computeSessionPills', () => {
   });
 
   it('uses the session color from the sessions array over the band color', () => {
-    const s = makeSession({ id: 's1', color: '#deadbe', inGameStart: REF_DATE, inGameEnd: '4726-05-06' });
+    const s = makeSession({
+      id: 's1',
+      color: '#deadbe',
+      inGameStart: REF_DATE,
+      inGameEnd: '4726-05-06',
+    });
     const bands = computeSessionBandsFromSessions([s], []);
     bands[0].color = '#000000'; // mutate band color — should not win
     const [pill] = computeSessionPills(bands, [s], VIEW, SIZE);
