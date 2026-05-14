@@ -8,9 +8,10 @@ import {
   daysInMonth,
   monthName,
   fromAbsoluteSeconds,
-} from '../math/golarian';
-import { formatAxisDayTick, formatAxisHour } from '../math/format';
+} from '../calendar/golarian';
+import { formatAxisDayTick, formatAxisHour } from '../calendar/format';
 import type { Palette } from '../data/types';
+import { paletteToCssVars } from '../palette';
 
 export interface TimeTier {
   readonly id: 'midday' | 'hour' | 'half' | 'quarter' | 'minute';
@@ -102,6 +103,7 @@ export function Axis({ view, size, palette }: AxisProps): ReactElement | null {
     if (leftDayX < 0) {
       const date = fromAbsoluteDays(leftDay);
       pinnedDay = (
+        // +17px: clears the axis-tick-mark height (21px) minus the tick offset (-4px)
         <div className="axis-day-pin" style={{ left: 8, top: axisY + 17 }}>
           {formatAxisDayTick(date, 'full')}
         </div>
@@ -196,15 +198,8 @@ export function Axis({ view, size, palette }: AxisProps): ReactElement | null {
     }
   }
 
-  // Scope palette colors as CSS variables so axis.css classes resolve correctly.
-  const cssVars = {
-    '--theme-border-strong':  palette.theme['border-strong']  ?? '#5a4530',
-    '--theme-text-secondary': palette.theme['text-secondary'] ?? '#a89a80',
-    '--theme-text-muted':     palette.theme['text-muted']     ?? '#7a6f58',
-  } as React.CSSProperties;
-
   return (
-    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', ...cssVars }}>
+    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', ...paletteToCssVars(palette) }}>
       {/* Month bands behind everything else */}
       {monthBands}
       <div className="axis-line" style={{ top: axisY }} />

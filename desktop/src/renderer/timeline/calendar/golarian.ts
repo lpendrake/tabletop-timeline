@@ -62,8 +62,7 @@ export function monthName(month: number): string {
 export function toAbsoluteDays(date: Pick<GolarianDate, 'year' | 'month' | 'day'>): number {
   let days = 0;
 
-  // Complete years
-  // For large year ranges, compute using 400-year cycles for efficiency.
+  // Complete years — use 400-year cycles for efficiency.
   const y = date.year;
   const fullCycles = Math.floor(y / 400);
   days += fullCycles * 146097; // 400 years = 97 leaps = 400*365 + 97
@@ -112,6 +111,59 @@ export function weekday(date: Pick<GolarianDate, 'year' | 'month' | 'day'>): Wee
   return WEEKDAYS[(ANCHOR_WEEKDAY_INDEX + mod) % 7];
 }
 
+export function weekdayIndex(date: Pick<GolarianDate, 'year' | 'month' | 'day'>): number {
+  return WEEKDAYS.indexOf(weekday(date));
+}
+
+export function validateDate(date: Pick<GolarianDate, 'year' | 'month' | 'day'>): void {
+  if (date.month < 1 || date.month > 12) {
+    throw new RangeError(`Invalid month: ${date.month}`);
+  }
+  const maxDay = daysInMonth(date.year, date.month);
+  if (date.day < 1 || date.day > maxDay) {
+    throw new RangeError(`Invalid day ${date.day} for ${monthName(date.month)} ${date.year} (max ${maxDay})`);
+  }
+}
+
+/**
+ * Parse ISO-style string: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS (with optional MM:SS).
+ */
+export function parseISOString(s: string): GolarianDate {
+  const match = s.match(
+    /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2})(?::(\d{2})(?::(\d{2}))?)?)?$/
+  );
+  if (!match) throw new SyntaxError(`Cannot parse date: "${s}"`);
+
+  const date: GolarianDate = {
+    year:   parseInt(match[1], 10),
+    month:  parseInt(match[2], 10),
+    day:    parseInt(match[3], 10),
+    hour:   match[4] ? parseInt(match[4], 10) : 0,
+    minute: match[5] ? parseInt(match[5], 10) : 0,
+    second: match[6] ? parseInt(match[6], 10) : 0,
+  };
+
+  validateDate(date);
+  return date;
+}
+
+export function toISOString(date: GolarianDate): string {
+  const y = String(date.year).padStart(4, '0');
+  const m = String(date.month).padStart(2, '0');
+  const d = String(date.day).padStart(2, '0');
+  if (date.hour === 0 && date.minute === 0 && date.second === 0) {
+    return `${y}-${m}-${d}`;
+  }
+  const hh = String(date.hour).padStart(2, '0');
+  const mm = String(date.minute).padStart(2, '0');
+  const ss = String(date.second).padStart(2, '0');
+  return `${y}-${m}-${d}T${hh}:${mm}:${ss}`;
+}
+
+export function toAbsoluteSeconds(date: GolarianDate): number {
+  return toAbsoluteDays(date) * 86400 + date.hour * 3600 + date.minute * 60 + date.second;
+}
+
 export function fromAbsoluteSeconds(totalSeconds: number): GolarianDate {
   const days = Math.floor(totalSeconds / 86400);
   const rem = totalSeconds % 86400;
@@ -122,4 +174,9 @@ export function fromAbsoluteSeconds(totalSeconds: number): GolarianDate {
     minute: Math.floor((rem % 3600) / 60),
     second: rem % 60,
   };
+}
+
+/** Whether the date string includes a time component (for all-day vs point event rendering). */
+export function hasTime(isoString: string): boolean {
+  return isoString.includes('T');
 }
