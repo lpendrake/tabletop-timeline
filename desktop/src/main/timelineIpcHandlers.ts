@@ -2,6 +2,7 @@ import { ipcMain, shell } from 'electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import matter from 'gray-matter';
+import yaml from 'js-yaml';
 
 import type {
   Event,
@@ -17,10 +18,16 @@ import type {
 
 const SAFE_FILENAME_RE = /^[A-Za-z0-9._-]+\.md$/;
 
-function dateToIso(val: unknown): string {
-  if (val instanceof Date) return val.toISOString();
-  return String(val ?? '');
-}
+// Prevent js-yaml from auto-casting YAML date fields to JS Date objects.
+// CORE_SCHEMA covers only null/bool/int/float — no !!timestamp type.
+const MATTER_OPTS = {
+  engines: {
+    yaml: {
+      parse: (s: string) => yaml.load(s, { schema: yaml.CORE_SCHEMA }) as Record<string, unknown>,
+      stringify: (o: object) => yaml.dump(o, { schema: yaml.CORE_SCHEMA }),
+    },
+  },
+} as const;
 
 function assertSafeFilename(dir: string, filename: string): void {
   if (!SAFE_FILENAME_RE.test(filename)) {
@@ -50,12 +57,12 @@ function parseEventFile(
   filename: string,
 ): { event: Event; lastModified: string } {
   const raw = fs.readFileSync(filePath, 'utf-8');
-  const { data, content: body } = matter(raw);
+  const { data, content: body } = matter(raw, MATTER_OPTS);
   const lastModified = fileMtime(filePath);
   const event: Event = {
     filename,
     title: String(data.title ?? ''),
-    date: dateToIso(data.date),
+    date: String(data.date ?? ''),
     tags: Array.isArray(data.tags) ? data.tags : [],
     ...(data.color !== undefined ? { color: String(data.color) } : {}),
     ...(data.status !== undefined ? { status: data.status as Event['status'] } : {}),
@@ -75,11 +82,11 @@ export function registerTimelineIpcHandlers() {
       .map((filename) => {
         const filePath = path.join(dir, filename);
         const raw = fs.readFileSync(filePath, 'utf-8');
-        const { data } = matter(raw);
+        const { data } = matter(raw, MATTER_OPTS);
         return {
           filename,
           title: String(data.title ?? ''),
-          date: dateToIso(data.date),
+          date: String(data.date ?? ''),
           tags: Array.isArray(data.tags) ? data.tags : [],
           ...(data.color !== undefined ? { color: String(data.color) } : {}),
           ...(data.status !== undefined ? { status: data.status as EventListItem['status'] } : {}),
