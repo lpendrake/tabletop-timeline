@@ -68,16 +68,8 @@ export function TimelineView({ campaignPath }: TimelineViewProps) {
   }, [campaignPath]);
 
   const bgColor = loadedData.palette?.theme.background ?? '#09090b';
-  const inGameNowSeconds = loadedData.gameState?.in_game_now
-    ? toAbsoluteSeconds(parseISOString(loadedData.gameState.in_game_now))
-    : Infinity;
-  // TEMP debug for issue #82 — remove before merge.
-  console.log('[TimelineView]', {
-    palette: loadedData.palette ? 'loaded' : 'null',
-    gameState: loadedData.gameState,
-    inGameNowSeconds,
-    viewportSize,
-  });
+  const inGameNow = loadedData.gameState?.in_game_now || null;
+  const inGameNowSeconds = inGameNow ? toAbsoluteSeconds(parseISOString(inGameNow)) : Infinity;
 
   return (
     <div
@@ -110,11 +102,11 @@ export function TimelineView({ campaignPath }: TimelineViewProps) {
           inGameNowSeconds={inGameNowSeconds}
         />
       )}
-      {loadedData.palette && loadedData.gameState && (
+      {loadedData.palette && inGameNow && (
         <NowMarker
           view={viewState}
           size={viewportSize}
-          inGameNow={loadedData.gameState.in_game_now}
+          inGameNow={inGameNow}
           inGameNowSeconds={inGameNowSeconds}
         />
       )}
