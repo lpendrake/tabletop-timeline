@@ -12,6 +12,8 @@ import { Axis } from '../../timeline/render/axis';
 import { Cards } from '../../timeline/render/cards.tsx';
 import { NowMarker } from '../../timeline/render/now-marker';
 import { SessionBands } from '../../timeline/render/session-bands.tsx';
+import { usePan } from '../../timeline/interactions/usePan';
+import { useZoom } from '../../timeline/interactions/useZoom';
 
 interface TimelineViewProps {
   campaignPath: string;
@@ -25,7 +27,7 @@ interface LoadedData {
 }
 
 export function TimelineView({ campaignPath }: TimelineViewProps) {
-  const [viewState] = useState<ViewState>({
+  const [viewState, setViewState] = useState<ViewState>({
     centerSeconds: 0,
     secondsPerPixel: DEFAULT_SECONDS_PER_PIXEL,
   });
@@ -38,6 +40,15 @@ export function TimelineView({ campaignPath }: TimelineViewProps) {
   });
 
   const viewportRef = useRef<HTMLDivElement>(null);
+
+  // Keep refs in sync so event-handler closures always see the latest state.
+  const viewRef = useRef<ViewState>(viewState);
+  const sizeRef = useRef<ViewportSize>(viewportSize);
+  viewRef.current = viewState;
+  sizeRef.current = viewportSize;
+
+  usePan(viewportRef, viewRef, setViewState);
+  useZoom(viewportRef, viewRef, sizeRef, setViewState);
 
   useEffect(() => {
     const el = viewportRef.current;
@@ -86,6 +97,7 @@ export function TimelineView({ campaignPath }: TimelineViewProps) {
         height: '100%',
         backgroundColor: bgColor,
         overflow: 'hidden',
+        cursor: 'grab',
         ...(loadedData.palette ? paletteToCssVars(loadedData.palette) : {}),
       }}
     >
