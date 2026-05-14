@@ -1,4 +1,5 @@
-import { EditorView, type Extension } from '@codemirror/view';
+import { EditorView } from '@codemirror/view';
+import type { Extension } from '@codemirror/state';
 
 export interface DropInsert {
   /** Markdown text to insert at the drop point. */
