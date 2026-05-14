@@ -26,11 +26,11 @@ export interface TimeTier {
 }
 
 export const ALL_TIERS: readonly TimeTier[] = [
-  { id: 'midday',  stepSecs: 43200, markMinPPD:    80, markHeight: 12, labelMinPPD:    120 },
-  { id: 'hour',    stepSecs:  3600, markMinPPD:   800, markHeight:  8, labelMinPPD:   1500 },
-  { id: 'half',    stepSecs:  1800, markMinPPD:  1600, markHeight:  5, labelMinPPD:   3000 },
-  { id: 'quarter', stepSecs:   900, markMinPPD:  3200, markHeight:  3, labelMinPPD:   6000 },
-  { id: 'minute',  stepSecs:    60, markMinPPD: 40000, markHeight:  2, labelMinPPD: 100000 },
+  { id: 'midday', stepSecs: 43200, markMinPPD: 80, markHeight: 12, labelMinPPD: 120 },
+  { id: 'hour', stepSecs: 3600, markMinPPD: 800, markHeight: 8, labelMinPPD: 1500 },
+  { id: 'half', stepSecs: 1800, markMinPPD: 1600, markHeight: 5, labelMinPPD: 3000 },
+  { id: 'quarter', stepSecs: 900, markMinPPD: 3200, markHeight: 3, labelMinPPD: 6000 },
+  { id: 'minute', stepSecs: 60, markMinPPD: 40000, markHeight: 2, labelMinPPD: 100000 },
 ];
 
 /** Choose day-tick spacing that keeps labels readable at the current zoom level. */
@@ -131,7 +131,10 @@ export function Axis({ view, size, palette }: AxisProps): ReactElement | null {
     const bandEndX = secondsToX(monthEndDay * SECONDS_PER_DAY, view, size);
 
     if (bandStartX > size.width) break;
-    if (bandEndX < 0) { monthStartDay = monthEndDay; continue; }
+    if (bandEndX < 0) {
+      monthStartDay = monthEndDay;
+      continue;
+    }
 
     const clampedStart = Math.max(0, bandStartX);
     const clampedEnd = Math.min(size.width, bandEndX);
@@ -140,7 +143,12 @@ export function Axis({ view, size, palette }: AxisProps): ReactElement | null {
       <div
         key={monthStartDay}
         className={`axis-month-band${md.month % 2 === 0 ? ' is-even' : ''}`}
-        style={{ left: clampedStart, width: clampedEnd - clampedStart, top: BAND_TOP, height: BAND_HEIGHT }}
+        style={{
+          left: clampedStart,
+          width: clampedEnd - clampedStart,
+          top: BAND_TOP,
+          height: BAND_HEIGHT,
+        }}
       />,
     );
 
@@ -162,7 +170,7 @@ export function Axis({ view, size, palette }: AxisProps): ReactElement | null {
   }
 
   // ---- Intraday time dividers ----
-  const activeTiers = ALL_TIERS.filter(t => pixelsPerDay >= t.markMinPPD);
+  const activeTiers = ALL_TIERS.filter((t) => pixelsPerDay >= t.markMinPPD);
   const timeTicks: ReactElement[] = [];
 
   if (activeTiers.length > 0) {
@@ -199,7 +207,14 @@ export function Axis({ view, size, palette }: AxisProps): ReactElement | null {
   }
 
   return (
-    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', ...paletteToCssVars(palette) }}>
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        pointerEvents: 'none',
+        ...paletteToCssVars(palette),
+      }}
+    >
       {/* Month bands behind everything else */}
       {monthBands}
       <div className="axis-line" style={{ top: axisY }} />

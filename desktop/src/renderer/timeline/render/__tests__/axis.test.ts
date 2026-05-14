@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { naturalTier, chooseDayStep, ALL_TIERS, type TimeTier } from '../Axis';
 
 function tier(id: TimeTier['id']): TimeTier {
-  const t = ALL_TIERS.find(t => t.id === id);
+  const t = ALL_TIERS.find((t) => t.id === id);
   if (!t) throw new Error(`No tier: ${id}`);
   return t;
 }
@@ -57,7 +57,7 @@ describe('naturalTier', () => {
   });
 
   it('works with a subset of tiers (only midday + hour active)', () => {
-    const active = ALL_TIERS.filter(t => t.id === 'midday' || t.id === 'hour');
+    const active = ALL_TIERS.filter((t) => t.id === 'midday' || t.id === 'hour');
     expect(naturalTier(43200, active)?.id).toBe('midday');
     expect(naturalTier(3600, active)?.id).toBe('hour');
     expect(naturalTier(1800, active)).toBeNull();

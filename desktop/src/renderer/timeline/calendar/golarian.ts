@@ -2,33 +2,39 @@
 
 export interface GolarianDate {
   year: number;
-  month: number;   // 1–12
-  day: number;     // 1–31
-  hour: number;    // 0–23
-  minute: number;  // 0–59
-  second: number;  // 0–59
+  month: number; // 1–12
+  day: number; // 1–31
+  hour: number; // 0–23
+  minute: number; // 0–59
+  second: number; // 0–59
 }
 
 export const MONTHS = [
-  { index: 1,  name: 'Abadius',   days: 31 },
-  { index: 2,  name: 'Calistril', days: 28 },
-  { index: 3,  name: 'Pharast',   days: 31 },
-  { index: 4,  name: 'Gozran',    days: 30 },
-  { index: 5,  name: 'Desnus',    days: 31 },
-  { index: 6,  name: 'Sarenith',  days: 30 },
-  { index: 7,  name: 'Erastus',   days: 31 },
-  { index: 8,  name: 'Arodus',    days: 31 },
-  { index: 9,  name: 'Rova',      days: 30 },
-  { index: 10, name: 'Lamashan',  days: 31 },
-  { index: 11, name: 'Neth',      days: 30 },
-  { index: 12, name: 'Kuthona',   days: 31 },
+  { index: 1, name: 'Abadius', days: 31 },
+  { index: 2, name: 'Calistril', days: 28 },
+  { index: 3, name: 'Pharast', days: 31 },
+  { index: 4, name: 'Gozran', days: 30 },
+  { index: 5, name: 'Desnus', days: 31 },
+  { index: 6, name: 'Sarenith', days: 30 },
+  { index: 7, name: 'Erastus', days: 31 },
+  { index: 8, name: 'Arodus', days: 31 },
+  { index: 9, name: 'Rova', days: 30 },
+  { index: 10, name: 'Lamashan', days: 31 },
+  { index: 11, name: 'Neth', days: 30 },
+  { index: 12, name: 'Kuthona', days: 31 },
 ] as const;
 
 export const WEEKDAYS = [
-  'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+  'Sunday',
 ] as const;
 
-export type Weekday = typeof WEEKDAYS[number];
+export type Weekday = (typeof WEEKDAYS)[number];
 
 // Anchor: 4726-05-04 is Wednesday (index 2)
 const ANCHOR_YEAR = 4726;
@@ -37,7 +43,7 @@ const ANCHOR_DAY = 4;
 const ANCHOR_WEEKDAY_INDEX = 2; // Wednesday
 
 export function isLeap(year: number): boolean {
-  return (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
 }
 
 export function daysInMonth(year: number, month: number): number {
@@ -121,7 +127,9 @@ export function validateDate(date: Pick<GolarianDate, 'year' | 'month' | 'day'>)
   }
   const maxDay = daysInMonth(date.year, date.month);
   if (date.day < 1 || date.day > maxDay) {
-    throw new RangeError(`Invalid day ${date.day} for ${monthName(date.month)} ${date.year} (max ${maxDay})`);
+    throw new RangeError(
+      `Invalid day ${date.day} for ${monthName(date.month)} ${date.year} (max ${maxDay})`,
+    );
   }
 }
 
@@ -129,16 +137,14 @@ export function validateDate(date: Pick<GolarianDate, 'year' | 'month' | 'day'>)
  * Parse ISO-style string: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS (with optional MM:SS).
  */
 export function parseISOString(s: string): GolarianDate {
-  const match = s.match(
-    /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2})(?::(\d{2})(?::(\d{2}))?)?)?$/
-  );
+  const match = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2})(?::(\d{2})(?::(\d{2}))?)?)?$/);
   if (!match) throw new SyntaxError(`Cannot parse date: "${s}"`);
 
   const date: GolarianDate = {
-    year:   parseInt(match[1], 10),
-    month:  parseInt(match[2], 10),
-    day:    parseInt(match[3], 10),
-    hour:   match[4] ? parseInt(match[4], 10) : 0,
+    year: parseInt(match[1], 10),
+    month: parseInt(match[2], 10),
+    day: parseInt(match[3], 10),
+    hour: match[4] ? parseInt(match[4], 10) : 0,
     minute: match[5] ? parseInt(match[5], 10) : 0,
     second: match[6] ? parseInt(match[6], 10) : 0,
   };
