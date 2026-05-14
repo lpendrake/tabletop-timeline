@@ -219,37 +219,45 @@ describe('assignRows', () => {
 describe('weekdayColorFromPalette', () => {
   it('returns monday color for a Monday date', () => {
     // 4726-05-02 is a Monday (4726-05-04 is Wednesday, 2 days earlier)
-    expect(weekdayColorFromPalette('4726-05-02', MOCK_PALETTE)).toBe(MOCK_PALETTE.weekdays.monday);
+    expect(weekdayColorFromPalette(parseISOString('4726-05-02'), MOCK_PALETTE)).toBe(
+      MOCK_PALETTE.weekdays.monday,
+    );
   });
 
   it('returns wednesday color for 4726-05-04 (the anchor Wednesday)', () => {
-    expect(weekdayColorFromPalette('4726-05-04', MOCK_PALETTE)).toBe(
+    expect(weekdayColorFromPalette(parseISOString('4726-05-04'), MOCK_PALETTE)).toBe(
       MOCK_PALETTE.weekdays.wednesday,
     );
   });
 
   it('returns thursday color for 4726-05-05', () => {
-    expect(weekdayColorFromPalette('4726-05-05', MOCK_PALETTE)).toBe(
+    expect(weekdayColorFromPalette(parseISOString('4726-05-05'), MOCK_PALETTE)).toBe(
       MOCK_PALETTE.weekdays.thursday,
     );
   });
 
   it('returns friday color for 4726-05-06', () => {
-    expect(weekdayColorFromPalette('4726-05-06', MOCK_PALETTE)).toBe(MOCK_PALETTE.weekdays.friday);
+    expect(weekdayColorFromPalette(parseISOString('4726-05-06'), MOCK_PALETTE)).toBe(
+      MOCK_PALETTE.weekdays.friday,
+    );
   });
 
   it('returns saturday color for 4726-05-07', () => {
-    expect(weekdayColorFromPalette('4726-05-07', MOCK_PALETTE)).toBe(
+    expect(weekdayColorFromPalette(parseISOString('4726-05-07'), MOCK_PALETTE)).toBe(
       MOCK_PALETTE.weekdays.saturday,
     );
   });
 
   it('returns sunday color for 4726-05-08', () => {
-    expect(weekdayColorFromPalette('4726-05-08', MOCK_PALETTE)).toBe(MOCK_PALETTE.weekdays.sunday);
+    expect(weekdayColorFromPalette(parseISOString('4726-05-08'), MOCK_PALETTE)).toBe(
+      MOCK_PALETTE.weekdays.sunday,
+    );
   });
 
   it('returns tuesday color for 4726-05-03', () => {
-    expect(weekdayColorFromPalette('4726-05-03', MOCK_PALETTE)).toBe(MOCK_PALETTE.weekdays.tuesday);
+    expect(weekdayColorFromPalette(parseISOString('4726-05-03'), MOCK_PALETTE)).toBe(
+      MOCK_PALETTE.weekdays.tuesday,
+    );
   });
 });
 

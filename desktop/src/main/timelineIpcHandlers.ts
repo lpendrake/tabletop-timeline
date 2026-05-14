@@ -20,6 +20,10 @@ const SAFE_FILENAME_RE = /^[A-Za-z0-9._-]+\.md$/;
 
 // Prevent js-yaml from auto-casting YAML date fields to JS Date objects.
 // CORE_SCHEMA covers only null/bool/int/float — no !!timestamp type.
+// Without this, Date.UTC(year, ...) maps years 0-99 to 1900-1999, so a
+// Golarian year like 0005 would silently arrive as 1905.
+// parseISOString in golarian.ts also accepts the .sssZ suffix as a secondary
+// guard, but the source of truth is keeping strings as strings here.
 const MATTER_OPTS = {
   engines: {
     yaml: {

@@ -1,14 +1,23 @@
 import type { EventListItem, Palette } from '../data/types';
 import type { ViewState, ViewportSize } from '../math/zoom';
 import { secondsToX } from '../math/zoom';
-import { parseISOString, toAbsoluteSeconds, weekdayIndex } from '../calendar/golarian';
+import {
+  type GolarianDate,
+  parseISOString,
+  toAbsoluteSeconds,
+  weekdayIndex,
+} from '../calendar/golarian';
 
 export const CARD_HEIGHT = 64;
 export const CARD_GAP = 24;
 export const CARD_PADDING_X = 12;
+// Cards beyond this row are hidden rather than stacking off-screen.
+// At typical zoom a day spans ~200px; 8 rows already exceeds viewport height.
+export const MAX_ROWS = 8;
 
 export interface LaidOutCard {
   event: EventListItem;
+  parsedDate: GolarianDate;
   x: number;
   seconds: number;
   isFuture: boolean;
@@ -29,8 +38,7 @@ const WEEKDAY_KEYS: (keyof Palette['weekdays'])[] = [
   'sunday',
 ];
 
-export function weekdayColorFromPalette(isoDate: string, palette: Palette): string {
-  const date = parseISOString(isoDate);
+export function weekdayColorFromPalette(date: GolarianDate, palette: Palette): string {
   const idx = weekdayIndex(date);
   return palette.weekdays[WEEKDAY_KEYS[idx]];
 }
@@ -42,9 +50,11 @@ export function layoutCards(
   inGameNowSeconds: number,
 ): LaidOutCard[] {
   return events.map((ev) => {
-    const seconds = toAbsoluteSeconds(parseISOString(ev.date));
+    const parsedDate = parseISOString(ev.date);
+    const seconds = toAbsoluteSeconds(parsedDate);
     return {
       event: ev,
+      parsedDate,
       seconds,
       x: secondsToX(seconds, view, size),
       isFuture: seconds > inGameNowSeconds,
@@ -58,12 +68,15 @@ export function assignRows(laidOut: LaidOutCard[]): Map<string, CardPlacement> {
   const placements = new Map<string, CardPlacement>();
 
   for (const card of sorted) {
+    // 8px/char is a font-agnostic estimate for 15px/500-weight text. CSS
+    // text-overflow:ellipsis handles the rare case where a title overflows.
     const estWidth = Math.max(120, Math.min(360, card.event.title.length * 8 + CARD_PADDING_X * 2));
     const left = card.x - estWidth / 2;
     const right = card.x + estWidth / 2;
 
+    // O(n²) worst case — acceptable for typical campaign sizes (<200 events).
     let row = 0;
-    while (true) {
+    while (row < MAX_ROWS) {
       if (!rows[row]) rows[row] = [];
       const overlaps = rows[row].some((o) => !(right < o.left || left > o.right));
       if (!overlaps) {
@@ -72,7 +85,9 @@ export function assignRows(laidOut: LaidOutCard[]): Map<string, CardPlacement> {
       }
       row++;
     }
-    placements.set(card.event.filename, { row, width: estWidth });
+    if (row < MAX_ROWS) {
+      placements.set(card.event.filename, { row, width: estWidth });
+    }
   }
 
   return placements;

@@ -7,6 +7,7 @@ import {
   type ViewportSize,
 } from '../../timeline/math/zoom';
 import { parseISOString, toAbsoluteSeconds } from '../../timeline/calendar/golarian';
+import { paletteToCssVars } from '../../timeline/palette';
 import { Axis } from '../../timeline/render/Axis';
 import { Cards } from '../../timeline/render/Cards.tsx';
 
@@ -84,11 +85,10 @@ export function TimelineView({ campaignPath }: TimelineViewProps) {
         height: '100%',
         backgroundColor: bgColor,
         overflow: 'hidden',
+        ...(loadedData.palette ? paletteToCssVars(loadedData.palette) : {}),
       }}
     >
-      {loadedData.palette && (
-        <Axis view={viewState} size={viewportSize} palette={loadedData.palette} />
-      )}
+      {loadedData.palette && <Axis view={viewState} size={viewportSize} />}
       <div
         data-layer="session-layer"
         style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
