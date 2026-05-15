@@ -407,15 +407,15 @@ export function TimelineView({ campaignPath, palette }: TimelineViewProps) {
       {/* Footer buttons — center slot, hidden while event editor is open */}
       {!editor.editorMode && (
         <FooterPortal slot="center">
-          <FooterButton onClick={handleJumpToNow} title="Jump to in-game now">
-            Now
-          </FooterButton>
           <FooterButton
             variant="primary"
             onClick={() => editor.openCreate()}
             title="Create a new event"
           >
             + Event
+          </FooterButton>
+          <FooterButton onClick={handleJumpToNow} title="Jump to in-game now">
+            Now
           </FooterButton>
         </FooterPortal>
       )}
