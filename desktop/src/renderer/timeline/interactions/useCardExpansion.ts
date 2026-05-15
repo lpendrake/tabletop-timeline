@@ -13,7 +13,11 @@ export interface UseCardExpansionResult {
   collapse: () => void;
 }
 
-export function useCardExpansion(campaignPath: string, pan: PanController): UseCardExpansionResult {
+export function useCardExpansion(
+  campaignPath: string,
+  pan: PanController,
+  suppressClick?: () => boolean,
+): UseCardExpansionResult {
   const [expansion, setExpansion] = useState<CardExpansionState | null>(null);
 
   // Ref stays in sync with state, giving async callbacks a non-stale view
@@ -28,7 +32,7 @@ export function useCardExpansion(campaignPath: string, pan: PanController): UseC
 
   const handleCardClick = useCallback(
     (filename: string) => {
-      if (pan.wasMoved()) return;
+      if (pan.wasMoved() || suppressClick?.()) return;
 
       // Toggle off when clicking the already-expanded card (including while loading)
       if (expansionRef.current?.filename === filename) {

@@ -1,0 +1,180 @@
+import {
+  parseISOString,
+  toAbsoluteSeconds,
+  fromAbsoluteSeconds,
+} from '../calendar/golarian';
+import { formatAxisDay, formatAxisHour } from '../calendar/format';
+import { secondsToX, xToSeconds, SECONDS_PER_DAY } from '../math/zoom';
+import type { ViewState, ViewportSize } from '../math/zoom';
+import type { EventListItem } from '../data/types';
+
+const SNAP_SECS = 900;
+
+export interface RescheduleDeps {
+  getView(): ViewState;
+  getSize(): ViewportSize;
+  getEvents(): EventListItem[];
+  getDragLabel(): HTMLElement | null;
+  saveReschedule(filename: string, newSeconds: number): Promise<void>;
+}
+
+interface DragSession {
+  filename: string;
+  cardEl: HTMLElement;
+  connectorEl: HTMLElement | null;
+  dotEl: HTMLElement | null;
+  cardWidth: number;
+  startMouseX: number;
+  originalSecs: number;
+  currentSecs: number;
+}
+
+export interface RescheduleController {
+  destroy(): void;
+  isActive(): boolean;
+  /** True if the most recent gesture entered reschedule mode (suppress click).
+   * Cleared on the next non-reschedule mousedown. */
+  wasActivated(): boolean;
+}
+
+export function createReschedule(
+  container: HTMLElement,
+  deps: RescheduleDeps,
+): RescheduleController {
+  let session: DragSession | null = null;
+  let activated = false;
+
+  function onMouseDown(e: MouseEvent) {
+    if (!e.shiftKey || e.button !== 0) {
+      activated = false;
+      return;
+    }
+
+    const cardEl = (e.target as HTMLElement).closest('.event-card') as HTMLElement | null;
+    if (!cardEl) {
+      activated = false;
+      return;
+    }
+
+    const filename = cardEl.dataset.filename;
+    if (!filename) {
+      activated = false;
+      return;
+    }
+
+    const ev = deps.getEvents().find((ev) => ev.filename === filename);
+    if (!ev) {
+      activated = false;
+      return;
+    }
+
+    const originalSecs = toAbsoluteSeconds(parseISOString(ev.date));
+
+    session = {
+      filename,
+      cardEl,
+      connectorEl: container.querySelector<HTMLElement>(
+        `.event-card-connector[data-filename="${CSS.escape(filename)}"]`,
+      ),
+      dotEl: container.querySelector<HTMLElement>(
+        `.event-card-dot[data-filename="${CSS.escape(filename)}"]`,
+      ),
+      cardWidth: cardEl.offsetWidth,
+      startMouseX: e.clientX,
+      originalSecs,
+      currentSecs: originalSecs,
+    };
+
+    activated = true;
+    cardEl.classList.add('is-ctrl-dragging');
+    container.style.cursor = 'ew-resize';
+  }
+
+  function onMouseMove(e: MouseEvent) {
+    if (!session) return;
+
+    const view = deps.getView();
+    const size = deps.getSize();
+    const axisY = Math.floor(size.height * 0.8);
+
+    const deltaX = e.clientX - session.startMouseX;
+    const originalX = secondsToX(session.originalSecs, view, size);
+    const rawSecs = xToSeconds(originalX + deltaX, view, size);
+    const snapUnit = e.ctrlKey ? SECONDS_PER_DAY : SNAP_SECS;
+    const snappedSecs = Math.round(rawSecs / snapUnit) * snapUnit;
+
+    session.currentSecs = snappedSecs;
+    const snappedX = secondsToX(snappedSecs, view, size);
+
+    session.cardEl.style.left = `${snappedX - session.cardWidth / 2}px`;
+    if (session.connectorEl) session.connectorEl.style.left = `${snappedX}px`;
+    if (session.dotEl) session.dotEl.style.left = `${snappedX}px`;
+
+    const date = fromAbsoluteSeconds(snappedSecs);
+    const labelText = `${formatAxisDay(date)} ${formatAxisHour(date)}`;
+    const label = deps.getDragLabel();
+    if (label) {
+      label.textContent = labelText;
+      label.style.left = `${snappedX}px`;
+      label.style.top = `${axisY + 8}px`;
+      label.style.display = '';
+    }
+  }
+
+  function hideDragLabel() {
+    const label = deps.getDragLabel();
+    if (label) label.style.display = 'none';
+  }
+
+  async function onMouseUp() {
+    if (!session) return;
+    const { filename, originalSecs, currentSecs } = session;
+
+    session.cardEl.classList.remove('is-ctrl-dragging');
+    container.style.cursor = '';
+    session = null;
+    hideDragLabel();
+
+    if (currentSecs !== originalSecs) {
+      try {
+        await deps.saveReschedule(filename, currentSecs);
+      } catch {
+        // saveReschedule handles user-visible error reporting and state refresh
+      }
+    }
+  }
+
+  function onKeyDown(e: KeyboardEvent) {
+    if (e.key !== 'Escape' || !session) return;
+
+    const view = deps.getView();
+    const size = deps.getSize();
+    const originalX = secondsToX(session.originalSecs, view, size);
+
+    session.cardEl.style.left = `${originalX - session.cardWidth / 2}px`;
+    if (session.connectorEl) session.connectorEl.style.left = `${originalX}px`;
+    if (session.dotEl) session.dotEl.style.left = `${originalX}px`;
+
+    session.cardEl.classList.remove('is-ctrl-dragging');
+    container.style.cursor = '';
+    session = null;
+    hideDragLabel();
+    // activated stays true so the upcoming mouseup→click is suppressed
+  }
+
+  container.addEventListener('mousedown', onMouseDown);
+  window.addEventListener('mousemove', onMouseMove);
+  window.addEventListener('mouseup', onMouseUp);
+  window.addEventListener('keydown', onKeyDown);
+
+  return {
+    destroy() {
+      container.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('keydown', onKeyDown);
+    },
+    isActive: () => session !== null,
+    wasActivated: () => activated,
+  };
+}
