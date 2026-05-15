@@ -335,6 +335,7 @@ export function TimelineView({ campaignPath }: TimelineViewProps) {
           mode={editor.editorMode}
           onClose={editor.closeEditor}
           onSaved={editor.handleSaved}
+          onAutosaved={editor.handleAutosaved}
           onDeleted={editor.handleDeleted}
         />
       )}
