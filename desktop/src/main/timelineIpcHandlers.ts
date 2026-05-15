@@ -123,7 +123,11 @@ export function registerTimelineIpcHandlers() {
       const filePath = path.join(dir, filename);
       const currentMtime = fileMtime(filePath);
       if (currentMtime !== ifUnmodifiedSince) return { conflict: true };
-      const content = matter.stringify(body, frontmatter as unknown as Record<string, unknown>);
+      const content = matter.stringify(
+        body,
+        frontmatter as unknown as Record<string, unknown>,
+        MATTER_OPTS,
+      );
       fs.writeFileSync(filePath, content, 'utf-8');
       return parseEventFile(filePath, filename);
     },
@@ -142,7 +146,11 @@ export function registerTimelineIpcHandlers() {
       assertSafeFilename(dir, filename);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       const filePath = path.join(dir, filename);
-      const content = matter.stringify(body, frontmatter as unknown as Record<string, unknown>);
+      const content = matter.stringify(
+        body,
+        frontmatter as unknown as Record<string, unknown>,
+        MATTER_OPTS,
+      );
       // 'wx' flag: fail if the file already exists, preventing silent clobbers.
       fs.writeFileSync(filePath, content, { encoding: 'utf-8', flag: 'wx' });
       return parseEventFile(filePath, filename);

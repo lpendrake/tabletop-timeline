@@ -75,7 +75,7 @@ export function createReschedule(
       dotEl: container.querySelector<HTMLElement>(
         `.event-card-dot[data-filename="${CSS.escape(filename)}"]`,
       ),
-      cardWidth: cardEl.offsetWidth,
+      cardWidth: parseInt(cardEl.style.width, 10),
       startMouseX: e.clientX,
       originalSecs,
       currentSecs: originalSecs,
@@ -84,6 +84,7 @@ export function createReschedule(
     activated = true;
     cardEl.classList.add('is-rescheduling');
     container.style.cursor = 'ew-resize';
+    e.preventDefault(); // suppress text selection during drag
   }
 
   function placeAt(s: DragSession, secs: number) {
@@ -135,14 +136,18 @@ export function createReschedule(
 
   async function onMouseUp() {
     if (!session) return;
-    const { filename, originalSecs, currentSecs } = session;
-    endSession(session);
+    const s = session;
+    const { filename, originalSecs, currentSecs } = s;
+    endSession(s);
 
     if (currentSecs !== originalSecs) {
       try {
         await deps.saveReschedule(filename, currentSecs);
-      } catch {
-        // saveReschedule handles user-visible error reporting and state refresh
+      } catch (err) {
+        // Revert the imperatively-moved DOM nodes — React won't do it because it
+        // compares its own last-set value and sees no change.
+        placeAt(s, originalSecs);
+        console.error('[reschedule] save failed', err);
       }
     }
   }

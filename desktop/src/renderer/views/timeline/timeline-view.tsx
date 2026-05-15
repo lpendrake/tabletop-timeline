@@ -24,6 +24,7 @@ import { usePreviewSize } from '../../timeline/interactions/usePreviewSize';
 import { useReschedule } from '../../timeline/interactions/useReschedule';
 import { useEventEditor } from '../../timeline/event-editor/useEventEditor';
 import { EventEditorModal } from '../../timeline/event-editor/EventEditorModal';
+import { computeSessionLabel } from '../../timeline/render/session-bands';
 
 interface TimelineViewProps {
   campaignPath: string;
@@ -66,6 +67,9 @@ export function TimelineView({ campaignPath }: TimelineViewProps) {
   const eventsRef = useRef<EventListItem[]>(loadedData.events);
   eventsRef.current = loadedData.events;
 
+  const sessionsRef = useRef<Session[]>(loadedData.sessions);
+  sessionsRef.current = loadedData.sessions;
+
   // collapseRef breaks the circular dep: refreshEvents→collapse→useCardExpansion→pan→reschedule
   const collapseRef = useRef<() => void>(() => {});
 
@@ -84,21 +88,36 @@ export function TimelineView({ campaignPath }: TimelineViewProps) {
       try {
         const { event, lastModified } = await timelinePort.getEvent(campaignPath, filename);
         const newDate = toISOString(fromAbsoluteSeconds(newSeconds));
+        const nonSeshTags = (event.tags ?? []).filter((t) => !t.startsWith('sesh:'));
+        const newSeshTags = sessionsRef.current
+          .filter((s) => {
+            if (!s.inGameStart) return false;
+            try {
+              const start = toAbsoluteSeconds(parseISOString(s.inGameStart));
+              const end = s.inGameEnd ? toAbsoluteSeconds(parseISOString(s.inGameEnd)) : start;
+              return newSeconds >= start && newSeconds <= end;
+            } catch {
+              return false;
+            }
+          })
+          .map((s) => `sesh:${computeSessionLabel(s, sessionsRef.current)}`);
+        const updatedTags = [...nonSeshTags, ...newSeshTags];
         await timelinePort.updateEvent(
           campaignPath,
           filename,
           {
             title: event.title,
             date: newDate,
-            tags: event.tags,
-            color: event.color,
-            status: event.status,
+            ...(updatedTags.length > 0 ? { tags: updatedTags } : {}),
+            ...(event.color ? { color: event.color } : {}),
+            ...(event.status ? { status: event.status } : {}),
           },
           event.body,
           lastModified,
         );
         await refreshEvents();
       } catch (err) {
+        console.error('[saveReschedule] failed', err);
         const msg =
           err instanceof ConflictError
             ? `"${filename}" was modified on disk — reschedule reverted.`
@@ -186,6 +205,7 @@ export function TimelineView({ campaignPath }: TimelineViewProps) {
           backgroundColor: bgColor,
           overflow: 'hidden',
           cursor: 'grab',
+          userSelect: 'none',
           ...(loadedData.palette ? paletteToCssVars(loadedData.palette) : {}),
         }}
       >
