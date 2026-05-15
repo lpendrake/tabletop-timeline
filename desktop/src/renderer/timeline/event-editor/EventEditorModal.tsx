@@ -74,7 +74,8 @@ export function EventEditorModal({
         console.error('[EventEditorModal] failed to load event', err);
         setLoadState('load-error');
       });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps — intentional mount-once
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional mount-once: mode and campaignPath are stable per modal instance (key prop ensures remount on target change)
+  }, []);
 
   // Escape: close the modal (capture phase wins over useCardExpansion's handler)
   useEffect(() => {
