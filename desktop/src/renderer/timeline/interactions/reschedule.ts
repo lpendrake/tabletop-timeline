@@ -86,8 +86,28 @@ export function createReschedule(
     };
 
     activated = true;
-    cardEl.classList.add('is-ctrl-dragging');
+    cardEl.classList.add('is-rescheduling');
     container.style.cursor = 'ew-resize';
+  }
+
+  function placeAt(s: DragSession, secs: number) {
+    const x = secondsToX(secs, deps.getView(), deps.getSize());
+    s.cardEl.style.left = `${x - s.cardWidth / 2}px`;
+    if (s.connectorEl) s.connectorEl.style.left = `${x}px`;
+    if (s.dotEl) s.dotEl.style.left = `${x}px`;
+    return x;
+  }
+
+  function hideDragLabel() {
+    const label = deps.getDragLabel();
+    if (label) label.style.display = 'none';
+  }
+
+  function endSession(s: DragSession) {
+    s.cardEl.classList.remove('is-rescheduling');
+    container.style.cursor = '';
+    session = null;
+    hideDragLabel();
   }
 
   function onMouseMove(e: MouseEvent) {
@@ -104,11 +124,7 @@ export function createReschedule(
     const snappedSecs = Math.round(rawSecs / snapUnit) * snapUnit;
 
     session.currentSecs = snappedSecs;
-    const snappedX = secondsToX(snappedSecs, view, size);
-
-    session.cardEl.style.left = `${snappedX - session.cardWidth / 2}px`;
-    if (session.connectorEl) session.connectorEl.style.left = `${snappedX}px`;
-    if (session.dotEl) session.dotEl.style.left = `${snappedX}px`;
+    const snappedX = placeAt(session, snappedSecs);
 
     const date = fromAbsoluteSeconds(snappedSecs);
     const labelText = `${formatAxisDay(date)} ${formatAxisHour(date)}`;
@@ -121,19 +137,10 @@ export function createReschedule(
     }
   }
 
-  function hideDragLabel() {
-    const label = deps.getDragLabel();
-    if (label) label.style.display = 'none';
-  }
-
   async function onMouseUp() {
     if (!session) return;
     const { filename, originalSecs, currentSecs } = session;
-
-    session.cardEl.classList.remove('is-ctrl-dragging');
-    container.style.cursor = '';
-    session = null;
-    hideDragLabel();
+    endSession(session);
 
     if (currentSecs !== originalSecs) {
       try {
@@ -146,19 +153,8 @@ export function createReschedule(
 
   function onKeyDown(e: KeyboardEvent) {
     if (e.key !== 'Escape' || !session) return;
-
-    const view = deps.getView();
-    const size = deps.getSize();
-    const originalX = secondsToX(session.originalSecs, view, size);
-
-    session.cardEl.style.left = `${originalX - session.cardWidth / 2}px`;
-    if (session.connectorEl) session.connectorEl.style.left = `${originalX}px`;
-    if (session.dotEl) session.dotEl.style.left = `${originalX}px`;
-
-    session.cardEl.classList.remove('is-ctrl-dragging');
-    container.style.cursor = '';
-    session = null;
-    hideDragLabel();
+    placeAt(session, session.originalSecs);
+    endSession(session);
     // activated stays true so the upcoming mouseup→click is suppressed
   }
 

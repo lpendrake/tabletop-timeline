@@ -172,12 +172,12 @@ describe('createReschedule — mousedown handling', () => {
     expect(ctrl.wasActivated()).toBe(false);
   });
 
-  it('adds is-ctrl-dragging class to the card on drag start', () => {
+  it('adds is-rescheduling class to the card on drag start', () => {
     const ev = makeEvent('a.md', '4726-05-04');
     const { container } = setup([ev]);
     const card = makeCard(container, 'a.md');
     shiftDown(card);
-    expect(card.classList.contains('is-ctrl-dragging')).toBe(true);
+    expect(card.classList.contains('is-rescheduling')).toBe(true);
   });
 
   it('sets cursor to ew-resize on the container while dragging', () => {
@@ -273,7 +273,7 @@ describe('createReschedule — mouseup / save', () => {
     move(600);
     await up();
     expect(ctrl.isActive()).toBe(false);
-    expect(card.classList.contains('is-ctrl-dragging')).toBe(false);
+    expect(card.classList.contains('is-rescheduling')).toBe(false);
     expect(container.style.cursor).toBe('');
     expect(label.style.display).toBe('none');
   });
