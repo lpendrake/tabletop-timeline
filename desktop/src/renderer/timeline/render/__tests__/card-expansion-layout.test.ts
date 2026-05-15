@@ -24,7 +24,7 @@ describe('computeExpansionLayout', () => {
       expect(expandsDown).toBe(true);
     });
 
-    it('exactly on the boundary (normalTop - expandedHeight === 0) opens upward', () => {
+    it('an expansion that exactly fits the available space above opens upward', () => {
       const top = normalTop(0); // 392
       // expandedHeight exactly equals normalTop → 392-392 = 0, which is NOT < 0
       const { expandsDown } = computeExpansionLayout(top, top, 120, 640);

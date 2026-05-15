@@ -130,7 +130,6 @@ export function TimelineView({ campaignPath }: TimelineViewProps) {
           size={viewportSize}
           palette={loadedData.palette}
           inGameNowSeconds={inGameNowSeconds}
-          campaignPath={campaignPath}
           expansion={expansion}
           previewSize={previewSize}
           onCardClick={handleCardClick}

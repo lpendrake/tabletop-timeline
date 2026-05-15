@@ -5,10 +5,10 @@ import type { PreviewSize } from '../interactions/usePreviewSize';
 const md = new MarkdownIt({ html: false, linkify: true, breaks: false });
 
 /**
- * Rewrite relative image src attributes to notes-asset:// URLs so Electron
- * can serve them from the campaign directory.
+ * Rewrite relative image src attributes to notes-asset:// URLs.
+ * The main process resolves notes-asset://current/<relPath> against currentCampaignPath.
  */
-function fixImageUrls(el: HTMLElement, campaignPath: string): void {
+function fixImageUrls(el: HTMLElement): void {
   for (const img of el.querySelectorAll<HTMLImageElement>('img[src]')) {
     const src = img.getAttribute('src') ?? '';
     if (
@@ -20,16 +20,13 @@ function fixImageUrls(el: HTMLElement, campaignPath: string): void {
     ) {
       continue;
     }
-    // notes-asset://current/<relPath> → resolved relative to campaignPath in main process
     img.setAttribute('src', `notes-asset://current/events/${encodeURIComponent(src)}`);
-    void campaignPath; // used conceptually; main process uses currentCampaignPath
   }
 }
 
 interface CardExpansionProps {
   body: string | null;
   expandsDown: boolean;
-  campaignPath: string;
   size: PreviewSize;
   centerX: number;
   onSizeChange: (s: PreviewSize) => void;
@@ -40,7 +37,6 @@ interface CardExpansionProps {
 export function CardExpansion({
   body,
   expandsDown,
-  campaignPath,
   size,
   centerX,
   onSizeChange,
@@ -54,9 +50,9 @@ export function CardExpansion({
   // Callback ref: after the body div mounts, rewrite any relative image URLs
   const bodyRef = useCallback(
     (el: HTMLDivElement | null) => {
-      if (el && body !== null) fixImageUrls(el, campaignPath);
+      if (el && body !== null) fixImageUrls(el);
     },
-    [body, campaignPath],
+    [body],
   );
 
   const handleResizeMouseDown = useCallback(

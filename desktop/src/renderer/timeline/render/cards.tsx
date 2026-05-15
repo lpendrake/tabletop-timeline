@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, type CSSProperties, type ReactElement } from 'react';
+import { useCallback, useMemo, type CSSProperties, type ReactElement } from 'react';
 import './cards.css';
 import type { EventListItem, Palette } from '../data/types';
 import type { ViewState, ViewportSize } from '../math/zoom';
@@ -39,7 +39,6 @@ interface CardsProps {
   size: ViewportSize;
   palette: Palette;
   inGameNowSeconds: number;
-  campaignPath: string;
   expansion: CardExpansionState | null;
   previewSize: PreviewSize;
   onCardClick: (filename: string) => void;
@@ -53,7 +52,6 @@ export function Cards({
   size,
   palette,
   inGameNowSeconds,
-  campaignPath,
   expansion,
   previewSize,
   onCardClick,
@@ -120,7 +118,6 @@ export function Cards({
             expandsDown={expandsDown}
             expansion={expansion}
             previewSize={previewSize}
-            campaignPath={campaignPath}
             onCardClick={onCardClick}
             onPreviewSizeChange={onPreviewSizeChange}
             onResizeDragChange={onResizeDragChange}
@@ -140,7 +137,6 @@ interface CardItemProps {
   expandsDown: boolean;
   expansion: CardExpansionState | null;
   previewSize: PreviewSize;
-  campaignPath: string;
   onCardClick: (filename: string) => void;
   onPreviewSizeChange: (s: PreviewSize) => void;
   onResizeDragChange: (active: boolean) => void;
@@ -155,13 +151,10 @@ function CardItem({
   expandsDown,
   expansion,
   previewSize,
-  campaignPath,
   onCardClick,
   onPreviewSizeChange,
   onResizeDragChange,
 }: CardItemProps): ReactElement {
-  const cardRef = useRef<HTMLDivElement>(null);
-
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -174,7 +167,6 @@ function CardItem({
     <CardExpansion
       body={expansion?.body ?? null}
       expandsDown={expandsDown}
-      campaignPath={campaignPath}
       size={previewSize}
       centerX={card.x}
       onSizeChange={onPreviewSizeChange}
@@ -186,7 +178,6 @@ function CardItem({
 
   return (
     <div
-      ref={cardRef}
       className={`event-card${card.isFuture ? ' is-future' : ''}${isExpanded ? ' is-expanded' : ''}`}
       style={
         {
