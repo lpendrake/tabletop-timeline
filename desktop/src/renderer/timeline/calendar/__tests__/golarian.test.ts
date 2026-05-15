@@ -233,4 +233,77 @@ describe('toAbsoluteDays / fromAbsoluteDays', () => {
     expect(toAbsoluteDays({ year: 1, month: 1, day: 1 })).toBe(366);
     expect(fromAbsoluteDays(366)).toMatchObject({ year: 1, month: 1, day: 1 });
   });
+
+  it('day -1 is -0001-12-31 (year -1 is not a leap year, 365 days)', () => {
+    expect(toAbsoluteDays({ year: -1, month: 12, day: 31 })).toBe(-1);
+    expect(fromAbsoluteDays(-1)).toMatchObject({ year: -1, month: 12, day: 31 });
+  });
+
+  it('day -365 is -0001-01-01', () => {
+    expect(toAbsoluteDays({ year: -1, month: 1, day: 1 })).toBe(-365);
+    expect(fromAbsoluteDays(-365)).toMatchObject({ year: -1, month: 1, day: 1 });
+  });
+});
+
+// ---- negative years: parseISOString / toISOString / seconds roundtrip ----
+
+describe('negative years', () => {
+  it('toISOString formats year -1 correctly', () => {
+    expect(toISOString({ year: -1, month: 12, day: 31, hour: 0, minute: 0, second: 0 })).toBe(
+      '-0001-12-31',
+    );
+  });
+
+  it('toISOString formats year -1 with time', () => {
+    expect(toISOString({ year: -1, month: 1, day: 1, hour: 23, minute: 59, second: 59 })).toBe(
+      '-0001-01-01T23:59:59',
+    );
+  });
+
+  it('parseISOString accepts negative year', () => {
+    expect(parseISOString('-0001-12-31')).toEqual({
+      year: -1,
+      month: 12,
+      day: 31,
+      hour: 0,
+      minute: 0,
+      second: 0,
+    });
+  });
+
+  it('parseISOString accepts negative year with time', () => {
+    expect(parseISOString('-0001-01-01T23:59:59')).toEqual({
+      year: -1,
+      month: 1,
+      day: 1,
+      hour: 23,
+      minute: 59,
+      second: 59,
+    });
+  });
+
+  it('toISOString output is re-parseable for year -1', () => {
+    const original = { year: -1, month: 6, day: 15, hour: 12, minute: 0, second: 0 };
+    expect(parseISOString(toISOString(original))).toEqual(original);
+  });
+
+  it('fromAbsoluteSeconds(-1) is year -1, Dec 31, 23:59:59', () => {
+    const d = fromAbsoluteSeconds(-1);
+    expect(d).toMatchObject({ year: -1, month: 12, day: 31, hour: 23, minute: 59, second: 59 });
+  });
+
+  it('fromAbsoluteSeconds(-86400) is year -1, Dec 31, 00:00:00', () => {
+    const d = fromAbsoluteSeconds(-86400);
+    expect(d).toMatchObject({ year: -1, month: 12, day: 31, hour: 0, minute: 0, second: 0 });
+  });
+
+  it('fromAbsoluteSeconds(-86401) is year -1, Dec 30, 23:59:59', () => {
+    const d = fromAbsoluteSeconds(-86401);
+    expect(d).toMatchObject({ year: -1, month: 12, day: 30, hour: 23, minute: 59, second: 59 });
+  });
+
+  it('toAbsoluteSeconds / fromAbsoluteSeconds roundtrip for year -1', () => {
+    const d = parseISOString('-0001-06-15T12:00:00');
+    expect(fromAbsoluteSeconds(toAbsoluteSeconds(d))).toEqual(d);
+  });
 });
