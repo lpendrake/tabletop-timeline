@@ -86,6 +86,7 @@ export function NotesApp({
             selection: EditorSelection.cursor(offset),
             effects: EditorView.scrollIntoView(offset, { y: 'center' }),
           });
+          view.focus();
           // CM6 uses estimated line heights for content it hasn't rendered yet.
           // A second pass one frame later corrects positions near the end of
           // long files where the first estimate is slightly short.
