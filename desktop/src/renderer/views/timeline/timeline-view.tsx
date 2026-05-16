@@ -32,6 +32,10 @@ import {
   applySessionSave,
   applySessionDelete,
 } from '../../timeline/interactions/session-transforms';
+import {
+  computeEventsNeedingSeshTagUpdate,
+  mergeSeshTags,
+} from '../../timeline/interactions/session-tag-sync';
 import { useSessionMode } from '../../timeline/session-editor/use-session-mode';
 import { useSessionEditor } from '../../timeline/session-editor/use-session-editor';
 import { SessionEditorModal } from '../../timeline/session-editor/session-editor-modal';
@@ -105,13 +109,57 @@ export function TimelineView({ campaignPath, palette }: TimelineViewProps) {
 
   // ---- Session persistence ----
 
+  const applySessionTagsToEvent = useCallback(
+    async (filename: string, sessions: Session[]): Promise<boolean> => {
+      const ev = eventsRef.current.find((e) => e.filename === filename);
+      if (!ev) return false;
+      let secs: number;
+      try {
+        secs = toAbsoluteSeconds(parseISOString(ev.date));
+      } catch {
+        return false;
+      }
+      const computed = sessionTagsForSeconds(secs, sessions);
+      const updatedTags = mergeSeshTags(ev.tags, computed);
+      const { event: full, lastModified } = await timelinePort.getEvent(campaignPath, filename);
+      await timelinePort.updateEvent(
+        campaignPath,
+        filename,
+        {
+          title: full.title,
+          date: full.date,
+          ...(updatedTags.length > 0 ? { tags: updatedTags } : {}),
+          ...(full.color ? { color: full.color } : {}),
+          ...(full.status ? { status: full.status } : {}),
+        },
+        full.body,
+        lastModified,
+      );
+      return true;
+    },
+    [campaignPath],
+  );
+
+  const applySessionTagsToAllEvents = useCallback(
+    async (sessions: Session[]): Promise<void> => {
+      const toUpdate = computeEventsNeedingSeshTagUpdate(eventsRef.current, sessions);
+      if (toUpdate.length === 0) return;
+      for (const filename of toUpdate) {
+        await applySessionTagsToEvent(filename, sessions);
+      }
+      await refreshEvents();
+    },
+    [applySessionTagsToEvent, refreshEvents],
+  );
+
   const saveSessionUpdate = useCallback(
     async (updated: Session) => {
       const newSessions = applySessionUpdate(sessionsRef.current, updated);
       await timelinePort.putSessions(campaignPath, newSessions);
       setLoadedData((d) => ({ ...d, sessions: newSessions }));
+      await applySessionTagsToAllEvents(newSessions);
     },
-    [campaignPath],
+    [campaignPath, applySessionTagsToAllEvents],
   );
 
   const handleSessionSave = useCallback(
@@ -119,8 +167,9 @@ export function TimelineView({ campaignPath, palette }: TimelineViewProps) {
       const newSessions = applySessionSave(sessionsRef.current, saved);
       await timelinePort.putSessions(campaignPath, newSessions);
       setLoadedData((d) => ({ ...d, sessions: newSessions }));
+      await applySessionTagsToAllEvents(newSessions);
     },
-    [campaignPath],
+    [campaignPath, applySessionTagsToAllEvents],
   );
 
   const handleSessionDelete = useCallback(
@@ -128,8 +177,9 @@ export function TimelineView({ campaignPath, palette }: TimelineViewProps) {
       const newSessions = applySessionDelete(sessionsRef.current, sessionId);
       await timelinePort.putSessions(campaignPath, newSessions);
       setLoadedData((d) => ({ ...d, sessions: newSessions }));
+      await applySessionTagsToAllEvents(newSessions);
     },
-    [campaignPath],
+    [campaignPath, applySessionTagsToAllEvents],
   );
 
   // ---- Session editor (modal state) ----
