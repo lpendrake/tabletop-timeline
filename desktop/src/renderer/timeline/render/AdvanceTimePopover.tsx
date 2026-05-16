@@ -18,8 +18,9 @@ interface AdvanceTimePopoverProps {
 }
 
 const QUICK_DELTAS: { label: string; delta: number }[] = [
+  { label: '+1 min', delta: 60 },
+  { label: '+10 min', delta: 600 },
   { label: '+1 hour', delta: 3600 },
-  { label: '+6 hours', delta: 6 * 3600 },
   { label: '+1 day', delta: 86400 },
   { label: '+1 week', delta: 7 * 86400 },
 ];
@@ -72,7 +73,7 @@ export function AdvanceTimePopover({
   }, [onClose]);
 
   function applyDelta(delta: number) {
-    const next = baseSecs + delta;
+    const next = pendingSecs + delta;
     setPendingSecs(next);
     setInputValue(toISOString(fromAbsoluteSeconds(next)));
     setInputError(false);

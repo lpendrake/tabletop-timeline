@@ -16,14 +16,21 @@ function applyDelta(baseSeconds: number, delta: number): string {
 }
 
 describe('AdvanceTimePopover — quick delta buttons', () => {
+  it('+1 min advances by 60 seconds', () => {
+    const result = applyDelta(BASE_SECS, 60);
+    const parsed = parseISOString(result);
+    expect(parsed.hour).toBe(12);
+    expect(parsed.minute).toBe(1);
+  });
+
+  it('+10 min advances by 600 seconds', () => {
+    const result = applyDelta(BASE_SECS, 600);
+    expect(parseISOString(result).minute).toBe(10);
+  });
+
   it('+1 hour advances by 3600 seconds', () => {
     const result = applyDelta(BASE_SECS, 3600);
     expect(parseISOString(result).hour).toBe(13);
-  });
-
-  it('+6 hours advances by 6 hours', () => {
-    const result = applyDelta(BASE_SECS, 6 * 3600);
-    expect(parseISOString(result).hour).toBe(18);
   });
 
   it('+1 day advances to the next calendar day', () => {
@@ -36,6 +43,12 @@ describe('AdvanceTimePopover — quick delta buttons', () => {
   it('+1 week advances by 7 days', () => {
     const result = applyDelta(BASE_SECS, 7 * 86400);
     expect(parseISOString(result).day).toBe(11);
+  });
+
+  it('applying the same delta twice accumulates (each click adds more)', () => {
+    const after1 = toAbsoluteSeconds(parseISOString(applyDelta(BASE_SECS, 86400)));
+    const after2 = toAbsoluteSeconds(parseISOString(applyDelta(after1, 86400)));
+    expect(parseISOString(toISOString(fromAbsoluteSeconds(after2))).day).toBe(6);
   });
 
   it('delta crossing a month boundary rolls over correctly', () => {
