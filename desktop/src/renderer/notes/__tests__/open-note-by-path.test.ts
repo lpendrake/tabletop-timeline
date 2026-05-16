@@ -22,10 +22,10 @@ describe('openNoteByPath path resolution', () => {
     expect(openFile).toHaveBeenCalledWith('Lore', 'places.md');
   });
 
-  it('handles deeply nested paths — folder is only the first segment', () => {
+  it('handles arbitrarily nested paths — folder is only the first segment', () => {
     const openFile = vi.fn();
-    simulateOpenNoteByPath('notes/NPCs/Villains/boss.md', openFile);
-    expect(openFile).toHaveBeenCalledWith('NPCs', 'Villains/boss.md');
+    simulateOpenNoteByPath('notes/foo/bar/baz/quux/thing.md', openFile);
+    expect(openFile).toHaveBeenCalledWith('foo', 'bar/baz/quux/thing.md');
   });
 
   it('does nothing for a path with no subfolder (no slash after prefix)', () => {
