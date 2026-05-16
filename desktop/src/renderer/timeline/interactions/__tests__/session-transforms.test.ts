@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applySessionUpdate, applySessionSave, applySessionDelete } from '../session-persistence';
+import { applySessionUpdate, applySessionSave, applySessionDelete } from '../session-transforms';
 import type { Session } from '../../data/types';
 
 function s(id: string, overrides: Partial<Session> = {}): Session {

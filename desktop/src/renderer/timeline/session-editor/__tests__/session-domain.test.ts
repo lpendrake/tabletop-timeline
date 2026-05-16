@@ -7,13 +7,13 @@ import {
   COLOR_STORAGE_KEY,
   toDatetimeLocal,
   fromDatetimeLocal,
-  validateGolarian,
   validateSessionBuffer,
   bufferFromSession,
   emptyBuffer,
   buildSavedSession,
   type SessionBuffer,
 } from '../session-domain';
+import { tryParseDate } from '../../calendar/golarian';
 import type { Session } from '../../data/types';
 
 // --- helpers ---
@@ -103,23 +103,23 @@ describe('fromDatetimeLocal', () => {
   });
 });
 
-// --- validateGolarian ---
+// --- tryParseDate (from calendar/golarian) ---
 
-describe('validateGolarian', () => {
-  it('returns true for a valid Golarian ISO string', () => {
-    expect(validateGolarian('4726-05-04T13:00')).toBe(true);
+describe('tryParseDate', () => {
+  it('returns a GolarianDate for a valid Golarian ISO string', () => {
+    expect(tryParseDate('4726-05-04T13:00')).not.toBeNull();
   });
 
-  it('returns false for garbage input', () => {
-    expect(validateGolarian('not-a-date')).toBe(false);
+  it('returns null for garbage input', () => {
+    expect(tryParseDate('not-a-date')).toBeNull();
   });
 
-  it('returns false for empty string', () => {
-    expect(validateGolarian('')).toBe(false);
+  it('returns null for empty string', () => {
+    expect(tryParseDate('')).toBeNull();
   });
 
-  it('returns false for a year-0 string (invalid month 0)', () => {
-    expect(validateGolarian('4726-00-04T13:00')).toBe(false);
+  it('returns null for invalid month 0', () => {
+    expect(tryParseDate('4726-00-04T13:00')).toBeNull();
   });
 });
 

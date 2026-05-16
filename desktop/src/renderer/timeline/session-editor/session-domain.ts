@@ -1,4 +1,4 @@
-import { parseISOString, toAbsoluteSeconds } from '../calendar/golarian';
+import { parseISOString, toAbsoluteSeconds, tryParseDate } from '../calendar/golarian';
 import type { Session } from '../data/types';
 
 export const SESSION_COLORS: readonly string[] = [
@@ -51,24 +51,15 @@ export function fromDatetimeLocal(val: string): string {
   return val.length === 16 ? val + ':00' : val;
 }
 
-export function validateGolarian(val: string): boolean {
-  try {
-    parseISOString(val);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export function validateSessionBuffer(
   buf: SessionBuffer,
   existingSessions: Session[],
   isNew: boolean,
 ): string | null {
-  if (!buf.inGameStart || !validateGolarian(buf.inGameStart)) {
+  if (!buf.inGameStart || !tryParseDate(buf.inGameStart)) {
     return 'Invalid in-game start date.';
   }
-  if (!buf.inGameEnd || !validateGolarian(buf.inGameEnd)) {
+  if (!buf.inGameEnd || !tryParseDate(buf.inGameEnd)) {
     return 'Invalid in-game end date.';
   }
   const realDay = buf.realStart.slice(0, 10);

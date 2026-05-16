@@ -31,7 +31,7 @@ import {
   applySessionUpdate,
   applySessionSave,
   applySessionDelete,
-} from '../../timeline/interactions/session-persistence';
+} from '../../timeline/interactions/session-transforms';
 import { useSessionMode } from '../../timeline/session-editor/use-session-mode';
 import { useSessionEditor } from '../../timeline/session-editor/use-session-editor';
 import { SessionEditorModal } from '../../timeline/session-editor/session-editor-modal';
