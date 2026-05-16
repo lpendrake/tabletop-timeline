@@ -164,6 +164,7 @@ export function Footer({ currentView, onChangeView, onBackToCampaigns }: FooterP
           flex: 1,
           display: 'grid',
           gridTemplateColumns: '1fr auto 1fr',
+          columnGap: '8px',
           alignItems: 'center',
           paddingLeft: '12px',
         }}
