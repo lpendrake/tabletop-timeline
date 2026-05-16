@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { type EditorView } from '@codemirror/view';
+import { EditorView } from '@codemirror/view';
+import { EditorSelection } from '@codemirror/state';
 import { useNotesController } from './hooks/useNotesController';
 import { MarkdownEditor, FormatToolbar, type SavedEditorInstance } from '../shared/markdown-editor';
 import { makeImagePasteConfig, makeDropLinkConfig } from './editor-bindings';
@@ -26,6 +27,8 @@ interface NotesAppProps {
   campaignPath: string;
   pendingOpenNotePath?: string | null;
   onNoteOpenHandled?: () => void;
+  pendingNoteMatchOffset?: number | null;
+  onNoteMatchOffsetHandled?: () => void;
 }
 
 export function NotesApp({
@@ -33,6 +36,8 @@ export function NotesApp({
   campaignPath,
   pendingOpenNotePath,
   onNoteOpenHandled,
+  pendingNoteMatchOffset,
+  onNoteMatchOffsetHandled,
 }: NotesAppProps) {
   const ctrl = useNotesController({ campaignId, campaignPath });
   const knownIds = useMemo(() => new Set(ctrl.linkIndex.map((e) => e.id)), [ctrl.linkIndex]);
@@ -61,6 +66,23 @@ export function NotesApp({
     // ctrl.openNoteByPath is stable; only re-run when the pending path changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingOpenNotePath]);
+
+  // Scroll to and place cursor at the body-text match offset once the editor is ready.
+  useEffect(() => {
+    if (pendingNoteMatchOffset == null) return;
+    if (ctrl.activeFile?.content == null) return;
+    requestAnimationFrame(() => {
+      const view = editorViewRef.current;
+      if (!view) return;
+      const offset = Math.min(pendingNoteMatchOffset, view.state.doc.length);
+      view.dispatch({
+        selection: EditorSelection.cursor(offset),
+        effects: EditorView.scrollIntoView(offset, { y: 'center' }),
+      });
+      onNoteMatchOffsetHandled?.();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingNoteMatchOffset, ctrl.activeFile?.content]);
 
   function handleFrontmatterChange(value: string) {
     if (!ctrl.activeTab) return;

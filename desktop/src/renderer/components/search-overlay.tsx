@@ -4,6 +4,7 @@ import type { EventListItem } from '../timeline/data/types';
 import { parseISOString } from '../timeline/calendar/golarian';
 import { formatCompact } from '../timeline/calendar/format';
 import type { LinkIndexEntry } from '../../types/global';
+import { splitFrontmatter } from '../../shared/frontmatter';
 import './search-overlay.css';
 
 interface SearchableEvent extends EventListItem {
@@ -18,14 +19,14 @@ interface SearchableNote {
 
 type SearchResult =
   | { kind: 'event'; item: EventListItem; snippet: string }
-  | { kind: 'note'; item: SearchableNote; snippet: string };
+  | { kind: 'note'; item: SearchableNote; snippet: string; matchOffset?: number };
 
 interface SearchOverlayProps {
   isOpen: boolean;
   campaignPath: string;
   onClose: () => void;
   onJumpToEvent: (ev: EventListItem) => void;
-  onOpenNote: (absolutePath: string) => void;
+  onOpenNote: (campaignRelativePath: string, matchOffset?: number) => void;
 }
 
 export function matches(text: string | undefined, query: string): boolean {
@@ -117,8 +118,9 @@ export function SearchOverlay({
         for (let i = 0; i < notesWithBodies.length; i++) {
           if (cancelled) return;
           try {
-            const body = await window.fsApi.read(`${campaignPath}/${notesWithBodies[i].path}`);
-            notesWithBodies[i] = { ...notesWithBodies[i], body: body ?? '' };
+            const raw = await window.fsApi.read(`${campaignPath}/${notesWithBodies[i].path}`);
+            const { body } = splitFrontmatter(raw ?? '');
+            notesWithBodies[i] = { ...notesWithBodies[i], body };
           } catch {
             notesWithBodies[i] = { ...notesWithBodies[i], body: '' };
           }
@@ -160,9 +162,11 @@ export function SearchOverlay({
     if (includeNotes) {
       for (const note of notes) {
         if (out.length >= 30) break;
-        if (matches(note.title, query) || matches(note.body, query)) {
-          const snippet = note.body ? extractSnippet(note.body, query) : '';
-          out.push({ kind: 'note', item: note, snippet });
+        const bodyIdx = note.body ? note.body.toLowerCase().indexOf(query.toLowerCase()) : -1;
+        if (matches(note.title, query) || bodyIdx !== -1) {
+          const snippet = note.body && bodyIdx !== -1 ? extractSnippet(note.body, query) : '';
+          const matchOffset = bodyIdx !== -1 ? bodyIdx : undefined;
+          out.push({ kind: 'note', item: note, snippet, matchOffset });
         }
       }
     }
@@ -180,7 +184,7 @@ export function SearchOverlay({
       if (result.kind === 'event') {
         onJumpToEvent(result.item);
       } else {
-        onOpenNote(result.item.path);
+        onOpenNote(result.item.path, result.matchOffset);
       }
       onClose();
     },

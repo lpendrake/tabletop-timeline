@@ -5,11 +5,15 @@ export function NotesView({
   campaignId,
   pendingOpenNotePath,
   onNoteOpenHandled,
+  pendingNoteMatchOffset,
+  onNoteMatchOffsetHandled,
 }: {
   campaignPath: string;
   campaignId: string;
   pendingOpenNotePath?: string | null;
   onNoteOpenHandled?: () => void;
+  pendingNoteMatchOffset?: number | null;
+  onNoteMatchOffsetHandled?: () => void;
 }) {
   return (
     <NotesApp
@@ -17,6 +21,8 @@ export function NotesView({
       campaignId={campaignId}
       pendingOpenNotePath={pendingOpenNotePath}
       onNoteOpenHandled={onNoteOpenHandled}
+      pendingNoteMatchOffset={pendingNoteMatchOffset}
+      onNoteMatchOffsetHandled={onNoteMatchOffsetHandled}
     />
   );
 }

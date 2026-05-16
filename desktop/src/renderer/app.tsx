@@ -17,6 +17,7 @@ export default function App() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [pendingJumpFilename, setPendingJumpFilename] = useState<string | null>(null);
   const [pendingOpenNotePath, setPendingOpenNotePath] = useState<string | null>(null);
+  const [pendingNoteMatchOffset, setPendingNoteMatchOffset] = useState<number | null>(null);
   const {
     rootDir,
     campaigns,
@@ -47,9 +48,10 @@ export default function App() {
     setPendingJumpFilename(ev.filename);
   }, []);
 
-  const handleOpenNote = useCallback((absolutePath: string) => {
+  const handleOpenNote = useCallback((path: string, matchOffset?: number) => {
     setCurrentView('notes');
-    setPendingOpenNotePath(absolutePath);
+    setPendingOpenNotePath(path);
+    setPendingNoteMatchOffset(matchOffset ?? null);
   }, []);
 
   if (isLoading) {
@@ -97,6 +99,8 @@ export default function App() {
             campaignId={activeCampaign.id}
             pendingOpenNotePath={pendingOpenNotePath}
             onNoteOpenHandled={() => setPendingOpenNotePath(null)}
+            pendingNoteMatchOffset={pendingNoteMatchOffset}
+            onNoteMatchOffsetHandled={() => setPendingNoteMatchOffset(null)}
           />
         );
       case 'timeline':
@@ -117,6 +121,8 @@ export default function App() {
             campaignId={activeCampaign.id}
             pendingOpenNotePath={pendingOpenNotePath}
             onNoteOpenHandled={() => setPendingOpenNotePath(null)}
+            pendingNoteMatchOffset={pendingNoteMatchOffset}
+            onNoteMatchOffsetHandled={() => setPendingNoteMatchOffset(null)}
           />
         );
     }
