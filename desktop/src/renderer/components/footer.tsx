@@ -174,7 +174,7 @@ export function Footer({ currentView, onChangeView, onBackToCampaigns }: FooterP
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
-            justifyContent: 'flex-start',
+            justifyContent: 'flex-end',
           }}
         />
         <div
@@ -187,7 +187,7 @@ export function Footer({ currentView, onChangeView, onBackToCampaigns }: FooterP
             display: 'flex',
             alignItems: 'center',
             gap: '10px',
-            justifyContent: 'flex-end',
+            justifyContent: 'flex-start',
           }}
         />
       </div>
