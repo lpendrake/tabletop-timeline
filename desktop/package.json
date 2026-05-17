@@ -48,7 +48,7 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "src/assets/images/icon.ico"
+      "icon": "src/assets/images/TTT.ico"
     },
     "nsis": {
       "artifactName": "${productName} Installer.${ext}",

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Campaign } from '../../../types/global';
+import tttIconUrl from '../../../assets/images/TTT.svg';
 
 interface CampaignManagerProps {
   campaigns: Campaign[];
@@ -174,39 +175,49 @@ export function CampaignManager({
       {/* Header */}
       <header
         style={{
-          padding: '24px 40px',
+          padding: '20px 40px',
           borderBottom: '1px solid #18181b',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
         }}
       >
-        <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 700, margin: 0 }}>My Campaigns</h1>
-          <div style={{ fontSize: '13px', color: '#71717a', marginTop: '4px' }}>
-            Workspace: <span style={{ color: '#a1a1aa' }}>{rootDir}</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-            {appVersion && (
-              <span style={{ fontSize: '12px', color: '#3f3f46' }}>v{appVersion}</span>
-            )}
-            {updateInfo && (
-              <button
-                onClick={() => setShowUpdateModal(true)}
-                style={{
-                  fontSize: '11px',
-                  color: '#f59e0b',
-                  background: 'rgba(245,158,11,0.1)',
-                  border: '1px solid rgba(245,158,11,0.3)',
-                  borderRadius: '4px',
-                  padding: '2px 8px',
-                  cursor: 'pointer',
-                  lineHeight: '1.6',
-                }}
-              >
-                Update available
-              </button>
-            )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <img
+            src={tttIconUrl}
+            alt="TableTop Timeline"
+            style={{ height: '48px', width: 'auto', flexShrink: 0 }}
+          />
+          <div>
+            <div style={{ fontSize: '20px', fontWeight: 700, lineHeight: 1.2 }}>
+              TableTop Timeline
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '3px' }}>
+              {appVersion && (
+                <span style={{ fontSize: '12px', color: '#3f3f46' }}>v{appVersion}</span>
+              )}
+              {updateInfo && (
+                <button
+                  onClick={() => setShowUpdateModal(true)}
+                  style={{
+                    fontSize: '11px',
+                    color: '#f59e0b',
+                    background: 'rgba(245,158,11,0.1)',
+                    border: '1px solid rgba(245,158,11,0.3)',
+                    borderRadius: '4px',
+                    padding: '2px 8px',
+                    cursor: 'pointer',
+                    lineHeight: '1.6',
+                  }}
+                >
+                  Update available
+                </button>
+              )}
+            </div>
+            <div style={{ fontSize: '12px', color: '#52525b', marginTop: '3px' }}>
+              <span style={{ color: '#3f3f46' }}>Workspace: </span>
+              <span style={{ color: '#52525b' }}>{rootDir}</span>
+            </div>
           </div>
         </div>
         <button
