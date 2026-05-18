@@ -1,11 +1,25 @@
-import { useEffect, useRef, useState } from 'react';
+import { CSSProperties, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { EventListItem, Session } from '../data/types';
-import type { DateField, DateFilter, Filter, FilterState, TagFilter } from './types';
-import { collectAllTags, filterSummary, newFilterId, nowForField } from './logic';
+import type { DateFilter, Filter, FilterState, TagFilter } from './types';
+import { newFilterId, nowForField } from './logic';
+import { FilterChip } from './filter-chip';
 import './filter-panel.css';
 
-interface FilterPanelProps {
+const panelStyle: CSSProperties = {
+  position: 'fixed',
+  bottom: 50,
+  left: 0,
+  right: 0,
+  background: 'var(--theme-panel, #2d3d2a)',
+  borderTop: '1px solid var(--theme-border, #3a3a30)',
+  padding: '8px 12px',
+  zIndex: 500,
+  maxHeight: 200,
+  overflowY: 'auto',
+};
+
+export interface FilterPanelProps {
   filterState: FilterState;
   events: EventListItem[];
   sessions: Session[];
@@ -76,7 +90,7 @@ export function FilterPanel({
   }, [addMenuOpen]);
 
   const content = (
-    <div className="filter-panel">
+    <div style={panelStyle}>
       <div className="filter-bar">
         {/* Add filter button */}
         <div className="filter-add-wrap">
@@ -132,202 +146,4 @@ export function FilterPanel({
   );
 
   return createPortal(content, document.body);
-}
-
-interface FilterChipProps {
-  filter: Filter;
-  isEditing: boolean;
-  events: EventListItem[];
-  sessions: Session[];
-  inGameNow: string;
-  onToggle: () => void;
-  onPin: () => void;
-  onRemove: () => void;
-  onEditClick: () => void;
-  onUpdate: (f: Filter) => void;
-  onDoneEditing: () => void;
-}
-
-function FilterChip({
-  filter,
-  isEditing,
-  events,
-  inGameNow,
-  onToggle,
-  onPin,
-  onRemove,
-  onEditClick,
-  onUpdate,
-  onDoneEditing,
-}: FilterChipProps) {
-  return (
-    <div className={`filter-chip-row${filter.enabled ? '' : ' is-disabled'}`}>
-      <input
-        type="checkbox"
-        checked={filter.enabled}
-        title={filter.enabled ? 'Disable' : 'Enable'}
-        onChange={onToggle}
-      />
-      <button type="button" className="filter-chip-summary" title="Edit" onClick={onEditClick}>
-        {filterSummary(filter)}
-      </button>
-      <button
-        type="button"
-        className={`filter-chip-icon filter-chip-pin${filter.pinned ? ' is-active' : ''}`}
-        title={filter.pinned ? 'Unpin' : 'Pin (persist across sessions)'}
-        onClick={onPin}
-      >
-        {filter.pinned ? '★' : '☆'}
-      </button>
-      <button type="button" className="filter-chip-icon" title="Remove" onClick={onRemove}>
-        ×
-      </button>
-      {isEditing &&
-        (filter.type === 'tag' ? (
-          <TagEditor filter={filter} events={events} onUpdate={onUpdate} onDone={onDoneEditing} />
-        ) : (
-          <DateEditor
-            filter={filter}
-            inGameNow={inGameNow}
-            onUpdate={onUpdate}
-            onDone={onDoneEditing}
-          />
-        ))}
-    </div>
-  );
-}
-
-interface TagEditorProps {
-  filter: TagFilter;
-  events: EventListItem[];
-  onUpdate: (f: Filter) => void;
-  onDone: () => void;
-}
-
-function TagEditor({ filter, events, onUpdate, onDone }: TagEditorProps) {
-  const [query, setQuery] = useState('');
-  const allTags = collectAllTags(events);
-  const results = allTags
-    .filter((t) => !filter.tags.includes(t) && t.toLowerCase().includes(query.toLowerCase()))
-    .slice(0, 8);
-
-  return (
-    <div className="filter-editor filter-editor-popover">
-      <div className="filter-tag-chips">
-        {filter.tags.map((tag) => (
-          <span key={tag} className="filter-chip">
-            {tag}
-            <button
-              type="button"
-              className="filter-chip-remove"
-              onClick={() => onUpdate({ ...filter, tags: filter.tags.filter((t) => t !== tag) })}
-            >
-              ×
-            </button>
-          </span>
-        ))}
-      </div>
-      <input
-        type="text"
-        className="filter-tag-input"
-        placeholder="Search tags…"
-        autoFocus
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-      />
-      {results.length > 0 && (
-        <ul className="filter-tag-results">
-          {results.map((tag) => (
-            <li
-              key={tag}
-              className="filter-tag-result"
-              onClick={() => {
-                onUpdate({ ...filter, tags: [...filter.tags, tag] });
-                setQuery('');
-              }}
-            >
-              {tag}
-            </li>
-          ))}
-        </ul>
-      )}
-      <button type="button" className="filter-editor-done" onClick={onDone}>
-        Done
-      </button>
-    </div>
-  );
-}
-
-interface DateEditorProps {
-  filter: DateFilter;
-  inGameNow: string;
-  onUpdate: (f: Filter) => void;
-  onDone: () => void;
-}
-
-function DateEditor({ filter, inGameNow, onUpdate, onDone }: DateEditorProps) {
-  const today = new Date().toISOString().slice(0, 10);
-
-  function handleFieldChange(field: DateField) {
-    onUpdate({
-      ...filter,
-      field,
-      from: null,
-      to: nowForField(field, inGameNow, today),
-    });
-  }
-
-  return (
-    <div className="filter-editor filter-editor-popover">
-      <div className="filter-date-field-row">
-        {(['in-game', 'session', 'creation'] as DateField[]).map((f) => (
-          <label key={f}>
-            <input
-              type="radio"
-              name={`field-${filter.id}`}
-              value={f}
-              checked={filter.field === f}
-              onChange={() => handleFieldChange(f)}
-            />
-            {f === 'in-game' ? 'In-game' : f === 'session' ? 'Session' : 'Created'}
-          </label>
-        ))}
-      </div>
-      <label className="filter-date-label">
-        From
-        <input
-          type="text"
-          className="filter-date-input"
-          placeholder="YYYY-MM-DD"
-          defaultValue={filter.from ?? ''}
-          onBlur={(e) => onUpdate({ ...filter, from: e.target.value.trim() || null })}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              onUpdate({ ...filter, from: (e.target as HTMLInputElement).value.trim() || null });
-              onDone();
-            }
-          }}
-        />
-      </label>
-      <label className="filter-date-label">
-        To
-        <input
-          type="text"
-          className="filter-date-input"
-          placeholder="YYYY-MM-DD"
-          defaultValue={filter.to ?? ''}
-          onBlur={(e) => onUpdate({ ...filter, to: e.target.value.trim() || null })}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              onUpdate({ ...filter, to: (e.target as HTMLInputElement).value.trim() || null });
-              onDone();
-            }
-          }}
-        />
-      </label>
-      <button type="button" className="filter-editor-done" onClick={onDone}>
-        Done
-      </button>
-    </div>
-  );
 }

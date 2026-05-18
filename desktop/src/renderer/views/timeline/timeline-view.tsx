@@ -565,7 +565,7 @@ export function TimelineView({
       </div>
 
       {/* Filter panel — rendered above the footer when open, hidden while modals are open */}
-      {filterPanelOpen && !anyModalOpen && palette && (
+      {filterPanelOpen && !anyModalOpen && (
         <FilterPanel
           filterState={filterState}
           events={loadedData.events}
