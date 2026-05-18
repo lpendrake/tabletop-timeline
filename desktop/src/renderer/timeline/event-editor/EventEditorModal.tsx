@@ -3,6 +3,7 @@ import type { EditorView } from '@codemirror/view';
 import { MarkdownEditor, FormatToolbar } from '../../shared/markdown-editor';
 import type { WikiLinkSuggestion } from '../../shared/markdown-editor';
 import { FooterPortal } from '../../components/footer-portal';
+import { openFromWikiLink, closeFromWikiLink } from '../../peek/stack';
 import { timelinePort, ConflictError } from '../data/ports';
 import { notesData } from '../../notes/data';
 import {
@@ -481,7 +482,13 @@ export function EventEditorModal({
                   content={buffer.body}
                   onChange={(s) => updateBuffer({ body: s })}
                   viewRef={viewRef}
-                  wikiLinks={{ suggest: suggestLinks, onOpen: () => {}, knownIds }}
+                  wikiLinks={{
+                    suggest: suggestLinks,
+                    onOpen: () => {},
+                    onHover: openFromWikiLink,
+                    onHoverEnd: closeFromWikiLink,
+                    knownIds,
+                  }}
                 />
               </div>
             </>

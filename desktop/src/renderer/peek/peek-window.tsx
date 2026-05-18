@@ -35,7 +35,7 @@ export interface PeekWindowHandle {
   windowEl: HTMLDivElement | null;
 }
 
-let zCounter = 400;
+let zCounter = 1100;
 function nextZ(): number {
   return ++zCounter;
 }
