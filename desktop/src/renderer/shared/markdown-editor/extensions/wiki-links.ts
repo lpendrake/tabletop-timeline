@@ -12,14 +12,8 @@ import {
   type EditorState,
   type Extension,
 } from '@codemirror/state';
-import {
-  Decoration,
-  EditorView,
-  ViewPlugin,
-  WidgetType,
-  keymap,
-  type DecorationSet,
-} from '@codemirror/view';
+import { Decoration, EditorView, WidgetType, keymap, type DecorationSet } from '@codemirror/view';
+import { makePointerGuard } from './pointer-guard';
 
 export type WikiLinkStatus = 'resolved' | 'loading' | 'missing' | 'unresolved';
 
@@ -232,31 +226,10 @@ function makeWikiLinkClickHandler(config: WikiLinksConfig): Extension {
 }
 
 function makeWikiLinkPointerGuard(_config: WikiLinksConfig): Extension {
-  return ViewPlugin.fromClass(
-    class {
-      private readonly onPointerDown = (event: PointerEvent) => {
-        if (!(event.metaKey || event.ctrlKey)) return;
-        if (event.button !== 0) return;
-        const target = event.target as HTMLElement;
-        const link = target.closest<HTMLElement>('.cm-note-link');
-        if (!link) return;
-
-        event.preventDefault();
-        event.stopImmediatePropagation();
-      };
-
-      constructor(readonly view: EditorView) {
-        view.dom.addEventListener('pointerdown', this.onPointerDown, true);
-      }
-
-      destroy() {
-        this.view.dom.removeEventListener('pointerdown', this.onPointerDown, true);
-      }
-    },
-  );
+  return makePointerGuard('.cm-note-link');
 }
 
-function buildDecorations(state: EditorState, _config: WikiLinksConfig): DecorationSet {
+export function buildDecorations(state: EditorState, _config: WikiLinksConfig): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const doc = state.doc;
   // knownIds is empty until the first setKnownIds effect; empty = don't mark as broken yet

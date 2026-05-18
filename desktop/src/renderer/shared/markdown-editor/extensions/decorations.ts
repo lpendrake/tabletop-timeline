@@ -30,7 +30,7 @@ export function isCursorNear(cursorHead: number, from: number, to: number): bool
   return cursorHead >= from && cursorHead <= to;
 }
 
-function buildDecorations(state: EditorState): DecorationSet {
+export function buildDecorations(state: EditorState): DecorationSet {
   const selection = state.selection.main;
   const cursorHead = selection.head;
   const decorations: { from: number; to: number; decoration: Decoration }[] = [];

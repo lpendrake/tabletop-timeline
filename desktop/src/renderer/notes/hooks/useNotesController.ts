@@ -664,9 +664,10 @@ export function useNotesController({
 
   function openMarkdownLink(rawUrl: string) {
     const target = rawUrl.replace(/^\.?\//, '');
+    // TODO: strip ../ segments and resolve relative to the current note's folder
     const match = linkIndex.find((e) => e.path === target || e.path.endsWith('/' + target));
     if (!match) {
-      console.warn('Unresolved internal link:', rawUrl);
+      pushToast(`Could not resolve link: ${rawUrl}`, true);
       return;
     }
     handleOpenLink(match.id);

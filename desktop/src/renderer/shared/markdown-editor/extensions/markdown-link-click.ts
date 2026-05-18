@@ -1,6 +1,7 @@
 import { syntaxTree } from '@codemirror/language';
 import type { EditorState, Extension } from '@codemirror/state';
-import { EditorView, ViewPlugin } from '@codemirror/view';
+import { EditorView } from '@codemirror/view';
+import { makePointerGuard } from './pointer-guard';
 
 export interface MarkdownLinkClickConfig {
   onOpenExternal?: (url: string) => void;
@@ -26,29 +27,6 @@ export function urlAtPos(state: EditorState, pos: number): string | null {
 
 function defaultOpenExternal(url: string): void {
   window.fsApi.openExternal(url).catch((err) => console.error('openExternal failed', err));
-}
-
-function makePointerGuard(): Extension {
-  return ViewPlugin.fromClass(
-    class {
-      private readonly onPointerDown = (event: PointerEvent) => {
-        if (!(event.metaKey || event.ctrlKey)) return;
-        if (event.button !== 0) return;
-        const target = event.target as HTMLElement;
-        if (!target.closest('.cm-md-link')) return;
-        event.preventDefault();
-        event.stopImmediatePropagation();
-      };
-
-      constructor(readonly view: EditorView) {
-        view.dom.addEventListener('pointerdown', this.onPointerDown, true);
-      }
-
-      destroy() {
-        this.view.dom.removeEventListener('pointerdown', this.onPointerDown, true);
-      }
-    },
-  );
 }
 
 export function markdownLinkClick(config: MarkdownLinkClickConfig = {}): Extension {
@@ -78,5 +56,5 @@ export function markdownLinkClick(config: MarkdownLinkClickConfig = {}): Extensi
     },
   });
 
-  return [makePointerGuard(), clickHandler];
+  return [makePointerGuard('.cm-md-link'), clickHandler];
 }

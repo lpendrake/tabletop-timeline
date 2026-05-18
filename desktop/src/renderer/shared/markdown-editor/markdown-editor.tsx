@@ -126,8 +126,8 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         onOpen: wikiLinksRef.current ? (id) => wikiLinksRef.current!.onOpen(id) : undefined,
       }),
       markdownLinkClick({
-        onOpenExternal: mdLinksRef.current?.onOpenExternal,
-        onOpenInternal: mdLinksRef.current?.onOpenInternal,
+        onOpenExternal: (u) => mdLinksRef.current?.onOpenExternal?.(u),
+        onOpenInternal: (u) => mdLinksRef.current?.onOpenInternal?.(u),
       }),
     ];
     return exts;

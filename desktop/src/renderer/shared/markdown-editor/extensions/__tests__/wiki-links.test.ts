@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { EditorState } from '@codemirror/state';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
-import { parseTrigger, findWikiLinksInLine, wikiLinks } from '../wiki-links';
+import { parseTrigger, findWikiLinksInLine, buildDecorations } from '../wiki-links';
 
 describe('parseTrigger', () => {
   it('treats [[ as a 2-char prefix', () => {
@@ -91,28 +91,38 @@ describe('cursor-in-link range check (inclusive bounds)', () => {
   });
 });
 
-describe('readonly mode state', () => {
-  it('EditorState.readOnly is true when readOnly extension is included', () => {
-    // This verifies the setup that the !state.readOnly guard in buildDecorations relies on.
-    const state = EditorState.create({
-      doc: '[[Bob|abc1]]',
-      extensions: [
-        markdown({ base: markdownLanguage }),
-        wikiLinks({}),
-        EditorState.readOnly.of(true),
-      ],
-      selection: { anchor: 2 },
+describe('readonly mode decorations', () => {
+  function makeState(doc: string, cursorPos: number, readOnly: boolean) {
+    const extensions = [
+      markdown({ base: markdownLanguage }),
+      ...(readOnly ? [EditorState.readOnly.of(true)] : []),
+    ];
+    return EditorState.create({ doc, extensions, selection: { anchor: cursorPos } });
+  }
+
+  it('in normal (editable) mode, a wiki-link whose range overlaps the selection shows as raw text', () => {
+    // cursor at pos 2 — inside [[Bob|abc1]], from=0 to=12
+    const state = makeState('[[Bob|abc1]]', 2, false);
+    const decos = buildDecorations(state, {});
+    let hasRawMark = false;
+    decos.between(0, state.doc.length, (_from, _to, deco) => {
+      if ((deco.spec as Record<string, unknown>)['class'] === 'cm-wiki-link-raw') hasRawMark = true;
     });
+    expect(hasRawMark).toBe(true);
+  });
+
+  it('in readonly mode, the same overlapping selection always renders as a widget', () => {
+    const state = makeState('[[Bob|abc1]]', 2, true);
     expect(state.readOnly).toBe(true);
-    // The selection IS inside the link even though readOnly is true,
-    // which is the condition the !state.readOnly guard in buildDecorations must handle.
-    const [link] = findWikiLinksInLine('[[Bob|abc1]]', 0);
-    const selectionOverlaps = state.selection.ranges.some(
-      (r) => r.from <= link.to && r.to >= link.from,
-    );
-    expect(selectionOverlaps).toBe(true);
-    // The guard `!state.readOnly && selectionOverlaps` evaluates to false,
-    // so the link renders as a widget, not raw text.
-    expect(!state.readOnly && selectionOverlaps).toBe(false);
+    const decos = buildDecorations(state, {});
+    let hasRawMark = false;
+    let hasWidget = false;
+    decos.between(0, state.doc.length, (_from, _to, deco) => {
+      const spec = deco.spec as Record<string, unknown>;
+      if (spec['class'] === 'cm-wiki-link-raw') hasRawMark = true;
+      if (spec['widget'] !== undefined) hasWidget = true;
+    });
+    expect(hasRawMark).toBe(false);
+    expect(hasWidget).toBe(true);
   });
 });
