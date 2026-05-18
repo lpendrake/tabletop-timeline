@@ -9,7 +9,12 @@ import {
   makeInitialFilterState,
   nowForField,
 } from '../logic';
-import { loadPinnedFilters, savePinnedFilters } from '../persistence';
+import {
+  loadPinnedFilters,
+  loadSessionFilters,
+  savePinnedFilters,
+  saveSessionFilters,
+} from '../persistence';
 
 // ---- Helpers ----
 
@@ -61,10 +66,11 @@ describe('applyFilters', () => {
   const ev3 = makeEvent({ filename: 'c.md', tags: [] });
 
   it('returns a copy of all events when no filters active', () => {
+    const input = [ev1, ev2];
     const state = makeInitialFilterState();
-    const result = applyFilters([ev1, ev2], state);
-    expect(result).toEqual([ev1, ev2]);
-    expect(result).not.toBe([ev1, ev2]);
+    const result = applyFilters(input, state);
+    expect(result).toEqual(input);
+    expect(result).not.toBe(input);
   });
 
   it('does not mutate the input array', () => {
@@ -345,5 +351,44 @@ describe('persistence', () => {
   it('filters out entries with missing required fields', () => {
     localStorage.setItem('last-gasp-pinned-filters', JSON.stringify([{ type: 'tag', tags: [] }]));
     expect(loadPinnedFilters()).toEqual([]);
+  });
+});
+
+describe('session filters persistence', () => {
+  const CAMPAIGN = '/campaigns/test';
+
+  beforeEach(() => sessionStorage.clear());
+  afterEach(() => sessionStorage.clear());
+
+  it('returns null when nothing stored', () => {
+    expect(loadSessionFilters(CAMPAIGN)).toBeNull();
+  });
+
+  it('round-trips a FilterState', () => {
+    const state = {
+      filters: [
+        makeTagFilter(['plot:beast'], { enabled: true, pinned: false }),
+        makeDateFilter({ field: 'in-game', from: '4726-01-01', to: null }),
+      ],
+    };
+    saveSessionFilters(CAMPAIGN, state);
+    const loaded = loadSessionFilters(CAMPAIGN);
+    expect(loaded).not.toBeNull();
+    expect(loaded!.filters).toHaveLength(2);
+    expect(loaded!.filters[0]).toMatchObject({ type: 'tag', tags: ['plot:beast'] });
+  });
+
+  it('returns null for malformed JSON', () => {
+    sessionStorage.setItem('last-gasp-session-filters:/campaigns/test', 'bad-json');
+    expect(loadSessionFilters(CAMPAIGN)).toBeNull();
+  });
+
+  it('isolates state by campaign path', () => {
+    const stateA = { filters: [makeTagFilter(['a'])] };
+    const stateB = { filters: [makeTagFilter(['b'])] };
+    saveSessionFilters('/campaigns/a', stateA);
+    saveSessionFilters('/campaigns/b', stateB);
+    expect(loadSessionFilters('/campaigns/a')!.filters[0]).toMatchObject({ tags: ['a'] });
+    expect(loadSessionFilters('/campaigns/b')!.filters[0]).toMatchObject({ tags: ['b'] });
   });
 });

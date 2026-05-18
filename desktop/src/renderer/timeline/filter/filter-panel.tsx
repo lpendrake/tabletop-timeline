@@ -301,6 +301,12 @@ function DateEditor({ filter, inGameNow, onUpdate, onDone }: DateEditorProps) {
           placeholder="YYYY-MM-DD"
           defaultValue={filter.from ?? ''}
           onBlur={(e) => onUpdate({ ...filter, from: e.target.value.trim() || null })}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              onUpdate({ ...filter, from: (e.target as HTMLInputElement).value.trim() || null });
+              onDone();
+            }
+          }}
         />
       </label>
       <label className="filter-date-label">
@@ -311,6 +317,12 @@ function DateEditor({ filter, inGameNow, onUpdate, onDone }: DateEditorProps) {
           placeholder="YYYY-MM-DD"
           defaultValue={filter.to ?? ''}
           onBlur={(e) => onUpdate({ ...filter, to: e.target.value.trim() || null })}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              onUpdate({ ...filter, to: (e.target as HTMLInputElement).value.trim() || null });
+              onDone();
+            }
+          }}
         />
       </label>
       <button type="button" className="filter-editor-done" onClick={onDone}>

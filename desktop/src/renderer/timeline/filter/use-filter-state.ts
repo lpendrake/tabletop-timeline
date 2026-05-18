@@ -1,9 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Filter, FilterState } from './types';
 import { makeInitialFilterState } from './logic';
-import { loadPinnedFilters, savePinnedFilters } from './persistence';
+import {
+  loadPinnedFilters,
+  loadSessionFilters,
+  savePinnedFilters,
+  saveSessionFilters,
+} from './persistence';
 
-function buildInitialState(): FilterState {
+function buildInitialState(campaignPath: string): FilterState {
+  // Session storage takes priority so state survives view switches.
+  const session = loadSessionFilters(campaignPath);
+  if (session) return session;
+
+  // Fall back to pinned filters from localStorage (loaded but with their saved enabled state).
   const state = makeInitialFilterState();
   for (const f of loadPinnedFilters()) {
     state.filters.push(f);
@@ -12,20 +22,26 @@ function buildInitialState(): FilterState {
 }
 
 export function useFilterState(campaignPath: string) {
-  const [filterState, setFilterState] = useState<FilterState>(buildInitialState);
+  const [filterState, setFilterState] = useState<FilterState>(() =>
+    buildInitialState(campaignPath),
+  );
 
-  // Reset filter state (non-pinned dropped, pinned reloaded) when campaign changes.
+  // Reload state when campaign changes (drops non-pinned, restores session or pinned).
   useEffect(() => {
-    setFilterState(buildInitialState());
+    setFilterState(buildInitialState(campaignPath));
   }, [campaignPath]);
 
-  const mutate = useCallback((updater: (prev: FilterState) => FilterState) => {
-    setFilterState((prev) => {
-      const next = updater(prev);
-      savePinnedFilters(next);
-      return next;
-    });
-  }, []);
+  const mutate = useCallback(
+    (updater: (prev: FilterState) => FilterState) => {
+      setFilterState((prev) => {
+        const next = updater(prev);
+        savePinnedFilters(next);
+        saveSessionFilters(campaignPath, next);
+        return next;
+      });
+    },
+    [campaignPath],
+  );
 
   const addFilter = useCallback(
     (f: Filter) => mutate((prev) => ({ filters: [...prev.filters, f] })),
