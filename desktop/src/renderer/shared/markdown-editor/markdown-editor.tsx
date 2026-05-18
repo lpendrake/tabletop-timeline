@@ -44,6 +44,8 @@ export interface WikiLinksHostConfig {
   suggest: (query: string) => Promise<WikiLinkSuggestion[]>;
   onOpen: (id: string) => void;
   knownIds?: Set<string>;
+  onHover?: (id: string, el: HTMLElement) => void;
+  onHoverEnd?: (relatedTarget: Element | null) => void;
 }
 
 export interface MarkdownEditorProps {
@@ -117,6 +119,12 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         wikiLinks({
           suggest: (q) => wikiLinksRef.current!.suggest(q),
           onOpen: (id) => wikiLinksRef.current!.onOpen(id),
+          onHover: wikiLinksRef.current.onHover
+            ? (id, el) => wikiLinksRef.current!.onHover!(id, el)
+            : undefined,
+          onHoverEnd: wikiLinksRef.current.onHoverEnd
+            ? (rt) => wikiLinksRef.current!.onHoverEnd!(rt)
+            : undefined,
         }),
       );
     }

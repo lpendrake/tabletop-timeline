@@ -1,5 +1,11 @@
-import type { ImagePasteConfig, DropLinkConfig, DropInsert } from '../shared/markdown-editor';
+import type {
+  ImagePasteConfig,
+  DropLinkConfig,
+  DropInsert,
+  WikiLinksHostConfig,
+} from '../shared/markdown-editor';
 import { notesData } from './data';
+import { openFromWikiLink, closeFromWikiLink } from '../peek/stack';
 
 interface SidebarDropPayload {
   folder: string;
@@ -54,5 +60,12 @@ export function makeDropLinkConfig(): DropLinkConfig {
 
       return null;
     },
+  };
+}
+
+export function makePeekWikiLinksConfig(): Pick<WikiLinksHostConfig, 'onHover' | 'onHoverEnd'> {
+  return {
+    onHover: openFromWikiLink,
+    onHoverEnd: closeFromWikiLink,
   };
 }

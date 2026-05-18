@@ -1,5 +1,8 @@
-import { describe, it, expect } from 'vitest';
-import { parseTrigger, findWikiLinksInLine } from '../wiki-links';
+// @vitest-environment happy-dom
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { EditorState } from '@codemirror/state';
+import { EditorView } from '@codemirror/view';
+import { parseTrigger, findWikiLinksInLine, wikiLinks, type WikiLinksConfig } from '../wiki-links';
 
 describe('parseTrigger', () => {
   it('treats [[ as a 2-char prefix', () => {
@@ -86,5 +89,94 @@ describe('cursor-in-link range check (inclusive bounds)', () => {
     // to=12, cursor at 13
     const cursor = link.to + 1;
     expect(link.from <= cursor && cursor <= link.to).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// onHover / onHoverEnd callbacks (requires DOM via happy-dom)
+// ---------------------------------------------------------------------------
+
+function makeView(config: WikiLinksConfig): { view: EditorView; container: HTMLDivElement } {
+  // Put the link at position 4 so the default cursor (pos 0) is outside the link
+  // range [4, 22], preventing the "isSelected → mark" branch from firing and ensuring
+  // the Decoration.replace widget (which renders .cm-note-link) is used instead.
+  const state = EditorState.create({
+    doc: 'See [[Test Note|abc1]]',
+    extensions: [wikiLinks(config)],
+  });
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const view = new EditorView({ state, parent: container });
+  return { view, container };
+}
+
+describe('onHover / onHoverEnd callbacks', () => {
+  const views: EditorView[] = [];
+  afterEach(() => {
+    views.forEach((v) => v.destroy());
+    views.length = 0;
+    document.body.innerHTML = '';
+  });
+
+  it('calls onHover with (noteId, element) when mouse enters a .cm-note-link span', () => {
+    const onHover = vi.fn();
+    const { view, container } = makeView({ onHover });
+    views.push(view);
+
+    const link = container.querySelector<HTMLElement>('.cm-note-link');
+    expect(link).not.toBeNull();
+    expect(link!.dataset.noteId).toBe('abc1');
+
+    link!.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    expect(onHover).toHaveBeenCalledTimes(1);
+    expect(onHover).toHaveBeenCalledWith('abc1', link);
+  });
+
+  it('does not call onHover when mouse enters a non-link element', () => {
+    const onHover = vi.fn();
+    const { view, container } = makeView({ onHover });
+    views.push(view);
+
+    // Dispatch mouseover on the editor root (not a link)
+    container.dispatchEvent(new MouseEvent('mouseover', { bubbles: false }));
+    expect(onHover).not.toHaveBeenCalled();
+  });
+
+  it('calls onHoverEnd with relatedTarget when mouse leaves a .cm-note-link span', () => {
+    const onHoverEnd = vi.fn();
+    const { view, container } = makeView({ onHoverEnd });
+    views.push(view);
+
+    const link = container.querySelector<HTMLElement>('.cm-note-link');
+    const other = document.createElement('div');
+    document.body.appendChild(other);
+
+    link!.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: other }));
+    expect(onHoverEnd).toHaveBeenCalledTimes(1);
+    expect(onHoverEnd).toHaveBeenCalledWith(other);
+  });
+
+  it('does not call onHoverEnd when mouse leaves a non-link element', () => {
+    const onHoverEnd = vi.fn();
+    const { view, container } = makeView({ onHoverEnd });
+    views.push(view);
+
+    // Dispatch mouseout on a non-link element inside the editor
+    const editorContent = container.querySelector('.cm-content');
+    if (editorContent) {
+      editorContent.dispatchEvent(new MouseEvent('mouseout', { bubbles: true }));
+    }
+    expect(onHoverEnd).not.toHaveBeenCalled();
+  });
+
+  it('does not call onHover when callbacks are not configured', () => {
+    const { view, container } = makeView({}); // no onHover
+    views.push(view);
+
+    const link = container.querySelector<HTMLElement>('.cm-note-link');
+    // Should not throw
+    expect(() => {
+      link!.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    }).not.toThrow();
   });
 });

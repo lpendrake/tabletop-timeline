@@ -3,7 +3,11 @@ import { EditorView } from '@codemirror/view';
 import { EditorSelection } from '@codemirror/state';
 import { useNotesController } from './hooks/useNotesController';
 import { MarkdownEditor, FormatToolbar, type SavedEditorInstance } from '../shared/markdown-editor';
-import { makeImagePasteConfig, makeDropLinkConfig } from './editor-bindings';
+import {
+  makeImagePasteConfig,
+  makeDropLinkConfig,
+  makePeekWikiLinksConfig,
+} from './editor-bindings';
 import { QuickAdd } from './components/quick-add.tsx';
 import { NoteContextMenu } from './components/note-context-menu.tsx';
 import { EditorTabs } from './components/editor-tabs.tsx';
@@ -57,6 +61,7 @@ export function NotesApp({
     [ctrl.activeTab?.folder, campaignPath],
   );
   const dropLinkConfig = useMemo(() => makeDropLinkConfig(), []);
+  const peekWikiLinksConfig = useMemo(() => makePeekWikiLinksConfig(), []);
 
   // Open a note from the search overlay, then scroll to the match position.
   // Both steps are sequenced here so the scroll happens only after the note's
@@ -188,6 +193,7 @@ export function NotesApp({
                 wikiLinks={{
                   suggest: ctrl.suggestLinks,
                   onOpen: ctrl.handleOpenLink,
+                  ...peekWikiLinksConfig,
                   knownIds,
                 }}
                 imagePaste={imagePasteConfig}

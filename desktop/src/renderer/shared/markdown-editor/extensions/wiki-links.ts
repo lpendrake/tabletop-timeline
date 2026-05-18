@@ -36,6 +36,8 @@ export interface WikiLinksConfig {
   suggest?: (query: string) => Promise<WikiLinkSuggestion[]>;
   onOpen?: (id: string) => void;
   openOnClick?: boolean;
+  onHover?: (id: string, el: HTMLElement) => void;
+  onHoverEnd?: (relatedTarget: Element | null) => void;
 }
 
 export interface ParsedWikiLink {
@@ -231,7 +233,7 @@ function makeWikiLinkClickHandler(config: WikiLinksConfig): Extension {
   });
 }
 
-function makeWikiLinkPointerGuard(_config: WikiLinksConfig): Extension {
+function makeWikiLinkPointerGuard(config: WikiLinksConfig): Extension {
   return ViewPlugin.fromClass(
     class {
       private readonly onPointerDown = (event: PointerEvent) => {
@@ -245,12 +247,33 @@ function makeWikiLinkPointerGuard(_config: WikiLinksConfig): Extension {
         event.stopImmediatePropagation();
       };
 
+      private readonly onMouseOver = (event: MouseEvent) => {
+        if (!config.onHover) return;
+        const target = event.target as HTMLElement;
+        const link = target.closest<HTMLElement>('.cm-note-link');
+        if (!link) return;
+        const noteId = link.dataset.noteId;
+        if (!noteId) return;
+        config.onHover(noteId, link);
+      };
+
+      private readonly onMouseOut = (event: MouseEvent) => {
+        if (!config.onHoverEnd) return;
+        const target = event.target as HTMLElement;
+        if (!target.closest<HTMLElement>('.cm-note-link')) return;
+        config.onHoverEnd(event.relatedTarget as Element | null);
+      };
+
       constructor(readonly view: EditorView) {
         view.dom.addEventListener('pointerdown', this.onPointerDown, true);
+        view.dom.addEventListener('mouseover', this.onMouseOver);
+        view.dom.addEventListener('mouseout', this.onMouseOut);
       }
 
       destroy() {
         this.view.dom.removeEventListener('pointerdown', this.onPointerDown, true);
+        this.view.dom.removeEventListener('mouseover', this.onMouseOver);
+        this.view.dom.removeEventListener('mouseout', this.onMouseOut);
       }
     },
   );
