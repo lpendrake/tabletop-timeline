@@ -18,6 +18,9 @@ land in sub-issue 2; this module only covers data resolution and rendering.
   cross-module import from outside `peek/`.
 - Receives file content via an injected `fetcher(path, signal)` callback.
   Does NOT import `window.fsApi` directly.
+- Fetcher contract: resolve to raw markdown, or reject with
+  `err.code === 'ENOENT'` / `err.name === 'NotFoundError'` for not-found
+  (triggers silent close; any other rejection shows an error state).
 - May NOT import from `../notes/`, `../timeline/`, `../views/`.
   The initiating slice wires in peek; peek doesn't know who initiated.
 

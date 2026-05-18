@@ -7,7 +7,11 @@ import type { PeekKind } from './resolve';
 export interface PeekHandle {
   pin(): void;
   close(): void;
-  el: HTMLDivElement;
+  /**
+   * The `.peek-window` div — use for hit-testing (`el.contains(target)`).
+   * Lazily resolved: the element is available after the first React render.
+   */
+  readonly el: HTMLDivElement;
   path: string;
 }
 
@@ -61,7 +65,11 @@ export function showPeek(opts: ShowPeekOptions): PeekHandle {
       windowRef.current?.close();
       destroy();
     },
-    el: host,
+    // Getter: resolves after first React render when windowRef is populated.
+    // Falls back to the React root host before first paint (unlikely in practice).
+    get el(): HTMLDivElement {
+      return (windowRef.current?.windowEl ?? host) as HTMLDivElement;
+    },
     path: linkInfo.path,
   };
 }

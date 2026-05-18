@@ -19,6 +19,12 @@ export interface PeekWindowProps {
   kind: PeekKind;
   anchorRect: DOMRect;
   stackDepth: number;
+  /**
+   * Async file reader — must resolve to raw markdown content.
+   * For not-found files, reject with an Error whose `.code === 'ENOENT'`
+   * (or `.name === 'NotFoundError'`) to trigger a silent close instead of
+   * showing an error state.
+   */
   fetcher: (path: string, signal: AbortSignal) => Promise<string>;
   onPin?: () => void;
   onClose?: () => void;
@@ -27,6 +33,8 @@ export interface PeekWindowProps {
 export interface PeekWindowHandle {
   pin(): void;
   close(): void;
+  /** The actual `.peek-window` div — use for hit-testing (el.contains(target)). */
+  windowEl: HTMLDivElement | null;
 }
 
 let zCounter = 400;
@@ -46,7 +54,8 @@ const ABSOLUTE_SRC_RE = /^(?:https?:|data:|notes-asset:|file:|\/)/;
 export function makeResolveSrc(baseDir: string): (src: string) => string {
   return (src: string) => {
     if (ABSOLUTE_SRC_RE.test(src)) return src;
-    return `notes-asset://current/${baseDir}/${encodeURIComponent(src)}`;
+    // No encoding: slashes in relative paths (e.g. subfolder/pic.png) must be preserved
+    return `notes-asset://current/${baseDir}/${src}`;
   };
 }
 
@@ -187,6 +196,9 @@ export const PeekWindow = forwardRef<PeekWindowHandle, PeekWindowProps>(function
       close() {
         abortRef.current?.abort();
         onClose?.();
+      },
+      get windowEl() {
+        return windowRef.current;
       },
     }),
     [onPin, onClose],

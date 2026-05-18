@@ -205,6 +205,13 @@ describe('makeResolveSrc', () => {
     expect(resolve('image.png')).toBe('notes-asset://current/notes/npcs/image.png');
   });
 
+  it('preserves slashes in subfolder image paths', () => {
+    const resolve = makeResolveSrc('notes/npcs');
+    expect(resolve('subfolder/portrait.png')).toBe(
+      'notes-asset://current/notes/npcs/subfolder/portrait.png',
+    );
+  });
+
   it('passes through notes-asset:// URLs unchanged', () => {
     const resolve = makeResolveSrc('notes/npcs');
     const url = 'notes-asset://current/notes/npcs/face.jpg';
