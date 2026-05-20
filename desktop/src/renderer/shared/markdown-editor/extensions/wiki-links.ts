@@ -20,6 +20,7 @@ import {
   keymap,
   type DecorationSet,
 } from '@codemirror/view';
+import { makePointerGuard } from './pointer-guard';
 
 export type WikiLinkStatus = 'resolved' | 'loading' | 'missing' | 'unresolved';
 
@@ -234,52 +235,40 @@ function makeWikiLinkClickHandler(config: WikiLinksConfig): Extension {
 }
 
 function makeWikiLinkPointerGuard(config: WikiLinksConfig): Extension {
-  return ViewPlugin.fromClass(
-    class {
-      private readonly onPointerDown = (event: PointerEvent) => {
-        if (!(event.metaKey || event.ctrlKey)) return;
-        if (event.button !== 0) return;
-        const target = event.target as HTMLElement;
-        const link = target.closest<HTMLElement>('.cm-note-link');
-        if (!link) return;
+  return [
+    makePointerGuard('.cm-note-link'),
+    ViewPlugin.fromClass(
+      class {
+        private readonly onMouseOver = (event: MouseEvent) => {
+          if (!config.onHover) return;
+          const link = (event.target as HTMLElement).closest<HTMLElement>('.cm-note-link');
+          if (!link) return;
+          const noteId = link.dataset.noteId;
+          if (!noteId) return;
+          config.onHover(noteId, link);
+        };
 
-        event.preventDefault();
-        event.stopImmediatePropagation();
-      };
+        private readonly onMouseOut = (event: MouseEvent) => {
+          if (!config.onHoverEnd) return;
+          if (!(event.target as HTMLElement).closest<HTMLElement>('.cm-note-link')) return;
+          config.onHoverEnd(event.relatedTarget as Element | null);
+        };
 
-      private readonly onMouseOver = (event: MouseEvent) => {
-        if (!config.onHover) return;
-        const target = event.target as HTMLElement;
-        const link = target.closest<HTMLElement>('.cm-note-link');
-        if (!link) return;
-        const noteId = link.dataset.noteId;
-        if (!noteId) return;
-        config.onHover(noteId, link);
-      };
+        constructor(readonly view: EditorView) {
+          view.dom.addEventListener('mouseover', this.onMouseOver);
+          view.dom.addEventListener('mouseout', this.onMouseOut);
+        }
 
-      private readonly onMouseOut = (event: MouseEvent) => {
-        if (!config.onHoverEnd) return;
-        const target = event.target as HTMLElement;
-        if (!target.closest<HTMLElement>('.cm-note-link')) return;
-        config.onHoverEnd(event.relatedTarget as Element | null);
-      };
-
-      constructor(readonly view: EditorView) {
-        view.dom.addEventListener('pointerdown', this.onPointerDown, true);
-        view.dom.addEventListener('mouseover', this.onMouseOver);
-        view.dom.addEventListener('mouseout', this.onMouseOut);
-      }
-
-      destroy() {
-        this.view.dom.removeEventListener('pointerdown', this.onPointerDown, true);
-        this.view.dom.removeEventListener('mouseover', this.onMouseOver);
-        this.view.dom.removeEventListener('mouseout', this.onMouseOut);
-      }
-    },
-  );
+        destroy() {
+          this.view.dom.removeEventListener('mouseover', this.onMouseOver);
+          this.view.dom.removeEventListener('mouseout', this.onMouseOut);
+        }
+      },
+    ),
+  ];
 }
 
-function buildDecorations(state: EditorState, _config: WikiLinksConfig): DecorationSet {
+export function buildDecorations(state: EditorState, _config: WikiLinksConfig): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const doc = state.doc;
   // knownIds is empty until the first setKnownIds effect; empty = don't mark as broken yet
@@ -294,7 +283,9 @@ function buildDecorations(state: EditorState, _config: WikiLinksConfig): Decorat
       // Inclusive bounds: cursor AT link.from or link.to counts as "inside" the link.
       // This matters because Decoration.replace (used below) is atomic — the cursor
       // can only land at the two boundary positions, never strictly inside.
-      const isSelected = state.selection.ranges.some((r) => r.from <= link.to && r.to >= link.from);
+      const isSelected =
+        !state.readOnly &&
+        state.selection.ranges.some((r) => r.from <= link.to && r.to >= link.from);
       const broken = hasIndex && !knownIds.has(link.id);
 
       if (isSelected) {

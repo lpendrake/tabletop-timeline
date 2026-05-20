@@ -24,6 +24,7 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { lastGaspThemeExtensions } from './theme';
 import { wikiLinks, setKnownIds, type WikiLinkSuggestion } from './extensions/wiki-links';
+import { markdownLinkClick, type MarkdownLinkClickConfig } from './extensions/markdown-link-click';
 import { markdownDecorations } from './extensions/decorations';
 import { imagePaste, type ImagePasteConfig } from './extensions/image-paste';
 import { imageDecorations, type ImageDecorationsOptions } from './extensions/image-decorations';
@@ -74,6 +75,9 @@ export interface MarkdownEditorProps {
 
   /** Enables drag-and-drop link insertion. Omit to disable. */
   dropLink?: DropLinkConfig;
+
+  /** Enables Ctrl/Cmd+click on standard markdown links `[text](url)`. */
+  mdLinks?: MarkdownLinkClickConfig;
 }
 
 export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
@@ -88,6 +92,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   images: imagesConfig,
   imagePaste: imagePasteConfig,
   dropLink: dropLinkConfig,
+  mdLinks: mdLinksConfig,
 }) => {
   const editorRef = useRef<HTMLDivElement>(null);
   const internalViewRef = useRef<EditorView | null>(null);
@@ -99,12 +104,14 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   const readOnlyRef = useRef(readOnly);
   const wikiLinksRef = useRef(wikiLinksConfig);
   const imagesRef = useRef(imagesConfig);
+  const mdLinksRef = useRef(mdLinksConfig);
   onChangeRef.current = onChange;
   onSaveInstanceRef.current = onSaveInstance;
   isSourceModeRef.current = isSourceMode;
   readOnlyRef.current = readOnly;
   wikiLinksRef.current = wikiLinksConfig;
   imagesRef.current = imagesConfig;
+  mdLinksRef.current = mdLinksConfig;
 
   const modeCompartmentRef = useRef<Compartment>(
     savedInstance?.modeCompartment ?? new Compartment(),
@@ -113,21 +120,24 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   /** Extensions that differ between live and source mode. */
   function buildModeExtensions(sourceMode: boolean): Extension[] {
     if (sourceMode) return [];
-    const exts: Extension[] = [markdownDecorations(), imageDecorations(imagesRef.current)];
-    if (wikiLinksRef.current) {
-      exts.push(
-        wikiLinks({
-          suggest: (q) => wikiLinksRef.current!.suggest(q),
-          onOpen: (id) => wikiLinksRef.current!.onOpen(id),
-          onHover: wikiLinksRef.current.onHover
-            ? (id, el) => wikiLinksRef.current!.onHover!(id, el)
-            : undefined,
-          onHoverEnd: wikiLinksRef.current.onHoverEnd
-            ? (rt) => wikiLinksRef.current!.onHoverEnd!(rt)
-            : undefined,
-        }),
-      );
-    }
+    const exts: Extension[] = [
+      markdownDecorations(),
+      imageDecorations(imagesRef.current),
+      wikiLinks({
+        suggest: wikiLinksRef.current ? (q) => wikiLinksRef.current!.suggest(q) : undefined,
+        onOpen: wikiLinksRef.current ? (id) => wikiLinksRef.current!.onOpen(id) : undefined,
+        onHover: wikiLinksRef.current?.onHover
+          ? (id, el) => wikiLinksRef.current!.onHover!(id, el)
+          : undefined,
+        onHoverEnd: wikiLinksRef.current?.onHoverEnd
+          ? (rt) => wikiLinksRef.current!.onHoverEnd!(rt)
+          : undefined,
+      }),
+      markdownLinkClick({
+        onOpenExternal: (u) => mdLinksRef.current?.onOpenExternal?.(u),
+        onOpenInternal: (u) => mdLinksRef.current?.onOpenInternal?.(u),
+      }),
+    ];
     return exts;
   }
 

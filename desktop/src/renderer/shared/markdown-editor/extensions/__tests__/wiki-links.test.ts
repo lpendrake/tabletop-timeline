@@ -2,7 +2,14 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { parseTrigger, findWikiLinksInLine, wikiLinks, type WikiLinksConfig } from '../wiki-links';
+import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
+import {
+  parseTrigger,
+  findWikiLinksInLine,
+  wikiLinks,
+  buildDecorations,
+  type WikiLinksConfig,
+} from '../wiki-links';
 
 describe('parseTrigger', () => {
   it('treats [[ as a 2-char prefix', () => {
@@ -178,5 +185,41 @@ describe('onHover / onHoverEnd callbacks', () => {
     expect(() => {
       link!.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
     }).not.toThrow();
+  });
+});
+
+describe('readonly mode decorations', () => {
+  function makeState(doc: string, cursorPos: number, readOnly: boolean) {
+    const extensions = [
+      markdown({ base: markdownLanguage }),
+      ...(readOnly ? [EditorState.readOnly.of(true)] : []),
+    ];
+    return EditorState.create({ doc, extensions, selection: { anchor: cursorPos } });
+  }
+
+  it('in normal (editable) mode, a wiki-link whose range overlaps the selection shows as raw text', () => {
+    // cursor at pos 2 — inside [[Bob|abc1]], from=0 to=12
+    const state = makeState('[[Bob|abc1]]', 2, false);
+    const decos = buildDecorations(state, {});
+    let hasRawMark = false;
+    decos.between(0, state.doc.length, (_from, _to, deco) => {
+      if ((deco.spec as Record<string, unknown>)['class'] === 'cm-wiki-link-raw') hasRawMark = true;
+    });
+    expect(hasRawMark).toBe(true);
+  });
+
+  it('in readonly mode, the same overlapping selection always renders as a widget', () => {
+    const state = makeState('[[Bob|abc1]]', 2, true);
+    expect(state.readOnly).toBe(true);
+    const decos = buildDecorations(state, {});
+    let hasRawMark = false;
+    let hasWidget = false;
+    decos.between(0, state.doc.length, (_from, _to, deco) => {
+      const spec = deco.spec as Record<string, unknown>;
+      if (spec['class'] === 'cm-wiki-link-raw') hasRawMark = true;
+      if (spec['widget'] !== undefined) hasWidget = true;
+    });
+    expect(hasRawMark).toBe(false);
+    expect(hasWidget).toBe(true);
   });
 });
