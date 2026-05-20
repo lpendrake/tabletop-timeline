@@ -24,6 +24,7 @@ export interface PeekWindowProps {
    * showing an error state.
    */
   fetcher: (path: string, signal: AbortSignal) => Promise<string>;
+  onOpenById?: (id: string) => void;
   onPin?: () => void;
   onClose?: () => void;
 }
@@ -35,7 +36,7 @@ export interface PeekWindowHandle {
   windowEl: HTMLDivElement | null;
 }
 
-let zCounter = 400;
+let zCounter = 1100;
 function nextZ(): number {
   return ++zCounter;
 }
@@ -72,7 +73,7 @@ function isNotFound(err: unknown): boolean {
 }
 
 export const PeekWindow = forwardRef<PeekWindowHandle, PeekWindowProps>(function PeekWindow(
-  { path, anchorRect, stackDepth: _stackDepth, fetcher, onPin, onClose },
+  { path, anchorRect, stackDepth: _stackDepth, fetcher, onOpenById, onPin, onClose },
   ref,
 ) {
   const [loadState, setLoadState] = useState<LoadState>({ status: 'loading' });
@@ -233,6 +234,8 @@ export const PeekWindow = forwardRef<PeekWindowHandle, PeekWindowProps>(function
           <MarkdownPreview
             content={loadState.body}
             images={{ resolveSrc: makeResolveSrc(loadState.baseDir) }}
+            baseDir={loadState.baseDir}
+            wikiLinks={onOpenById ? { onOpen: onOpenById } : undefined}
           />
         )}
       </div>

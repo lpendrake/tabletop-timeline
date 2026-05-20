@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
+import { generateShortId } from '../shared/ids.js';
 
 import type {
   Event,
@@ -77,6 +78,7 @@ function parseEventFile(
     tags: Array.isArray(data.tags) ? data.tags : [],
     ...(data.color !== undefined ? { color: String(data.color) } : {}),
     ...(data.status !== undefined ? { status: data.status as Event['status'] } : {}),
+    ...(data.id !== undefined ? { id: String(data.id) } : {}),
     body: body.trimStart(),
     mtime: lastModified,
   };
@@ -153,9 +155,12 @@ export function registerTimelineIpcHandlers() {
       assertSafeFilename(dir, filename);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       const filePath = path.join(dir, filename);
+      const fmWithId: EventFrontmatter = frontmatter.id
+        ? frontmatter
+        : { ...frontmatter, id: generateShortId() };
       const content = matter.stringify(
         body,
-        frontmatter as unknown as Record<string, unknown>,
+        fmWithId as unknown as Record<string, unknown>,
         MATTER_OPTS,
       );
       // 'wx' flag: fail if the file already exists, preventing silent clobbers.

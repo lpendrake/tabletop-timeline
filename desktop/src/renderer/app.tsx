@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Footer, ViewType } from './components/footer';
 import { NotesView } from './views/notes/notes-view';
 import { TimelineView } from './views/timeline/timeline-view';
@@ -9,7 +9,11 @@ import { useCampaigns } from './hooks/useCampaigns';
 import { useCampaignPalette } from './hooks/useCampaignPalette';
 import { paletteToCssVars } from './timeline/palette';
 import { SearchOverlay } from './components/search-overlay';
+import { notesData } from './notes/data';
+import { timelinePort } from './timeline/data/ports';
+import { initPeek, teardownPeek } from './peek/stack';
 import type { EventListItem } from './timeline/data/types';
+import type { LinkIndexEntry } from '../types/global';
 import '../../src/index.css';
 
 export default function App() {
@@ -32,6 +36,43 @@ export default function App() {
   const palette = useCampaignPalette(activeCampaign?.path ?? null);
   const paletteVars = palette ? paletteToCssVars(palette) : null;
 
+  const linkIndexRef = useRef<LinkIndexEntry[]>([]);
+
+  useEffect(() => {
+    if (!activeCampaign) return;
+    const campaignPath = activeCampaign.path;
+    linkIndexRef.current = [];
+    let active = true;
+    notesData
+      .getLinkIndex(campaignPath)
+      .then((index) => {
+        if (active) linkIndexRef.current = index;
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+      linkIndexRef.current = [];
+    };
+  }, [activeCampaign?.path]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!activeCampaign) return;
+    const campaignPath = activeCampaign.path;
+    initPeek({
+      fetcher: async (path, signal) => {
+        const content = await notesData.readNote(`${campaignPath}/${path}`);
+        if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+        if (content !== null) return content;
+        const filename = path.split('/').pop()!;
+        const { event } = await timelinePort.getEvent(campaignPath, filename);
+        return `# ${event.title}\n\n${event.body}`;
+      },
+      getLinkIndex: () => linkIndexRef.current,
+      onOpenById: handleOpenById,
+    });
+    return () => teardownPeek();
+  }, [activeCampaign?.path]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && activeCampaign) {
@@ -45,9 +86,10 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [activeCampaign]);
 
-  const handleJumpToEvent = useCallback((ev: EventListItem) => {
+  const handleJumpToEvent = useCallback((target: string | EventListItem) => {
+    const filename = typeof target === 'string' ? target : target.filename;
     setCurrentView('timeline');
-    setPendingJumpFilename(ev.filename);
+    setPendingJumpFilename(filename);
   }, []);
 
   const handleOpenNote = useCallback((path: string, matchOffset?: number) => {
@@ -55,6 +97,19 @@ export default function App() {
     setPendingOpenNotePath(path);
     setPendingNoteMatchOffset(matchOffset ?? null);
   }, []);
+
+  const handleOpenById = useCallback(
+    (id: string) => {
+      const entry = linkIndexRef.current.find((e) => e.id === id);
+      if (!entry) return;
+      if (entry.type === 'event') {
+        handleJumpToEvent(entry.path.split('/').pop()!);
+      } else if (entry.type === 'note') {
+        handleOpenNote(entry.path);
+      }
+    },
+    [handleJumpToEvent, handleOpenNote],
+  );
 
   if (isLoading) {
     return (
@@ -103,6 +158,7 @@ export default function App() {
             onNoteOpenHandled={() => setPendingOpenNotePath(null)}
             pendingNoteMatchOffset={pendingNoteMatchOffset}
             onNoteMatchOffsetHandled={() => setPendingNoteMatchOffset(null)}
+            onOpenEvent={handleJumpToEvent}
           />
         );
       case 'timeline':
@@ -112,6 +168,7 @@ export default function App() {
             palette={palette}
             pendingJumpFilename={pendingJumpFilename}
             onJumpHandled={() => setPendingJumpFilename(null)}
+            onOpenById={handleOpenById}
           />
         );
       case 'relationships':
@@ -125,6 +182,7 @@ export default function App() {
             onNoteOpenHandled={() => setPendingOpenNotePath(null)}
             pendingNoteMatchOffset={pendingNoteMatchOffset}
             onNoteMatchOffsetHandled={() => setPendingNoteMatchOffset(null)}
+            onOpenEvent={handleJumpToEvent}
           />
         );
     }

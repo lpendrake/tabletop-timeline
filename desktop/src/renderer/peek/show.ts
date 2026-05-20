@@ -18,13 +18,14 @@ export interface ShowPeekOptions {
   targetEl: HTMLElement;
   linkInfo: { path: string };
   fetcher: (path: string, signal: AbortSignal) => Promise<string>;
+  onOpenById?: (id: string) => void;
   stackDepth?: number;
   onPin?: () => void;
   onClose?: () => void;
 }
 
 export function showPeek(opts: ShowPeekOptions): PeekHandle {
-  const { targetEl, linkInfo, fetcher, stackDepth = 0, onPin, onClose } = opts;
+  const { targetEl, linkInfo, fetcher, onOpenById, stackDepth = 0, onPin, onClose } = opts;
 
   const host = document.createElement('div');
   document.body.appendChild(host);
@@ -47,6 +48,7 @@ export function showPeek(opts: ShowPeekOptions): PeekHandle {
       anchorRect,
       stackDepth,
       fetcher,
+      onOpenById,
       onPin,
       onClose: () => {
         onClose?.();

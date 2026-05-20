@@ -56,6 +56,8 @@ interface TimelineViewProps {
   pendingJumpFilename?: string | null;
   /** Called after the jump has been applied so the parent can clear the pending value. */
   onJumpHandled?: () => void;
+  /** Navigate to a note by wiki-link ID (Ctrl+click from card expansions / event editor). */
+  onOpenById?: (id: string) => void;
 }
 
 interface LoadedData {
@@ -69,6 +71,7 @@ export function TimelineView({
   palette,
   pendingJumpFilename,
   onJumpHandled,
+  onOpenById,
 }: TimelineViewProps) {
   const [viewState, setViewState] = useState<ViewState>({
     centerSeconds: 0,
@@ -487,6 +490,7 @@ export function TimelineView({
             onResizeDragChange={sessionModeActiveRef.current ? undefined : handleResizeDragChange}
             onEditClick={sessionModeActiveRef.current ? undefined : editor.openEdit}
             onDeleteClick={sessionModeActiveRef.current ? undefined : editor.requestDeleteFromCard}
+            onOpenById={onOpenById}
           />
         )}
         {palette && inGameNow && (
@@ -599,6 +603,7 @@ export function TimelineView({
           onSaved={editor.handleSaved}
           onAutosaved={editor.handleAutosaved}
           onDeleted={editor.handleDeleted}
+          onOpenById={onOpenById}
         />
       )}
 
