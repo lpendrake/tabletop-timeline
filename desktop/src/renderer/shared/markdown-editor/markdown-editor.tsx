@@ -42,8 +42,8 @@ export interface SavedEditorInstance {
 }
 
 export interface WikiLinksHostConfig {
-  suggest: (query: string) => Promise<WikiLinkSuggestion[]>;
-  onOpen: (id: string) => void;
+  suggest?: (query: string) => Promise<WikiLinkSuggestion[]>;
+  onOpen?: (id: string) => void;
   knownIds?: Set<string>;
   onHover?: (id: string, el: HTMLElement) => void;
   onHoverEnd?: (relatedTarget: Element | null) => void;

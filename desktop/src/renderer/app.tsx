@@ -12,6 +12,7 @@ import { SearchOverlay } from './components/search-overlay';
 import { notesData } from './notes/data';
 import { timelinePort } from './timeline/data/ports';
 import { initPeek, teardownPeek } from './peek/stack';
+import { resolvePeekTarget } from './peek/resolve';
 import type { EventListItem } from './timeline/data/types';
 import type { LinkIndexEntry } from '../types/global';
 import '../../src/index.css';
@@ -68,6 +69,7 @@ export default function App() {
         return `# ${event.title}\n\n${event.body}`;
       },
       getLinkIndex: () => linkIndexRef.current,
+      onOpenNote: handleOpenNoteById,
     });
     return () => teardownPeek();
   }, [activeCampaign?.path]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -96,6 +98,14 @@ export default function App() {
     setPendingOpenNotePath(path);
     setPendingNoteMatchOffset(matchOffset ?? null);
   }, []);
+
+  const handleOpenNoteById = useCallback(
+    (id: string) => {
+      const target = resolvePeekTarget(id, '', linkIndexRef.current);
+      if (target) handleOpenNote(target.path);
+    },
+    [handleOpenNote],
+  );
 
   if (isLoading) {
     return (
@@ -154,6 +164,7 @@ export default function App() {
             palette={palette}
             pendingJumpFilename={pendingJumpFilename}
             onJumpHandled={() => setPendingJumpFilename(null)}
+            onOpenNote={handleOpenNoteById}
           />
         );
       case 'relationships':

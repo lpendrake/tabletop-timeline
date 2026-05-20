@@ -46,6 +46,7 @@ interface CardsProps {
   onResizeDragChange: (active: boolean) => void;
   onEditClick: (filename: string) => void;
   onDeleteClick: (item: EventListItem) => void;
+  onOpenNote?: (id: string) => void;
 }
 
 export function Cards({
@@ -61,6 +62,7 @@ export function Cards({
   onResizeDragChange,
   onEditClick,
   onDeleteClick,
+  onOpenNote,
 }: CardsProps): ReactElement | null {
   const laidOut = useMemo(
     () => layoutCards(events, view, size, inGameNowSeconds),
@@ -129,6 +131,7 @@ export function Cards({
             onResizeDragChange={onResizeDragChange}
             onEditClick={onEditClick}
             onDeleteClick={onDeleteClick}
+            onOpenNote={onOpenNote}
           />
         );
       })}
@@ -150,6 +153,7 @@ interface CardItemProps {
   onResizeDragChange: (active: boolean) => void;
   onEditClick: (filename: string) => void;
   onDeleteClick: (item: EventListItem) => void;
+  onOpenNote?: (id: string) => void;
 }
 
 function CardItem({
@@ -166,6 +170,7 @@ function CardItem({
   onResizeDragChange,
   onEditClick,
   onDeleteClick,
+  onOpenNote,
 }: CardItemProps): ReactElement {
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
@@ -183,6 +188,7 @@ function CardItem({
       centerX={card.x}
       onSizeChange={onPreviewSizeChange}
       onResizeDragChange={onResizeDragChange}
+      onOpenNote={onOpenNote}
     />
   ) : null;
 

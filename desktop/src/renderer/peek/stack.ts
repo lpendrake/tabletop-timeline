@@ -20,6 +20,7 @@ let stackConfig: PeekStackConfig | null = null;
 export interface PeekStackConfig {
   fetcher: (path: string, signal: AbortSignal) => Promise<string>;
   getLinkIndex: () => readonly LinkIndexEntry[];
+  onOpenNote?: (id: string) => void;
 }
 
 function cancelOpen() {
@@ -75,6 +76,7 @@ function openWindow(path: string, anchor: HTMLElement, depth: number) {
     targetEl: anchor,
     linkInfo: { path },
     fetcher: stackConfig!.fetcher,
+    onOpenNote: stackConfig!.onOpenNote,
     stackDepth: Math.min(depth, MAX_DEPTH - 1),
     onPin: () => {
       stack = stack.filter((e) => e.handle !== handle);

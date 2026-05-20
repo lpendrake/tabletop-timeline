@@ -17,6 +17,7 @@ interface CardExpansionProps {
   onSizeChange: (s: PreviewSize) => void;
   /** Called with a boolean indicating whether a resize drag is in progress */
   onResizeDragChange: (active: boolean) => void;
+  onOpenNote?: (id: string) => void;
 }
 
 export function CardExpansion({
@@ -26,6 +27,7 @@ export function CardExpansion({
   centerX,
   onSizeChange,
   onResizeDragChange,
+  onOpenNote,
 }: CardExpansionProps): ReactElement {
   // Ref to the expansion container element (owns the height we resize)
   const expRef = useRef<HTMLDivElement>(null);
@@ -113,6 +115,7 @@ export function CardExpansion({
           content={body}
           images={{ resolveSrc: resolveEventImageSrc }}
           baseDir="events"
+          wikiLinks={onOpenNote ? { onOpen: onOpenNote } : undefined}
         />
       ) : (
         <div className="exp-body">

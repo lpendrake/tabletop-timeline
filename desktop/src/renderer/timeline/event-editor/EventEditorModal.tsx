@@ -34,6 +34,7 @@ export interface EventEditorModalProps {
   onDeleted: (filename: string) => void;
   /** Called after a background auto-save; editor stays open. */
   onAutosaved?: (filename: string) => void;
+  onOpenNote?: (id: string) => void;
 }
 
 export function EventEditorModal({
@@ -43,6 +44,7 @@ export function EventEditorModal({
   onSaved,
   onDeleted,
   onAutosaved,
+  onOpenNote,
 }: EventEditorModalProps) {
   const [loadState, setLoadState] = useState<LoadState>(mode.kind === 'edit' ? 'loading' : 'ready');
   const [buffer, setBuffer] = useState<EditorBuffer>(
@@ -484,7 +486,7 @@ export function EventEditorModal({
                   viewRef={viewRef}
                   wikiLinks={{
                     suggest: suggestLinks,
-                    onOpen: () => {},
+                    onOpen: onOpenNote,
                     onHover: openFromWikiLink,
                     onHoverEnd: closeFromWikiLink,
                     knownIds,
