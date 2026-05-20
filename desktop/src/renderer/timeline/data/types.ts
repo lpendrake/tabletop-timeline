@@ -4,6 +4,7 @@ export interface EventFrontmatter {
   tags?: string[];
   color?: string;
   status?: 'happened' | 'planned';
+  id?: string;
 }
 
 export interface Event extends EventFrontmatter {

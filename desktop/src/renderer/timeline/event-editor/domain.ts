@@ -7,6 +7,7 @@ export interface EditorBuffer {
   tagsText: string;
   color: string;
   body: string;
+  id?: string;
 }
 
 export type EditorMode =
@@ -44,6 +45,7 @@ export function bufferFromEvent(ev: Event): EditorBuffer {
     tagsText: (ev.tags ?? []).join(', '),
     color: ev.color ?? '',
     body: ev.body,
+    id: ev.id,
   };
 }
 
@@ -58,6 +60,7 @@ export function bufferToFrontmatter(buf: EditorBuffer): EventFrontmatter {
   };
   if (tags.length > 0) fm.tags = tags;
   if (buf.color) fm.color = buf.color;
+  if (buf.id) fm.id = buf.id;
   return fm;
 }
 
