@@ -1,4 +1,4 @@
-# Claude instructions for desktop/
+# Claude instructions
 
 ## Running scripts
 
