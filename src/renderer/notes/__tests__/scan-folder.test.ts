@@ -104,4 +104,30 @@ describe('scanFolderContents', () => {
     const result = await scanFolderContents(campaignPath, folder, index);
     expect(result.some((e) => e.path === 'good.md')).toBe(true);
   });
+
+  it('handles folder and file names that contain spaces', async () => {
+    const index: LinkIndexEntry[] = [
+      {
+        id: 'sp1',
+        path: 'notes/Lore/Player Characters/bob the brave.md',
+        title: 'Bob the Brave',
+        type: 'note',
+      },
+    ];
+    listFolder.mockImplementation(async (p: string) => {
+      if (p === rootDir) return [{ name: 'Player Characters', isDirectory: true }];
+      if (p === `${rootDir}/Player Characters`)
+        return [{ name: 'bob the brave.md', isDirectory: false }];
+      return [];
+    });
+    const result = await scanFolderContents(campaignPath, folder, index);
+    expect(result).toEqual([
+      {
+        id: 'sp1',
+        path: 'Player Characters/bob the brave.md',
+        title: 'Bob the Brave',
+        kind: 'note',
+      },
+    ]);
+  });
 });

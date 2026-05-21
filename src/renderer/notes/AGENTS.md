@@ -1,7 +1,6 @@
-# `src/renderer/notes/` — Notes View (React)
+# `src/renderer/notes/` — Notes View
 
-The folder/file browser, tabbed editor, and live markdown editor for
-notes (NPCs, locations, factions, plots, etc.). React, not vanilla DOM.
+The folder/file browser and tabbed notes editor.
 
 ## Layout
 
@@ -12,57 +11,61 @@ notes/
   scan-folder.ts              # scanFolderContents — IO-only, no React
   editor-bindings.ts          # pure config-builder functions
   types.ts
-  domain/                     # pure functions, no React, no IO
+  domain/                     # pure functions, no IO
     slugify.ts
-    open-note-by-path.ts      # parseNotePath
-    link-resolution.ts        # suggestLinks, resolveLinkById, resolveMarkdownHref
+    open-note-by-path.ts      # parseNotePath — also used by global search-to-notes flow
+    link-resolution.ts        # resolveLinkById, resolveMarkdownHref
     __tests__/
   hooks/
     useNotesController.ts     # orchestrator (see ceiling note)
     useSaveSync.ts
     useFolderTree.ts
   components/
-    FolderSidebar.tsx
-    EditorTabs.tsx
-    BreadcrumbNav.tsx
-    MetaPanel.tsx
-    QuickAdd.tsx
-    NoteContextMenu.tsx
+    folder-sidebar.tsx
+    editor-tabs.tsx
+    breadcrumb-nav.tsx
+    meta-panel.tsx
+    note-context-menu.tsx
+    quick-add.tsx
   __tests__/                  # cross-cutting tests
   styles/
 ```
 
+Note: link suggestion (`suggestLinks`) lives in `src/renderer/shared/suggest-links.ts` — it is
+an editor feature shared with the event editor, not a notes-specific concern.
+
 ## Layer rules
 
-- **`domain/`** — pure functions, no React, no `window.fsApi`, no `notesData`.
-  Tested directly in `domain/__tests__/`.
+- **`domain/`** — pure functions, no IO. Tested directly in `domain/__tests__/`.
 - **Top-level `.ts` files** (`scan-folder.ts`, `editor-bindings.ts`, `data.ts`) — non-React IO or
-  config logic. May import `data.ts` / `notesData`. No React. Tested in `__tests__/` with `vi.mock`.
+  config logic. May import `notesData`. No React. Tested in `__tests__/` with `vi.mock`.
 - **`hooks/`** — React state and effects. May import `domain/` and the top-level helpers.
-- **`components/`** — JSX only. Receive props; do not import `notesData` directly.
+- **`components/`** — `.tsx` files that render markup and surface events via props. No business
+  logic, no direct imports of `notesData`.
 
 ## useNotesController ceiling
 
 The orchestrator is ~750 lines. The remaining length is file-ops handlers (`handleRename*`,
-`handleDelete*`, `handleMove`, `commitNew*`, `handleQuickAddCreate`) that each thread 5–10
-setState calls. Pulling these into a hook would mean passing every setter through a deps object —
-the abstraction would be larger than the code it hides.
+`handleDelete*`, `handleMove`, `commitNew*`, `handleQuickAddCreate`). Each drives 5–10 setState
+calls in a fixed sequence; the interesting part is the state computation, not the sequencing.
 
-**New pure logic goes in `domain/`. New IO-only logic goes as a named file alongside
-`scan-folder.ts`. Do not add logic to the orchestrator.** If a handler grows non-trivial
-computation, extract the computation to `domain/` and call it from the handler.
+**The right pattern when a handler grows or needs a test:** extract the computation into a pure
+function in `domain/` — e.g. `computeTabStateAfterDelete(tabs, activeTab, folder, path)` takes
+state arrays and returns new ones. The handler calls it and feeds the result into the setters.
+No setter-threading required.
 
-## React conventions
+**The orchestrator is a sequencer, not a logic owner.** New logic goes in `domain/`.
 
-- One component per file. Filename matches the export.
-- Hooks for state and effects.
-- Components for JSX only.
-- `domain/` for pure logic.
-- Top-level `.ts` files for non-React IO or config.
+## Conventions
+
+- Hooks coordinate state and effects; they call `domain/` functions and do not contain the
+  logic themselves.
+- One `.tsx` component per file in kebab-case. Components render markup and delegate everything
+  else to their hook or parent via props.
+- `domain/` for pure logic; top-level `.ts` files for non-React IO.
 
 ## Don't
 
 - Don't call `window.fsApi` directly from React. Go through `data.ts` or a top-level helper.
 - Don't reimplement folder tree state — `useFolderTree` is the source of truth.
-- Don't put logic in the orchestrator that would be equally at home in `domain/` or a
-  standalone `.ts` file.
+- Don't put logic in the orchestrator. Extract the computation and call it.

@@ -58,8 +58,6 @@ Functions defined this way close over state and become untestable without mounti
 - Non-React IO logic belongs as a named `.ts` file alongside `data.ts`
 - The hook body wires those up to React state — it does not contain the logic itself
 
-A test file that duplicates implementation logic in a local stub is the clearest sign this rule was broken.
-
 # File Naming Convention
 
 kebab-case for all files and folders.

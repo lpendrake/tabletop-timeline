@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { suggestLinks, resolveLinkById, resolveMarkdownHref } from '../link-resolution';
+import { resolveLinkById, resolveMarkdownHref } from '../link-resolution';
 import type { LinkIndexEntry } from '../../../../types/global';
 
 const idx: LinkIndexEntry[] = [
@@ -9,38 +9,14 @@ const idx: LinkIndexEntry[] = [
   { id: 's3', path: 'notes/assets/map.png', title: 'World Map', type: 'asset' },
 ];
 
-describe('suggestLinks', () => {
-  it('matches by title substring case-insensitively', () => {
-    expect(suggestLinks(idx, 'bob')).toEqual([
-      { id: 'a1', label: 'Bob the Brave', detail: 'notes/Lore/bob.md' },
-    ]);
-  });
-
-  it('matches by id', () => {
-    const result = suggestLinks(idx, 'e1');
-    expect(result[0].id).toBe('e1');
-  });
-
-  it('asset entries carry assetPath and a blank id', () => {
-    const result = suggestLinks(idx, 'map');
-    expect(result[0]).toMatchObject({
-      id: '',
-      label: 'World Map',
-      assetPath: 'notes/assets/map.png',
-    });
-  });
-
-  it('returns [] when nothing matches', () => {
-    expect(suggestLinks(idx, 'xyzzy')).toEqual([]);
-  });
-});
-
 describe('resolveLinkById', () => {
   it('returns not-found for unknown id', () => {
     expect(resolveLinkById(idx, 'nope')).toEqual({ kind: 'not-found' });
   });
 
-  it('strips "timeline/" prefix for events', () => {
+  it('returns the filename without the "timeline/" folder prefix for events', () => {
+    // event paths in the index are stored as "timeline/<filename>" — strip the folder
+    // so the caller can pass just the filename to onOpenEvent
     expect(resolveLinkById(idx, 'e1')).toEqual({ kind: 'event', filename: 'sess-01.md' });
   });
 

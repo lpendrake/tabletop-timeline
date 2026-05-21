@@ -1,26 +1,5 @@
 import type { LinkIndexEntry } from '../../../types/global';
 
-export interface LinkSuggestion {
-  id: string;
-  label: string;
-  detail: string;
-  assetPath?: string;
-}
-
-export function suggestLinks(
-  linkIndex: readonly LinkIndexEntry[],
-  query: string,
-): LinkSuggestion[] {
-  const q = query.toLowerCase();
-  return linkIndex
-    .filter((e) => e.title.toLowerCase().includes(q) || e.id.toLowerCase().includes(q))
-    .map((e) =>
-      e.type === 'asset'
-        ? { id: '', label: e.title, detail: e.path, assetPath: e.path }
-        : { id: e.id, label: e.title, detail: e.path },
-    );
-}
-
 export type ResolvedLink =
   | { kind: 'not-found' }
   | { kind: 'event'; filename: string }

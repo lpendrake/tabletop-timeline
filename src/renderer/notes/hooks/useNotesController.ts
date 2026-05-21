@@ -2,11 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { notesData } from '../data';
 import { slugify } from '../domain/slugify';
 import { parseNotePath } from '../domain/open-note-by-path';
-import {
-  suggestLinks as suggestLinksDomain,
-  resolveLinkById,
-  resolveMarkdownHref,
-} from '../domain/link-resolution';
+import { suggestLinks as suggestLinksDomain } from '../../shared/suggest-links';
+import { resolveLinkById, resolveMarkdownHref } from '../domain/link-resolution';
 import { scanFolderContents } from '../scan-folder';
 import { splitFrontmatter, joinFrontmatter } from '../../../shared/frontmatter';
 import { generateShortId } from '../../../shared/ids';
