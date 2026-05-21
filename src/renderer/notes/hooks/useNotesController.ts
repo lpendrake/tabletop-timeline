@@ -1,6 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { notesData } from '../data';
 import { slugify } from '../domain/slugify';
+import { parseNotePath } from '../domain/open-note-by-path';
+import {
+  suggestLinks as suggestLinksDomain,
+  resolveLinkById,
+  resolveMarkdownHref,
+} from '../domain/link-resolution';
+import { scanFolderContents } from '../scan-folder';
 import { splitFrontmatter, joinFrontmatter } from '../../../shared/frontmatter';
 import { generateShortId } from '../../../shared/ids';
 import { useSaveSync } from './useSaveSync';
@@ -123,55 +130,8 @@ export function useNotesController({
     activeTabRef.current = activeTab;
   }, [activeTab]);
 
-  // ---- Filesystem scanner ----
-  // Reads the actual folder contents from disk (not just the index) so that
-  // empty directories and unrecognised file types are visible in the sidebar.
-  // Dotfiles are excluded — they're tooling artefacts, not user content.
-  // Wrapped in useCallback so the bootstrap effect can list it as a stable dep.
-  const scanFolderContents = useCallback(
-    async (folder: string, index: LinkIndexEntry[]): Promise<NoteEntry[]> => {
-      const results: NoteEntry[] = [];
-
-      async function scan(dirPath: string, relPrefix: string): Promise<boolean> {
-        let items: { name: string; isDirectory: boolean }[];
-        try {
-          items = await notesData.listFolder(dirPath);
-        } catch {
-          return false;
-        }
-
-        let hasChildren = false;
-        for (const item of items) {
-          if (item.name.startsWith('.')) continue; // skip dotfiles
-          if (item.isDirectory) {
-            const childRel = relPrefix ? `${relPrefix}/${item.name}` : item.name;
-            const childHasChildren = await scan(`${dirPath}/${item.name}`, childRel);
-            if (!childHasChildren) {
-              results.push({ id: '', path: childRel, title: item.name, kind: 'dir' });
-            }
-            hasChildren = true;
-          } else {
-            const relPath = relPrefix ? `${relPrefix}/${item.name}` : item.name;
-            const indexEntry = index.find((e) => e.path === `notes/${folder}/${relPath}`);
-            if (indexEntry) {
-              results.push({
-                id: indexEntry.id,
-                path: relPath,
-                title: indexEntry.title,
-                kind: indexEntry.type === 'asset' ? 'asset' : 'note',
-              });
-            } else {
-              results.push({ id: '', path: relPath, title: item.name, kind: 'unsupported' });
-            }
-            hasChildren = true;
-          }
-        }
-        return hasChildren;
-      }
-
-      await scan(`${campaignPath}/notes/${folder}`, '');
-      return results;
-    },
+  const scanFolderContentsForCampaign = useCallback(
+    (folder: string, index: LinkIndexEntry[]) => scanFolderContents(campaignPath, folder, index),
     [campaignPath],
   );
 
@@ -191,7 +151,7 @@ export function useNotesController({
         // Scan each folder from the filesystem so empty dirs and unrecognised
         // files appear in the sidebar alongside notes and assets.
         const scanned = await Promise.all(
-          folderNames.map(async (f) => [f, await scanFolderContents(f, index)] as const),
+          folderNames.map(async (f) => [f, await scanFolderContentsForCampaign(f, index)] as const),
         );
         setFolderFiles(Object.fromEntries(scanned));
 
@@ -205,7 +165,7 @@ export function useNotesController({
       }
     };
     bootstrap();
-  }, [campaignPath, scanFolderContents, ensureLoaded, pushToast]);
+  }, [campaignPath, scanFolderContentsForCampaign, ensureLoaded, pushToast]);
 
   // ---- A3: Live index delta listener ----
   useEffect(() => {
@@ -302,7 +262,7 @@ export function useNotesController({
     if (folderFiles[folder] !== undefined) return;
     setFolderFiles((prev) => ({ ...prev, [folder]: null }));
     try {
-      const entries = await scanFolderContents(folder, linkIndex);
+      const entries = await scanFolderContentsForCampaign(folder, linkIndex);
       setFolderFiles((prev) => ({ ...prev, [folder]: entries }));
     } catch (err) {
       pushToast(`Failed to load ${folder}: ${String(err)}`, true);
@@ -355,15 +315,10 @@ export function useNotesController({
     if (fileKind !== 'asset' && fileKind !== 'unsupported') ensureLoaded(folder, path);
   }
 
-  // Opens a note given its campaign-relative path (e.g. "notes/Lore/places.md").
-  // Strips the implicit "notes/" prefix before delegating to openFile.
   async function openNoteByPath(campaignRelativePath: string) {
-    const withoutPrefix = campaignRelativePath.startsWith('notes/')
-      ? campaignRelativePath.slice('notes/'.length)
-      : campaignRelativePath;
-    const slashIdx = withoutPrefix.indexOf('/');
-    if (slashIdx === -1) return;
-    await openFile(withoutPrefix.slice(0, slashIdx), withoutPrefix.slice(slashIdx + 1));
+    const parsed = parseNotePath(campaignRelativePath);
+    if (!parsed) return;
+    await openFile(parsed.folder, parsed.path);
   }
 
   function handleContentChange(folder: string, path: string, content: string) {
@@ -641,31 +596,26 @@ export function useNotesController({
   }
 
   function handleOpenLink(id: string) {
-    const entry = linkIndex.find((e) => e.id === id);
-    if (!entry) {
+    const resolved = resolveLinkById(linkIndex, id);
+    if (resolved.kind === 'not-found') {
       pushToast(`Note not found: ${id}`, true);
       return;
     }
-    if (entry.type === 'event') {
+    if (resolved.kind === 'event') {
       if (!onOpenEvent) {
         pushToast('Cannot navigate to event from here', true);
         return;
       }
-      // entry.path is 'timeline/filename.md' — strip the leading 'timeline/' segment
-      const filename = entry.path.split('/').slice(1).join('/');
-      onOpenEvent(filename);
+      onOpenEvent(resolved.filename);
       return;
     }
-    const parts = entry.path.split('/');
-    const folder = parts[1];
-    const path = parts.slice(2).join('/');
-    openFile(folder, path).catch(() => pushToast(`Failed to open linked note`, true));
+    openFile(resolved.folder, resolved.path).catch(() =>
+      pushToast(`Failed to open linked note`, true),
+    );
   }
 
   function openMarkdownLink(rawUrl: string) {
-    const target = rawUrl.replace(/^\.?\//, '');
-    // TODO: strip ../ segments and resolve relative to the current note's folder
-    const match = linkIndex.find((e) => e.path === target || e.path.endsWith('/' + target));
+    const match = resolveMarkdownHref(linkIndex, rawUrl);
     if (!match) {
       pushToast(`Could not resolve link: ${rawUrl}`, true);
       return;
@@ -673,15 +623,8 @@ export function useNotesController({
     handleOpenLink(match.id);
   }
 
-  async function suggestLinks(query: string) {
-    const q = query.toLowerCase();
-    return linkIndex
-      .filter((e) => e.title.toLowerCase().includes(q) || e.id.toLowerCase().includes(q))
-      .map((e) =>
-        e.type === 'asset'
-          ? { id: '', label: e.title, detail: e.path, assetPath: e.path }
-          : { id: e.id, label: e.title, detail: e.path },
-      );
+  function suggestLinks(query: string) {
+    return suggestLinksDomain(linkIndex, query);
   }
 
   async function handleRenameFolder(oldFolderName: string, newName: string) {
