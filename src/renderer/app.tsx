@@ -57,6 +57,25 @@ export default function App() {
     };
   }, [activeCampaign?.path]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Keep entityIndexRef and entityLabelMap in sync with file system renames/edits.
+  // Mirrors the same delta subscription in useNotesController.
+  useEffect(() => {
+    return window.fsApi.onEntityDelta((delta) => {
+      let updated: EntityIndexEntry[];
+      if (delta.op === 'add' || delta.op === 'update') {
+        const { entry } = delta;
+        updated = [
+          ...entityIndexRef.current.filter((e) => e.id !== entry.id && e.path !== entry.path),
+          entry,
+        ];
+      } else {
+        updated = entityIndexRef.current.filter((e) => e.path !== delta.path);
+      }
+      entityIndexRef.current = updated;
+      setEntityLabelMap(buildEntityLabelMap(updated));
+    });
+  }, []); // stable — ref and setter are stable references
+
   useEffect(() => {
     if (!activeCampaign) return;
     const campaignPath = activeCampaign.path;
