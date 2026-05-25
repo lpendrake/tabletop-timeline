@@ -1,10 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  isEntityTag,
-  parseEntityTag,
-  formatEntityTag,
-  isValidCustomTag,
-} from '../entity-tags';
+import { isEntityTag, parseEntityTag, formatEntityTag, isValidCustomTag } from '../entity-tags';
 
 describe('isEntityTag', () => {
   it('returns true for valid entity tags', () => {
