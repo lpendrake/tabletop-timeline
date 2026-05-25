@@ -26,6 +26,9 @@ contextBridge.exposeInMainWorld('fsApi', {
   // Notes
   buildIndex: (campaignPath: string) => ipcRenderer.invoke('entity:buildIndex', campaignPath),
   ensureDirs: (notesDir: string) => ipcRenderer.invoke('notes:ensureDirs', notesDir),
+  getEntityIndex: () => ipcRenderer.invoke('entity:getAll'),
+  updateEntityLabelOverride: (id: string, target: 'tagLabel' | 'linkLabel', value: string | null) =>
+    ipcRenderer.invoke('entity:updateLabelOverride', id, target, value),
 
   // Watcher
   onFileChange: (callback: (data: { event: string; path: string }) => void) => {

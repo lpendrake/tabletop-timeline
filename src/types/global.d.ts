@@ -59,6 +59,12 @@ declare global {
       // Notes
       buildIndex: (campaignPath: string) => Promise<EntityIndexEntry[]>;
       ensureDirs: (notesDir: string) => Promise<boolean>;
+      getEntityIndex: () => Promise<EntityIndexEntry[]>;
+      updateEntityLabelOverride: (
+        id: string,
+        target: 'tagLabel' | 'linkLabel',
+        value: string | null,
+      ) => Promise<boolean>;
 
       // Watcher
       onFileChange: (callback: (data: { event: string; path: string }) => void) => () => void;

@@ -14,6 +14,36 @@ export interface EntityIndexEntry {
   linkLabelOverride?: string;
 }
 
+export function findEntityById(id: string, campaignPath: string): string | null {
+  for (const subdir of ['notes', 'timeline']) {
+    const result = findMdById(id, path.join(campaignPath, subdir));
+    if (result) return result;
+  }
+  return null;
+}
+
+function findMdById(id: string, dir: string): string | null {
+  if (!fs.existsSync(dir)) return null;
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      const result = findMdById(id, fullPath);
+      if (result) return result;
+    } else if (entry.isFile() && path.extname(entry.name).toLowerCase() === '.md') {
+      try {
+        const content = fs.readFileSync(fullPath, 'utf-8');
+        const fallbackTitle = path.basename(fullPath, '.md');
+        const { frontmatter } = parseNote(content, fallbackTitle);
+        if (frontmatter.id === id) return fullPath;
+      } catch {
+        // skip unreadable files
+      }
+    }
+  }
+  return null;
+}
+
 export function buildEntityIndex(campaignPath: string): EntityIndexEntry[] {
   const index: EntityIndexEntry[] = [];
   const notesDir = path.join(campaignPath, 'notes');

@@ -6,6 +6,7 @@ const { autoUpdater } = pkg;
 import { windowManager } from './windowManager.js';
 import { registerIpcHandlers } from './ipcHandlers.js';
 import { FileWatcher } from './fileWatcher.js';
+import { getCampaignPath, setCampaignPath } from './campaign-state.js';
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -20,20 +21,18 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 
-let currentCampaignPath: string | null = null;
-
 const fileWatcher = new FileWatcher();
 registerIpcHandlers();
 
 app.whenReady().then(() => {
   // URL shape: notes-asset://current/notes/<folder>/assets/<file>
   protocol.handle('notes-asset', (request) => {
-    if (!currentCampaignPath) {
+    if (!getCampaignPath()) {
       return new Response('No campaign open', { status: 404 });
     }
     const url = new URL(request.url);
     const relPath = decodeURIComponent(url.pathname.slice(1)); // strip leading /
-    const campaignBase = path.resolve(currentCampaignPath);
+    const campaignBase = path.resolve(getCampaignPath()!);
     const resolved = path.resolve(campaignBase, relPath);
     if (!resolved.startsWith(campaignBase + path.sep)) {
       return new Response('Forbidden', { status: 403 });
@@ -44,13 +43,13 @@ app.whenReady().then(() => {
   const mainWindow = windowManager.createMainWindow();
 
   ipcMain.handle('campaign:open', async (event, campaignPath: string) => {
-    currentCampaignPath = path.resolve(campaignPath);
+    setCampaignPath(path.resolve(campaignPath));
     await fileWatcher.start(campaignPath, mainWindow);
     return true;
   });
 
   ipcMain.handle('campaign:close', async () => {
-    currentCampaignPath = null;
+    setCampaignPath(null);
     fileWatcher.stop();
     return true;
   });
