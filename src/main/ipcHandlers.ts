@@ -6,6 +6,7 @@ import pkg from 'electron-updater';
 import { generateShortId } from '../shared/ids.js';
 import { buildEntityIndex } from './entity-index.js';
 import { registerTimelineIpcHandlers } from './timelineIpcHandlers.js';
+import { registerEntityIndexHandlers } from './entity-index-handlers.js';
 
 const { autoUpdater } = pkg;
 
@@ -280,6 +281,7 @@ ${description}
   });
 
   registerTimelineIpcHandlers();
+  registerEntityIndexHandlers();
 
   ipcMain.handle('app:getVersion', () => app.getVersion());
   ipcMain.handle('app:installUpdate', async () => {
