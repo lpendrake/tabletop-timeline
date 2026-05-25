@@ -44,16 +44,27 @@ function findMdById(id: string, dir: string): string | null {
   return null;
 }
 
-export function buildEntityIndex(campaignPath: string): EntityIndexEntry[] {
+export function buildEntityIndex(
+  campaignPath: string,
+  onProgress?: (completed: number, total: number) => void,
+): EntityIndexEntry[] {
   const index: EntityIndexEntry[] = [];
   const notesDir = path.join(campaignPath, 'notes');
   const timelineDir = path.join(campaignPath, 'timeline');
 
+  const total = countFiles(notesDir, true) + countFiles(timelineDir, false);
+  let completed = 0;
+  const tick = onProgress
+    ? () => {
+        onProgress(++completed, total);
+      }
+    : undefined;
+
   if (fs.existsSync(notesDir)) {
-    scanDir(notesDir, 'note', notesDir, index);
+    scanDir(notesDir, 'note', notesDir, index, tick);
   }
   if (fs.existsSync(timelineDir)) {
-    scanDir(timelineDir, 'event', timelineDir, index);
+    scanDir(timelineDir, 'event', timelineDir, index, tick);
   }
 
   return index;
@@ -104,18 +115,37 @@ export function indexSingleEntity(fullPath: string, campaignPath: string): Entit
   return null;
 }
 
+function isIndexable(ext: string, includeAssets: boolean): boolean {
+  return ext === '.md' || (includeAssets && ASSET_EXTENSIONS.has(ext));
+}
+
+function countFiles(dir: string, includeAssets: boolean): number {
+  if (!fs.existsSync(dir)) return 0;
+  let count = 0;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      count += countFiles(path.join(dir, entry.name), includeAssets);
+    } else if (entry.isFile()) {
+      const ext = path.extname(entry.name).toLowerCase();
+      if (isIndexable(ext, includeAssets)) count++;
+    }
+  }
+  return count;
+}
+
 function scanDir(
   currentDir: string,
   type: 'note' | 'event',
   baseDir: string,
   index: EntityIndexEntry[],
+  tick?: () => void,
 ) {
   const entries = fs.readdirSync(currentDir, { withFileTypes: true });
 
   for (const entry of entries) {
     const fullPath = path.join(currentDir, entry.name);
     if (entry.isDirectory()) {
-      scanDir(fullPath, type, baseDir, index);
+      scanDir(fullPath, type, baseDir, index, tick);
     } else if (entry.isFile()) {
       const ext = path.extname(entry.name).toLowerCase();
       const relPath = path.relative(baseDir, fullPath).replace(/\\/g, '/');
@@ -139,9 +169,11 @@ function scanDir(
         if (typeof frontmatter.linkLabelOverride === 'string')
           indexEntry.linkLabelOverride = frontmatter.linkLabelOverride;
         index.push(indexEntry);
+        tick?.();
       } else if (type === 'note' && ASSET_EXTENSIONS.has(ext)) {
         const title = path.basename(entry.name, ext);
         index.push({ id: '', path: prefix + relPath, title, type: 'asset' });
+        tick?.();
       }
     }
   }
