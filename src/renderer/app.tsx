@@ -8,6 +8,7 @@ import { CampaignManager } from './views/campaigns/campaign-manager';
 import { useCampaigns } from './hooks/useCampaigns';
 import { ThemeProvider } from './theme';
 import { SearchOverlay } from './components/search-overlay';
+import { CampaignLoadOverlay } from './components/campaign-load-overlay';
 import { notesData } from './notes/data';
 import { timelinePort } from './timeline/data/ports';
 import { initPeek, teardownPeek } from './peek/stack';
@@ -27,6 +28,11 @@ export default function App() {
     campaigns,
     activeCampaign,
     isLoading,
+    loadProgress,
+    loadResult,
+    loadError,
+    pendingEntityIndex,
+    dismissLoadNotification,
     handleSetRootDir,
     handleCreateCampaign,
     handleOpenCampaign,
@@ -39,6 +45,13 @@ export default function App() {
   useEffect(() => {
     if (!activeCampaign) return;
     const campaignPath = activeCampaign.path;
+
+    if (pendingEntityIndex) {
+      entityIndexRef.current = pendingEntityIndex;
+      setEntityLabelMap(buildEntityLabelMap(pendingEntityIndex));
+      return;
+    }
+
     entityIndexRef.current = [];
     setEntityLabelMap(new Map());
     let active = true;
@@ -55,6 +68,10 @@ export default function App() {
       active = false;
       entityIndexRef.current = [];
     };
+    // pendingEntityIndex is intentionally omitted from deps: handleOpenCampaign
+    // sets it and activeCampaign in the same React batch, so by the time this
+    // effect fires on a path change, pendingEntityIndex already reflects the new
+    // campaign. Adding it would cause a redundant re-run when it resets to null.
   }, [activeCampaign?.path]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keep entityIndexRef and entityLabelMap in sync with file system renames/edits.
@@ -144,90 +161,101 @@ export default function App() {
     return <DirectoryPicker onSelect={handleSetRootDir} />;
   }
 
-  // State 2: Campaign List
-  if (!activeCampaign) {
-    return (
-      <CampaignManager
-        campaigns={campaigns}
-        onOpen={handleOpenCampaign}
-        onCreate={handleCreateCampaign}
-        onChangeDir={() => handleSetRootDir('')}
-        rootDir={rootDir}
-      />
-    );
-  }
-
-  // State 3: Active Campaign
-  const renderView = () => {
-    switch (currentView) {
-      case 'notes':
-        return (
-          <NotesView
-            campaignPath={activeCampaign.path}
-            campaignId={activeCampaign.id}
-            pendingOpenNotePath={pendingOpenNotePath}
-            onNoteOpenHandled={() => setPendingOpenNotePath(null)}
-            pendingNoteMatchOffset={pendingNoteMatchOffset}
-            onNoteMatchOffsetHandled={() => setPendingNoteMatchOffset(null)}
-            onOpenEvent={handleJumpToEvent}
-          />
-        );
-      case 'timeline':
-        return (
-          <TimelineView
-            campaignPath={activeCampaign.path}
-            pendingJumpFilename={pendingJumpFilename}
-            onJumpHandled={() => setPendingJumpFilename(null)}
-            onOpenById={handleOpenById}
-            entityLabelMap={entityLabelMap}
-          />
-        );
-      case 'relationships':
-        return <RelationshipsView />;
-      default:
-        return (
-          <NotesView
-            campaignPath={activeCampaign.path}
-            campaignId={activeCampaign.id}
-            pendingOpenNotePath={pendingOpenNotePath}
-            onNoteOpenHandled={() => setPendingOpenNotePath(null)}
-            pendingNoteMatchOffset={pendingNoteMatchOffset}
-            onNoteMatchOffsetHandled={() => setPendingNoteMatchOffset(null)}
-            onOpenEvent={handleJumpToEvent}
-          />
-        );
+  // States 2 & 3: share one tree so CampaignLoadOverlay is never remounted
+  // between the campaign-list → active-campaign transition.
+  const renderMainContent = () => {
+    if (!activeCampaign) {
+      return (
+        <CampaignManager
+          campaigns={campaigns}
+          onOpen={handleOpenCampaign}
+          onCreate={handleCreateCampaign}
+          onChangeDir={() => handleSetRootDir('')}
+          rootDir={rootDir}
+        />
+      );
     }
+
+    const renderView = () => {
+      switch (currentView) {
+        case 'notes':
+          return (
+            <NotesView
+              campaignPath={activeCampaign.path}
+              campaignId={activeCampaign.id}
+              pendingOpenNotePath={pendingOpenNotePath}
+              onNoteOpenHandled={() => setPendingOpenNotePath(null)}
+              pendingNoteMatchOffset={pendingNoteMatchOffset}
+              onNoteMatchOffsetHandled={() => setPendingNoteMatchOffset(null)}
+              onOpenEvent={handleJumpToEvent}
+            />
+          );
+        case 'timeline':
+          return (
+            <TimelineView
+              campaignPath={activeCampaign.path}
+              pendingJumpFilename={pendingJumpFilename}
+              onJumpHandled={() => setPendingJumpFilename(null)}
+              onOpenById={handleOpenById}
+              entityLabelMap={entityLabelMap}
+            />
+          );
+        case 'relationships':
+          return <RelationshipsView />;
+        default:
+          return (
+            <NotesView
+              campaignPath={activeCampaign.path}
+              campaignId={activeCampaign.id}
+              pendingOpenNotePath={pendingOpenNotePath}
+              onNoteOpenHandled={() => setPendingOpenNotePath(null)}
+              pendingNoteMatchOffset={pendingNoteMatchOffset}
+              onNoteMatchOffsetHandled={() => setPendingNoteMatchOffset(null)}
+              onOpenEvent={handleJumpToEvent}
+            />
+          );
+      }
+    };
+
+    return (
+      <div
+        style={{
+          height: '100vh',
+          backgroundColor: 'var(--theme-background)',
+          color: 'var(--theme-text-primary)',
+          fontFamily: '"Inter", "Segoe UI", sans-serif',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>{renderView()}</div>
+        <Footer
+          currentView={currentView}
+          onChangeView={setCurrentView}
+          onBackToCampaigns={handleCloseCampaign}
+        />
+        <SearchOverlay
+          isOpen={isSearchOpen}
+          campaignPath={activeCampaign.path}
+          onClose={() => setIsSearchOpen(false)}
+          onJumpToEvent={handleJumpToEvent}
+          onOpenNote={handleOpenNote}
+        />
+      </div>
+    );
   };
 
   return (
-    <div
-      style={{
-        height: '100vh',
-        backgroundColor: 'var(--theme-background)',
-        color: 'var(--theme-text-primary)',
-        fontFamily: '"Inter", "Segoe UI", sans-serif',
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-      }}
-    >
-      {/* Main View Area */}
-      <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>{renderView()}</div>
-
-      {/* Persistent Footer */}
-      <Footer
-        currentView={currentView}
-        onChangeView={setCurrentView}
-        onBackToCampaigns={handleCloseCampaign}
+    <>
+      {renderMainContent()}
+      <CampaignLoadOverlay
+        result={loadResult}
+        progress={loadProgress}
+        errorMessage={loadError}
+        fileCount={pendingEntityIndex?.length ?? 0}
+        onDismissNotification={dismissLoadNotification}
       />
-
-      <SearchOverlay
-        isOpen={isSearchOpen}
-        campaignPath={activeCampaign.path}
-        onClose={() => setIsSearchOpen(false)}
-        onJumpToEvent={handleJumpToEvent}
-        onOpenNote={handleOpenNote}
-      />
-    </div>
+    </>
   );
 }
