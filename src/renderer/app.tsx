@@ -167,10 +167,11 @@ export default function App() {
     return <DirectoryPicker onSelect={handleSetRootDir} />;
   }
 
-  // State 2: Campaign List (with optional loading overlay)
-  if (!activeCampaign) {
-    return (
-      <>
+  // States 2 & 3: share one tree so CampaignLoadOverlay is never remounted
+  // between the campaign-list → active-campaign transition.
+  const renderMainContent = () => {
+    if (!activeCampaign) {
+      return (
         <CampaignManager
           campaigns={campaigns}
           onOpen={handleOpenCampaign}
@@ -178,94 +179,89 @@ export default function App() {
           onChangeDir={() => handleSetRootDir('')}
           rootDir={rootDir}
         />
-        <CampaignLoadOverlay
-          result={loadResult}
-          progress={loadProgress}
-          errorMessage={loadError}
-          fileCount={pendingEntityIndex?.length ?? 0}
-          onDismissNotification={dismissLoadNotification}
-        />
-      </>
-    );
-  }
-
-  // State 3: Active Campaign
-  const renderView = () => {
-    switch (currentView) {
-      case 'notes':
-        return (
-          <NotesView
-            campaignPath={activeCampaign.path}
-            campaignId={activeCampaign.id}
-            pendingOpenNotePath={pendingOpenNotePath}
-            onNoteOpenHandled={() => setPendingOpenNotePath(null)}
-            pendingNoteMatchOffset={pendingNoteMatchOffset}
-            onNoteMatchOffsetHandled={() => setPendingNoteMatchOffset(null)}
-            onOpenEvent={handleJumpToEvent}
-          />
-        );
-      case 'timeline':
-        return (
-          <TimelineView
-            campaignPath={activeCampaign.path}
-            pendingJumpFilename={pendingJumpFilename}
-            onJumpHandled={() => setPendingJumpFilename(null)}
-            onOpenById={handleOpenById}
-            entityLabelMap={entityLabelMap}
-          />
-        );
-      case 'relationships':
-        return <RelationshipsView />;
-      default:
-        return (
-          <NotesView
-            campaignPath={activeCampaign.path}
-            campaignId={activeCampaign.id}
-            pendingOpenNotePath={pendingOpenNotePath}
-            onNoteOpenHandled={() => setPendingOpenNotePath(null)}
-            pendingNoteMatchOffset={pendingNoteMatchOffset}
-            onNoteMatchOffsetHandled={() => setPendingNoteMatchOffset(null)}
-            onOpenEvent={handleJumpToEvent}
-          />
-        );
+      );
     }
+
+    const renderView = () => {
+      switch (currentView) {
+        case 'notes':
+          return (
+            <NotesView
+              campaignPath={activeCampaign.path}
+              campaignId={activeCampaign.id}
+              pendingOpenNotePath={pendingOpenNotePath}
+              onNoteOpenHandled={() => setPendingOpenNotePath(null)}
+              pendingNoteMatchOffset={pendingNoteMatchOffset}
+              onNoteMatchOffsetHandled={() => setPendingNoteMatchOffset(null)}
+              onOpenEvent={handleJumpToEvent}
+            />
+          );
+        case 'timeline':
+          return (
+            <TimelineView
+              campaignPath={activeCampaign.path}
+              pendingJumpFilename={pendingJumpFilename}
+              onJumpHandled={() => setPendingJumpFilename(null)}
+              onOpenById={handleOpenById}
+              entityLabelMap={entityLabelMap}
+            />
+          );
+        case 'relationships':
+          return <RelationshipsView />;
+        default:
+          return (
+            <NotesView
+              campaignPath={activeCampaign.path}
+              campaignId={activeCampaign.id}
+              pendingOpenNotePath={pendingOpenNotePath}
+              onNoteOpenHandled={() => setPendingOpenNotePath(null)}
+              pendingNoteMatchOffset={pendingNoteMatchOffset}
+              onNoteMatchOffsetHandled={() => setPendingNoteMatchOffset(null)}
+              onOpenEvent={handleJumpToEvent}
+            />
+          );
+      }
+    };
+
+    return (
+      <div
+        style={{
+          height: '100vh',
+          backgroundColor: 'var(--theme-background)',
+          color: 'var(--theme-text-primary)',
+          fontFamily: '"Inter", "Segoe UI", sans-serif',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>{renderView()}</div>
+        <Footer
+          currentView={currentView}
+          onChangeView={setCurrentView}
+          onBackToCampaigns={handleCloseCampaign}
+        />
+        <SearchOverlay
+          isOpen={isSearchOpen}
+          campaignPath={activeCampaign.path}
+          onClose={() => setIsSearchOpen(false)}
+          onJumpToEvent={handleJumpToEvent}
+          onOpenNote={handleOpenNote}
+        />
+      </div>
+    );
   };
 
   return (
-    <div
-      style={{
-        height: '100vh',
-        backgroundColor: 'var(--theme-background)',
-        color: 'var(--theme-text-primary)',
-        fontFamily: '"Inter", "Segoe UI", sans-serif',
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-      }}
-    >
-      {/* Main View Area */}
-      <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>{renderView()}</div>
-
-      {/* Persistent Footer */}
-      <Footer
-        currentView={currentView}
-        onChangeView={setCurrentView}
-        onBackToCampaigns={handleCloseCampaign}
-      />
-
-      <SearchOverlay
-        isOpen={isSearchOpen}
-        campaignPath={activeCampaign.path}
-        onClose={() => setIsSearchOpen(false)}
-        onJumpToEvent={handleJumpToEvent}
-        onOpenNote={handleOpenNote}
-      />
-
+    <>
+      {renderMainContent()}
       <CampaignLoadOverlay
         result={loadResult}
         progress={loadProgress}
+        errorMessage={loadError}
+        fileCount={pendingEntityIndex?.length ?? 0}
         onDismissNotification={dismissLoadNotification}
       />
-    </div>
+    </>
   );
 }
