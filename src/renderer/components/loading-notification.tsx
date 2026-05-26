@@ -34,7 +34,7 @@ export function LoadingNotification({
       style={{
         backgroundColor: bs.cardBg,
         border: `1px solid ${bs.cardBorder}`,
-        boxShadow: `0 4px 16px ${bs.bg}99`,
+        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.6)',
       }}
       role="status"
     >
