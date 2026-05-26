@@ -17,7 +17,7 @@ import {
   type EditorMode,
 } from './domain';
 import { ThemeProvider } from '../../theme';
-import { buildEntityLabelMap } from '../../../shared/entity-labels';
+import { buildEntityLabelMap, applyEntityDelta } from '../../../shared/entity-labels';
 import './EventEditorModal.css';
 
 type SaveState = 'clean' | 'dirty' | 'saving' | 'error' | 'saved';
@@ -67,13 +67,7 @@ export function EventEditorModal({
 
   useEffect(() => {
     return window.fsApi.onEntityDelta((delta) => {
-      setEntityIndex((prev) => {
-        if (delta.op === 'add' || delta.op === 'update') {
-          const { entry } = delta;
-          return [...prev.filter((e) => e.id !== entry.id && e.path !== entry.path), entry];
-        }
-        return prev.filter((e) => e.path !== delta.path);
-      });
+      setEntityIndex((prev) => applyEntityDelta(prev, delta));
     });
   }, []);
 
