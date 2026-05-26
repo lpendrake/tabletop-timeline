@@ -31,7 +31,11 @@ export function LoadingNotification({
   return (
     <div
       className="loading-notification"
-      style={{ backgroundColor: bs.cardBg, border: `1px solid ${bs.cardBorder}` }}
+      style={{
+        backgroundColor: bs.cardBg,
+        border: `1px solid ${bs.cardBorder}`,
+        boxShadow: `0 4px 16px ${bs.bg}99`,
+      }}
       role="status"
     >
       <div className="loading-notification-body">

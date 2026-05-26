@@ -11,8 +11,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
-  animation: notification-slide-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+animation: notification-slide-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 @keyframes notification-slide-in {
