@@ -112,6 +112,13 @@
   line-height: 1.4;
 }
 
+.event-card-tag--entity {
+  font-family: inherit;
+  background: color-mix(in srgb, var(--theme-accent-gold) 18%, var(--theme-panel-accent));
+  border-color: var(--theme-accent-gold);
+  color: var(--theme-text-primary);
+}
+
 /* ===== Expanded card ===== */
 
 .event-card.is-expanded {

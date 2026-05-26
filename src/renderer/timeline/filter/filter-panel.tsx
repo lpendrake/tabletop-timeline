@@ -11,6 +11,7 @@ export interface FilterPanelProps {
   events: EventListItem[];
   sessions: Session[];
   inGameNow: string;
+  entityTagLabelMap?: Map<string, string>;
   onAdd: (f: Filter) => void;
   onRemove: (id: string) => void;
   onToggle: (id: string) => void;
@@ -23,6 +24,7 @@ export function FilterPanel({
   events,
   sessions,
   inGameNow,
+  entityTagLabelMap,
   onAdd,
   onRemove,
   onToggle,
@@ -117,6 +119,7 @@ export function FilterPanel({
             events={events}
             sessions={sessions}
             inGameNow={inGameNow}
+            entityTagLabelMap={entityTagLabelMap}
             onToggle={() => onToggle(f.id)}
             onPin={() => onPin(f.id)}
             onRemove={() => {

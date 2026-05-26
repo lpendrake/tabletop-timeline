@@ -147,6 +147,35 @@
   border-color: var(--theme-accent);
 }
 
+/* ===== Tag chip preview ===== */
+
+.event-editor-tag-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 3px;
+}
+
+.event-editor-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-family: ui-monospace, 'Consolas', monospace;
+  background: var(--theme-panel-accent);
+  color: var(--theme-text-secondary);
+  border: 1px solid var(--theme-border);
+  border-radius: 999px;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+
+.event-editor-tag-chip--entity {
+  font-family: inherit;
+  background: color-mix(in srgb, var(--theme-accent-gold) 18%, var(--theme-panel-accent));
+  border-color: var(--theme-accent-gold);
+  color: var(--theme-text-primary);
+}
+
 /* ===== Color row ===== */
 
 .event-editor-color-row {

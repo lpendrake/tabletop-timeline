@@ -59,6 +59,8 @@ interface TimelineViewProps {
   onOpenById?: (id: string) => void;
   /** Entity id → display label map for resolving [[id]] wiki links. */
   entityLabelMap: Map<string, string>;
+  /** Entity id → tag label map for resolving id:XXXX tags to human-readable names. */
+  entityTagLabelMap: Map<string, string>;
 }
 
 interface LoadedData {
@@ -73,6 +75,7 @@ export function TimelineView({
   onJumpHandled,
   onOpenById,
   entityLabelMap,
+  entityTagLabelMap,
 }: TimelineViewProps) {
   const weekdays = ThemeProvider.get().timeline.days;
   const [viewState, setViewState] = useState<ViewState>({
@@ -500,6 +503,7 @@ export function TimelineView({
           onContextMenu={sessionModeActiveRef.current ? undefined : handleCardContextMenu}
           onOpenById={onOpenById}
           entityLabelMap={entityLabelMap}
+          entityTagLabelMap={entityTagLabelMap}
         />
         {inGameNow && (
           <NowMarker
@@ -583,6 +587,7 @@ export function TimelineView({
           events={loadedData.events}
           sessions={loadedData.sessions}
           inGameNow={inGameNow ?? ''}
+          entityTagLabelMap={entityTagLabelMap}
           onAdd={addFilter}
           onRemove={removeFilter}
           onToggle={toggleFilter}

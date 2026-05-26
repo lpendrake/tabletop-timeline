@@ -13,12 +13,45 @@ import {
   validateBuffer,
   deriveFilename,
   getColorPresetValue,
+  parseTagsText,
   type EditorBuffer,
   type EditorMode,
 } from './domain';
 import { ThemeProvider } from '../../theme';
-import { buildEntityLabelMap, applyEntityDelta } from '../../../shared/entity-labels';
+import {
+  buildEntityLabelMap,
+  buildEntityTagLabelMap,
+  applyEntityDelta,
+} from '../../../shared/entity-labels';
+import { parseEntityTag } from '../../../shared/entity-tags';
 import './EventEditorModal.css';
+
+function TagChipPreview({
+  tagsText,
+  entityTagLabelMap,
+}: {
+  tagsText: string;
+  entityTagLabelMap: Map<string, string>;
+}) {
+  const tags = parseTagsText(tagsText);
+  if (tags.length === 0) return null;
+  return (
+    <div className="event-editor-tag-chips">
+      {tags.map((raw) => {
+        const id = parseEntityTag(raw);
+        const label = id ? entityTagLabelMap.get(id) : undefined;
+        return (
+          <span
+            key={raw}
+            className={`event-editor-tag-chip${label !== undefined ? ' event-editor-tag-chip--entity' : ''}`}
+          >
+            {label ?? raw}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
 
 type SaveState = 'clean' | 'dirty' | 'saving' | 'error' | 'saved';
 type LoadState = 'loading' | 'ready' | 'load-error';
@@ -78,6 +111,7 @@ export function EventEditorModal({
 
   const knownIds = useMemo(() => new Set(entityIndex.map((e) => e.id)), [entityIndex]);
   const entityLabelMap = useMemo(() => buildEntityLabelMap(entityIndex), [entityIndex]);
+  const entityTagLabelMap = useMemo(() => buildEntityTagLabelMap(entityIndex), [entityIndex]);
 
   // Refs for stable access inside async callbacks without needing deps
   const lastModifiedRef = useRef<string | null>(null);
@@ -447,6 +481,10 @@ export function EventEditorModal({
                     onChange={(e) => updateBuffer({ tagsText: e.target.value })}
                     placeholder="plot:beast, location:fort"
                     autoComplete="off"
+                  />
+                  <TagChipPreview
+                    tagsText={buffer.tagsText}
+                    entityTagLabelMap={entityTagLabelMap}
                   />
                 </label>
 

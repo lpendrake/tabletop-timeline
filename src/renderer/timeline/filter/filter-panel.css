@@ -105,6 +105,12 @@
   font-family: ui-monospace, 'Consolas', monospace;
   font-size: 12px;
 }
+.filter-chip--entity {
+  font-family: inherit;
+  background: color-mix(in srgb, var(--theme-accent-gold) 18%, var(--theme-panel-accent));
+  border: 1px solid var(--theme-accent-gold);
+  color: var(--theme-text-primary);
+}
 .filter-chip-remove {
   background: transparent;
   border: none;
@@ -150,6 +156,10 @@
 }
 .filter-tag-result:hover {
   background: var(--theme-panel-accent);
+}
+.filter-tag-result--entity {
+  font-family: inherit;
+  color: var(--theme-accent-gold);
 }
 
 .filter-date-field-row {

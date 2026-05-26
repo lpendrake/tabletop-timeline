@@ -14,7 +14,11 @@ import { timelinePort } from './timeline/data/ports';
 import { initPeek, teardownPeek } from './peek/stack';
 import type { EventListItem } from './timeline/data/types';
 import type { EntityIndexEntry } from '../types/global';
-import { buildEntityLabelMap, applyEntityDelta } from '../shared/entity-labels';
+import {
+  buildEntityLabelMap,
+  buildEntityTagLabelMap,
+  applyEntityDelta,
+} from '../shared/entity-labels';
 import '../../src/index.css';
 
 export default function App() {
@@ -41,6 +45,7 @@ export default function App() {
 
   const entityIndexRef = useRef<EntityIndexEntry[]>([]);
   const [entityLabelMap, setEntityLabelMap] = useState<Map<string, string>>(new Map());
+  const [entityTagLabelMap, setEntityTagLabelMap] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
     if (!activeCampaign) return;
@@ -49,11 +54,13 @@ export default function App() {
     if (pendingEntityIndex) {
       entityIndexRef.current = pendingEntityIndex;
       setEntityLabelMap(buildEntityLabelMap(pendingEntityIndex));
+      setEntityTagLabelMap(buildEntityTagLabelMap(pendingEntityIndex));
       return;
     }
 
     entityIndexRef.current = [];
     setEntityLabelMap(new Map());
+    setEntityTagLabelMap(new Map());
     let active = true;
     notesData
       .getEntityIndex(campaignPath)
@@ -61,6 +68,7 @@ export default function App() {
         if (active) {
           entityIndexRef.current = index;
           setEntityLabelMap(buildEntityLabelMap(index));
+          setEntityTagLabelMap(buildEntityTagLabelMap(index));
         }
       })
       .catch(() => {});
@@ -74,14 +82,15 @@ export default function App() {
     // campaign. Adding it would cause a redundant re-run when it resets to null.
   }, [activeCampaign?.path]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Keep entityIndexRef and entityLabelMap in sync with file system renames/edits.
+  // Keep entityIndexRef and label maps in sync with file system renames/edits.
   useEffect(() => {
     return window.fsApi.onEntityDelta((delta) => {
       const updated = applyEntityDelta(entityIndexRef.current, delta);
       entityIndexRef.current = updated;
       setEntityLabelMap(buildEntityLabelMap(updated));
+      setEntityTagLabelMap(buildEntityTagLabelMap(updated));
     });
-  }, []); // stable — ref and setter are stable references
+  }, []); // stable — ref and setters are stable references
 
   useEffect(() => {
     if (!activeCampaign) return;
@@ -198,6 +207,7 @@ export default function App() {
               onJumpHandled={() => setPendingJumpFilename(null)}
               onOpenById={handleOpenById}
               entityLabelMap={entityLabelMap}
+              entityTagLabelMap={entityTagLabelMap}
             />
           );
         case 'relationships':
