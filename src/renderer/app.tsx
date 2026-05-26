@@ -182,6 +182,7 @@ export default function App() {
           result={loadResult}
           progress={loadProgress}
           errorMessage={loadError}
+          fileCount={pendingEntityIndex?.length ?? 0}
           onDismissNotification={dismissLoadNotification}
         />
       </>
