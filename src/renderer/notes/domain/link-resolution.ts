@@ -19,6 +19,14 @@ export function resolveLinkById(
   return { kind: 'note', folder: parts[1], path: parts.slice(2).join('/') };
 }
 
+export function findEntityIdByNotePath(
+  entityIndex: readonly EntityIndexEntry[],
+  folder: string,
+  path: string,
+): string | null {
+  return entityIndex.find((e) => e.path === `notes/${folder}/${path}`)?.id ?? null;
+}
+
 export function resolveMarkdownHref(
   entityIndex: readonly EntityIndexEntry[],
   rawUrl: string,

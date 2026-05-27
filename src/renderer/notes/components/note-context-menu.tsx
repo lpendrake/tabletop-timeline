@@ -13,6 +13,8 @@ interface Props {
   onNewFolder(folder: string, subdir?: string): void;
   onRename(folder: string, path: string): void;
   onDelete(folder: string, path: string | undefined, kind: ContextMenuTarget['kind']): void;
+  onEditTagLabel?(folder: string, path: string): void;
+  onEditLinkLabel?(folder: string, path: string): void;
 }
 
 export function NoteContextMenu({
@@ -22,6 +24,8 @@ export function NoteContextMenu({
   onNewFolder,
   onRename,
   onDelete,
+  onEditTagLabel,
+  onEditLinkLabel,
 }: Props) {
   const { menuRef, pos } = useContextMenuBehavior(target.x, target.y, onClose);
 
@@ -76,6 +80,29 @@ export function NoteContextMenu({
       >
         {target.kind === 'topfolder' ? 'Delete Folder' : 'Delete'}
       </button>
+      {target.kind === 'file' && (
+        <>
+          <div className="context-menu-sep" />
+          <button
+            className="context-menu-item"
+            onClick={() => {
+              onEditTagLabel?.(target.folder, target.path);
+              onClose();
+            }}
+          >
+            Edit Tag Label
+          </button>
+          <button
+            className="context-menu-item"
+            onClick={() => {
+              onEditLinkLabel?.(target.folder, target.path);
+              onClose();
+            }}
+          >
+            Edit Link Label
+          </button>
+        </>
+      )}
     </div>
   );
 }

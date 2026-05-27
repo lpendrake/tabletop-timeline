@@ -3,7 +3,11 @@ import { notesData } from '../data';
 import { slugify } from '../domain/slugify';
 import { parseNotePath } from '../domain/open-note-by-path';
 import { suggestLinks as suggestLinksDomain } from '../../shared/suggest-links';
-import { resolveLinkById, resolveMarkdownHref } from '../domain/link-resolution';
+import {
+  resolveLinkById,
+  resolveMarkdownHref,
+  findEntityIdByNotePath,
+} from '../domain/link-resolution';
 import { scanFolderContents } from '../scan-folder';
 import {
   removeFileFromFolderFiles,
@@ -71,6 +75,10 @@ export function useNotesController({
   );
   const [newFolderMode, setNewFolderMode] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuTarget | null>(null);
+  const [labelEditorTarget, setLabelEditorTarget] = useState<{
+    entityId: string;
+    target: 'tagLabel' | 'linkLabel';
+  } | null>(null);
   const [renamingKey, setRenamingKey] = useState<string | null>(null);
   const [dragTarget, setDragTarget] = useState<string | null>(null);
 
@@ -532,6 +540,15 @@ export function useNotesController({
     );
   }
 
+  function handleOpenLabelEditor(folder: string, path: string, target: 'tagLabel' | 'linkLabel') {
+    const entityId = findEntityIdByNotePath(entityIndex, folder, path);
+    if (!entityId) {
+      pushToast('Could not find entity for this note', true);
+      return;
+    }
+    setLabelEditorTarget({ entityId, target });
+  }
+
   function openMarkdownLink(rawUrl: string) {
     const match = resolveMarkdownHref(entityIndex, rawUrl);
     if (!match) {
@@ -591,6 +608,7 @@ export function useNotesController({
     creatingDirIn,
     newFolderMode,
     contextMenu,
+    labelEditorTarget,
     renamingKey,
     dragTarget,
     // UI state
@@ -611,6 +629,7 @@ export function useNotesController({
     setCreatingDirIn,
     setNewFolderMode,
     setContextMenu,
+    setLabelEditorTarget,
     setRenamingKey,
     setDragTarget,
     setOpenFolderPaths,
@@ -638,6 +657,7 @@ export function useNotesController({
     handleRenameFolder,
     handleMove,
     handleOpenLink,
+    handleOpenLabelEditor,
     openMarkdownLink,
     suggestLinks,
     handleQuickAddCreate,

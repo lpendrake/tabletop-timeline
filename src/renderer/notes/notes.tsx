@@ -11,6 +11,7 @@ import {
 import { buildEntityLabelMap } from '../../shared/entity-labels';
 import { QuickAdd } from './components/quick-add.tsx';
 import { NoteContextMenu } from './components/note-context-menu.tsx';
+import { LabelOverrideEditor } from '../shared/components/label-override-editor';
 import { EditorTabs } from './components/editor-tabs.tsx';
 import { BreadcrumbNav } from './components/breadcrumb-nav.tsx';
 import { FolderSidebar } from './components/folder-sidebar.tsx';
@@ -323,6 +324,16 @@ export function NotesApp({
             if (kind === 'topfolder') ctrl.handleDeleteFolder(folder);
             else ctrl.handleDeleteFile(folder, path!);
           }}
+          onEditTagLabel={(folder, path) => ctrl.handleOpenLabelEditor(folder, path, 'tagLabel')}
+          onEditLinkLabel={(folder, path) => ctrl.handleOpenLabelEditor(folder, path, 'linkLabel')}
+        />
+      )}
+
+      {ctrl.labelEditorTarget && (
+        <LabelOverrideEditor
+          entityId={ctrl.labelEditorTarget.entityId}
+          target={ctrl.labelEditorTarget.target}
+          onClose={() => ctrl.setLabelEditorTarget(null)}
         />
       )}
     </>
