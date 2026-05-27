@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveLinkById, resolveMarkdownHref } from '../link-resolution';
+import { resolveLinkById, resolveMarkdownHref, findEntityIdByNotePath } from '../link-resolution';
 import type { EntityIndexEntry } from '../../../../types/global';
 
 const idx: EntityIndexEntry[] = [
@@ -26,6 +26,20 @@ describe('resolveLinkById', () => {
       folder: 'Lore',
       path: 'bob.md',
     });
+  });
+});
+
+describe('findEntityIdByNotePath', () => {
+  it('returns the id when folder and path match', () => {
+    expect(findEntityIdByNotePath(idx, 'Lore', 'bob.md')).toBe('a1');
+  });
+
+  it('returns null when path does not match', () => {
+    expect(findEntityIdByNotePath(idx, 'Lore', 'nonexistent.md')).toBeNull();
+  });
+
+  it('returns null when folder does not match', () => {
+    expect(findEntityIdByNotePath(idx, 'WrongFolder', 'bob.md')).toBeNull();
   });
 });
 
