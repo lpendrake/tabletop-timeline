@@ -14,10 +14,14 @@ import {
   deriveFilename,
   getColorPresetValue,
   buildTagChips,
+  hasReservedTagPrefix,
+  addTagsToText,
+  removeTagFromText,
   type EditorBuffer,
   type EditorMode,
 } from './domain';
 import { ThemeProvider } from '../../theme';
+import { isValidCustomTag } from '../../../shared/entity-tags';
 import {
   buildEntityLabelMap,
   buildEntityTagLabelMap,
@@ -25,16 +29,20 @@ import {
 } from '../../../shared/entity-labels';
 import './EventEditorModal.css';
 
-function TagChipPreview({
+function TagChipList({
   tagsText,
   body,
+  systemTags,
   entityTagLabelMap,
+  onRemoveCustomTag,
 }: {
   tagsText: string;
   body: string;
+  systemTags: string[];
   entityTagLabelMap: Map<string, string>;
+  onRemoveCustomTag: (tag: string) => void;
 }) {
-  const chips = buildTagChips(tagsText, body, entityTagLabelMap);
+  const chips = buildTagChips(tagsText, body, entityTagLabelMap, systemTags);
   if (chips.length === 0) return null;
   return (
     <div className="event-editor-tag-chips">
@@ -44,6 +52,16 @@ function TagChipPreview({
           className={`event-editor-tag-chip${isEntity ? ' entity-tag-chip--resolved' : ''}`}
         >
           {display}
+          {isValidCustomTag(raw) && (
+            <button
+              type="button"
+              className="event-editor-tag-chip-remove"
+              onClick={() => onRemoveCustomTag(raw)}
+              aria-label={`Remove tag ${raw}`}
+            >
+              ×
+            </button>
+          )}
         </span>
       ))}
     </div>
@@ -116,6 +134,8 @@ export function EventEditorModal({
   const bufferRef = useRef<EditorBuffer>(buffer);
   bufferRef.current = buffer;
   const savedTimerRef = useRef<number | null>(null);
+
+  const [tagInput, setTagInput] = useState('');
 
   const viewRef = useRef<EditorView | null>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -267,6 +287,36 @@ export function EventEditorModal({
       scheduleAutoSave();
     },
     [scheduleAutoSave],
+  );
+
+  const handleTagInputKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const trimmed = tagInput.trim();
+      if (!trimmed) return;
+      const newText = addTagsToText(bufferRef.current.tagsText, trimmed);
+      setTagInput('');
+      if (newText === bufferRef.current.tagsText) return;
+      // Update ref synchronously so doSave reads the new tags immediately.
+      bufferRef.current = { ...bufferRef.current, tagsText: newText };
+      setBuffer(bufferRef.current);
+      setSaveState((s) => (s === 'saving' ? s : 'dirty'));
+      setErrorMessage(null);
+      if (autoSaveTimerRef.current !== null) {
+        window.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      void doSave({ silent: true });
+    },
+    [tagInput, doSave],
+  );
+
+  const handleRemoveCustomTag = useCallback(
+    (tag: string) => {
+      updateBuffer({ tagsText: removeTagFromText(bufferRef.current.tagsText, tag) });
+    },
+    [updateBuffer],
   );
 
   // Escape + Ctrl+Enter: capture phase wins over CodeMirror keybindings.
@@ -494,19 +544,29 @@ export function EventEditorModal({
                 </label>
 
                 <label className="event-editor-field">
-                  <span className="event-editor-field-label">Tags (comma-separated)</span>
+                  <span className="event-editor-field-label">
+                    Add tags (comma-separated, Enter to confirm)
+                  </span>
                   <input
                     type="text"
                     className="event-editor-input"
-                    value={buffer.tagsText}
-                    onChange={(e) => updateBuffer({ tagsText: e.target.value })}
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    onKeyDown={handleTagInputKeyDown}
                     placeholder="plot:beast, location:fort"
                     autoComplete="off"
                   />
-                  <TagChipPreview
+                  {hasReservedTagPrefix(tagInput) && (
+                    <span className="event-editor-field-warning">
+                      {"Tags starting with 'id:' or 'sesh:' are reserved for system-generated tags"}
+                    </span>
+                  )}
+                  <TagChipList
                     tagsText={buffer.tagsText}
                     body={buffer.body}
+                    systemTags={buffer.systemTags}
                     entityTagLabelMap={entityTagLabelMap}
+                    onRemoveCustomTag={handleRemoveCustomTag}
                   />
                 </label>
 

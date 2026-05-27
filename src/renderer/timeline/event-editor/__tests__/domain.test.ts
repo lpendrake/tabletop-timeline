@@ -8,6 +8,9 @@ import {
   getColorPresetValue,
   parseTagsText,
   buildTagChips,
+  hasReservedTagPrefix,
+  addTagsToText,
+  removeTagFromText,
   type EditorBuffer,
 } from '../domain';
 import { ThemeProvider } from '../../../theme';
@@ -24,6 +27,7 @@ function buf(overrides: Partial<EditorBuffer> = {}): EditorBuffer {
     body: '',
     tagLabelOverride: '',
     linkLabelOverride: '',
+    systemTags: [],
     ...overrides,
   };
 }
@@ -53,6 +57,7 @@ describe('emptyBuffer', () => {
       body: '',
       tagLabelOverride: '',
       linkLabelOverride: '',
+      systemTags: [],
     });
   });
 
@@ -127,8 +132,18 @@ describe('bufferFromEvent', () => {
     expect(bufferFromEvent(ev).tagsText).toBe('combat, plot');
   });
 
+  it('excludes session tags from tagsText', () => {
+    const ev = event({ tags: ['combat', 'sesh:Session 1', 'plot'] });
+    expect(bufferFromEvent(ev).tagsText).toBe('combat, plot');
+  });
+
   it('produces empty tagsText when all tags are entity tags', () => {
     const ev = event({ tags: ['id:ab12', 'id:cd34'] });
+    expect(bufferFromEvent(ev).tagsText).toBe('');
+  });
+
+  it('produces empty tagsText when all tags are session tags', () => {
+    const ev = event({ tags: ['sesh:01', 'sesh:02'] });
     expect(bufferFromEvent(ev).tagsText).toBe('');
   });
 
@@ -146,6 +161,16 @@ describe('bufferFromEvent', () => {
     const ev = event();
     expect(bufferFromEvent(ev).tagLabelOverride).toBe('');
     expect(bufferFromEvent(ev).linkLabelOverride).toBe('');
+  });
+
+  it('populates systemTags with session tags from the event', () => {
+    const ev = event({ tags: ['combat', 'sesh:Session 1', 'id:ab12'] });
+    expect(bufferFromEvent(ev).systemTags).toEqual(['sesh:Session 1']);
+  });
+
+  it('populates empty systemTags when the event has no session tags', () => {
+    const ev = event({ tags: ['combat', 'id:ab12'] });
+    expect(bufferFromEvent(ev).systemTags).toEqual([]);
   });
 });
 
@@ -224,6 +249,37 @@ describe('bufferToFrontmatter', () => {
     expect(fm.tags).toEqual(['combat']);
   });
 
+  it('filters out manually-entered entity-format tags from tagsText', () => {
+    const fm = bufferToFrontmatter(buf({ tagsText: 'id:ab12, combat', body: '' }));
+    expect(fm.tags).toEqual(['combat']);
+  });
+
+  it('omits tags field entirely when only entity-format tags were typed', () => {
+    const fm = bufferToFrontmatter(buf({ tagsText: 'id:ab12', body: '' }));
+    expect('tags' in fm).toBe(false);
+  });
+
+  it('filters out manually-entered session tags from tagsText', () => {
+    const fm = bufferToFrontmatter(buf({ tagsText: 'sesh:Session 1, combat', body: '' }));
+    expect(fm.tags).toEqual(['combat']);
+  });
+
+  it('omits tags field entirely when only session tags were typed', () => {
+    const fm = bufferToFrontmatter(buf({ tagsText: 'sesh:01', body: '' }));
+    expect('tags' in fm).toBe(false);
+  });
+
+  it('preserves systemTags in the output', () => {
+    const fm = bufferToFrontmatter(buf({ tagsText: 'combat', systemTags: ['sesh:01'] }));
+    expect(fm.tags).toContain('sesh:01');
+    expect(fm.tags).toContain('combat');
+  });
+
+  it('omits tags field when only systemTags and no custom/entity tags', () => {
+    const fm = bufferToFrontmatter(buf({ tagsText: '', systemTags: [] }));
+    expect('tags' in fm).toBe(false);
+  });
+
   it('round-trips through bufferFromEvent', () => {
     const original = buf({
       title: 'Round-trip',
@@ -249,6 +305,87 @@ describe('bufferToFrontmatter', () => {
     expect(restored.tagsText.split(', ').sort()).toEqual(original.tagsText.split(', ').sort());
     expect(restored.tagLabelOverride).toBe(original.tagLabelOverride);
     expect(restored.linkLabelOverride).toBe(original.linkLabelOverride);
+  });
+});
+
+// ---- addTagsToText ----
+
+describe('addTagsToText', () => {
+  it('adds new tags to an empty list', () => {
+    expect(addTagsToText('', 'combat, plot')).toBe('combat, plot');
+  });
+
+  it('appends new tags to existing ones', () => {
+    expect(addTagsToText('combat', 'plot, location:fort')).toBe('combat, plot, location:fort');
+  });
+
+  it('deduplicates tags already present', () => {
+    expect(addTagsToText('combat, plot', 'combat, location:fort')).toBe(
+      'combat, plot, location:fort',
+    );
+  });
+
+  it('returns unchanged text when all inputs are duplicates', () => {
+    expect(addTagsToText('combat', 'combat')).toBe('combat');
+  });
+
+  it('silently ignores reserved-format tags', () => {
+    expect(addTagsToText('combat', 'id:ab12, sesh:01, plot')).toBe('combat, plot');
+  });
+
+  it('returns unchanged text when input is empty', () => {
+    expect(addTagsToText('combat', '')).toBe('combat');
+  });
+});
+
+// ---- removeTagFromText ----
+
+describe('removeTagFromText', () => {
+  it('removes a tag from a list', () => {
+    expect(removeTagFromText('combat, plot', 'combat')).toBe('plot');
+  });
+
+  it('returns empty string when the only tag is removed', () => {
+    expect(removeTagFromText('combat', 'combat')).toBe('');
+  });
+
+  it('returns unchanged text when tag is not present', () => {
+    expect(removeTagFromText('combat, plot', 'npc')).toBe('combat, plot');
+  });
+
+  it('removes only the matching tag when multiple exist', () => {
+    expect(removeTagFromText('combat, plot, location:fort', 'plot')).toBe('combat, location:fort');
+  });
+});
+
+// ---- hasReservedTagPrefix ----
+
+describe('hasReservedTagPrefix', () => {
+  it('returns false for empty tagsText', () => {
+    expect(hasReservedTagPrefix('')).toBe(false);
+  });
+
+  it('returns false for normal tags', () => {
+    expect(hasReservedTagPrefix('combat, plot, location:fort')).toBe(false);
+  });
+
+  it('returns true when a tag matches id:XXXX format', () => {
+    expect(hasReservedTagPrefix('id:ab12')).toBe(true);
+  });
+
+  it('returns true when a tag matches sesh: format', () => {
+    expect(hasReservedTagPrefix('sesh:Session 1')).toBe(true);
+    expect(hasReservedTagPrefix('sesh:01')).toBe(true);
+  });
+
+  it('returns true when one of multiple tags matches', () => {
+    expect(hasReservedTagPrefix('combat, id:ab12, plot')).toBe(true);
+    expect(hasReservedTagPrefix('combat, sesh:01, plot')).toBe(true);
+  });
+
+  it('returns false for tags that start with id: but do not match the 4-char format', () => {
+    expect(hasReservedTagPrefix('id:toolong')).toBe(false);
+    expect(hasReservedTagPrefix('id:abc')).toBe(false);
   });
 });
 
@@ -291,6 +428,20 @@ describe('buildTagChips', () => {
   it('ignores entity tags that may have been manually typed into tagsText', () => {
     const chips = buildTagChips('id:ab12', '', resolvedMap);
     expect(chips).toEqual([{ raw: 'id:ab12', display: 'id:ab12', isEntity: false }]);
+  });
+
+  it('includes systemTags as non-entity chips between custom and entity chips', () => {
+    const chips = buildTagChips('combat', '[[ab12]]', resolvedMap, ['sesh:01']);
+    expect(chips).toEqual([
+      { raw: 'combat', display: 'combat', isEntity: false },
+      { raw: 'sesh:01', display: 'sesh:01', isEntity: false },
+      { raw: 'id:ab12', display: 'Bob the Wizard', isEntity: true },
+    ]);
+  });
+
+  it('defaults systemTags to empty when not provided', () => {
+    const chips = buildTagChips('combat', '', emptyMap);
+    expect(chips).toEqual([{ raw: 'combat', display: 'combat', isEntity: false }]);
   });
 });
 

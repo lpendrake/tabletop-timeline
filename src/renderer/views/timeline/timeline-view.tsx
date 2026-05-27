@@ -44,6 +44,7 @@ import { FooterButton } from '../../components/footer-button';
 import { loadSavedViewState, saveViewState } from './view-state-persistence';
 import { useFilterState } from '../../timeline/filter/use-filter-state';
 import { applyFilters } from '../../timeline/filter/logic';
+import { isSessionTag } from '../../../shared/entity-tags';
 import { FilterPanel } from '../../timeline/filter/filter-panel';
 import { EventContextMenu } from '../../timeline/components/event-context-menu';
 import { LabelOverrideEditor } from '../../shared/components/label-override-editor';
@@ -259,7 +260,7 @@ export function TimelineView({
       try {
         const { event, lastModified } = await timelinePort.getEvent(campaignPath, filename);
         const newDate = toISOString(fromAbsoluteSeconds(newSeconds));
-        const nonSeshTags = (event.tags ?? []).filter((t) => !t.startsWith('sesh:'));
+        const nonSeshTags = (event.tags ?? []).filter((t) => !isSessionTag(t));
         const newSeshTags = sessionTagsForSeconds(newSeconds, sessionsRef.current);
         const updatedTags = [...nonSeshTags, ...newSeshTags];
         await timelinePort.updateEvent(
@@ -289,6 +290,33 @@ export function TimelineView({
       }
     },
     [campaignPath, refreshEvents],
+  );
+
+  const handleRemoveTag = useCallback(
+    async (filename: string, tag: string) => {
+      const { event, lastModified } = await timelinePort.getEvent(campaignPath, filename);
+      const newTags = (event.tags ?? []).filter((t) => t !== tag);
+      await timelinePort.updateEvent(
+        campaignPath,
+        filename,
+        {
+          title: event.title,
+          date: event.date,
+          ...(newTags.length > 0 ? { tags: newTags } : {}),
+          ...(event.color ? { color: event.color } : {}),
+          ...(event.status ? { status: event.status } : {}),
+        },
+        event.body,
+        lastModified,
+      );
+      setLoadedData((d) => ({
+        ...d,
+        events: d.events.map((e) =>
+          e.filename === filename ? { ...e, tags: newTags.length > 0 ? newTags : undefined } : e,
+        ),
+      }));
+    },
+    [campaignPath],
   );
 
   const reschedule = useReschedule(
@@ -507,6 +535,7 @@ export function TimelineView({
           onDeleteClick={sessionModeActiveRef.current ? undefined : editor.requestDeleteFromCard}
           onContextMenu={sessionModeActiveRef.current ? undefined : handleCardContextMenu}
           onOpenById={onOpenById}
+          onRemoveTag={sessionModeActiveRef.current ? undefined : handleRemoveTag}
           entityLabelMap={entityLabelMap}
           entityTagLabelMap={entityTagLabelMap}
         />
