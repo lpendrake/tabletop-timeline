@@ -1,3 +1,5 @@
+@import '../../shared/entity-tag-chip.css';
+
 .filter-panel {
   position: fixed;
   bottom: 50px;
@@ -150,6 +152,10 @@
 }
 .filter-tag-result:hover {
   background: var(--theme-panel-accent);
+}
+.filter-tag-result--entity {
+  font-family: inherit;
+  color: var(--theme-accent-gold);
 }
 
 .filter-date-field-row {

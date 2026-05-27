@@ -12,6 +12,12 @@ export function buildEntityLabelMap(entityIndex: readonly EntityIndexEntry[]): M
   return new Map(entityIndex.map((e) => [e.id, effectiveLinkLabel(e)]));
 }
 
+export function buildEntityTagLabelMap(
+  entityIndex: readonly EntityIndexEntry[],
+): Map<string, string> {
+  return new Map(entityIndex.map((e) => [e.id, effectiveTagLabel(e)]));
+}
+
 export function applyEntityDelta(
   index: readonly EntityIndexEntry[],
   delta: EntityIndexDelta,
