@@ -470,19 +470,14 @@ export function EventEditorModal({
                 </label>
 
                 <label className="event-editor-field">
-                  <span className="event-editor-field-label">Tags (comma-separated)</span>
+                  <span className="event-editor-field-label">Link Label</span>
                   <input
                     type="text"
                     className="event-editor-input"
-                    value={buffer.tagsText}
-                    onChange={(e) => updateBuffer({ tagsText: e.target.value })}
-                    placeholder="plot:beast, location:fort"
+                    value={buffer.linkLabelOverride}
+                    onChange={(e) => updateBuffer({ linkLabelOverride: e.target.value })}
+                    placeholder={buffer.title || 'event title'}
                     autoComplete="off"
-                  />
-                  <TagChipPreview
-                    tagsText={buffer.tagsText}
-                    body={buffer.body}
-                    entityTagLabelMap={entityTagLabelMap}
                   />
                 </label>
 
@@ -499,14 +494,19 @@ export function EventEditorModal({
                 </label>
 
                 <label className="event-editor-field">
-                  <span className="event-editor-field-label">Link Label</span>
+                  <span className="event-editor-field-label">Tags (comma-separated)</span>
                   <input
                     type="text"
                     className="event-editor-input"
-                    value={buffer.linkLabelOverride}
-                    onChange={(e) => updateBuffer({ linkLabelOverride: e.target.value })}
-                    placeholder={buffer.title || 'event title'}
+                    value={buffer.tagsText}
+                    onChange={(e) => updateBuffer({ tagsText: e.target.value })}
+                    placeholder="plot:beast, location:fort"
                     autoComplete="off"
+                  />
+                  <TagChipPreview
+                    tagsText={buffer.tagsText}
+                    body={buffer.body}
+                    entityTagLabelMap={entityTagLabelMap}
                   />
                 </label>
 
