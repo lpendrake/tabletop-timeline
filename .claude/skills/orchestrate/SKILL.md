@@ -296,3 +296,18 @@ the code directly.
   codebase and figure out what to do" wastes tokens and produces
   unfocused results. Do the research yourself (via Explore agents)
   in Phase 1, then give the implementation agent precise instructions.
+- **Stale worktrees pollute test runs** → worktrees live under
+  `.claude/worktrees/` inside the repo. Test runners (vitest, jest)
+  will recurse into them and run every test file N extra times,
+  inflating counts and slowing builds. **Always clean up worktrees
+  after merging.** After all cherry-picks for a batch, run:
+  ```bash
+  # unlock and remove all agent worktrees
+  for wt in $(git worktree list --porcelain \
+    | grep "^worktree.*\.claude/worktrees" \
+    | sed 's/^worktree //'); do
+    git worktree unlock "$wt" 2>/dev/null
+    git worktree remove "$wt" --force
+  done
+  ```
+  Do this before running `npm test` to verify the merge.
