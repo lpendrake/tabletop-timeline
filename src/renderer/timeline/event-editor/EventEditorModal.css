@@ -92,6 +92,13 @@
   flex-shrink: 0;
 }
 
+/* ===== Inline field warning ===== */
+
+.event-editor-field-warning {
+  font-size: 11px;
+  color: var(--theme-danger);
+}
+
 /* ===== Loading state ===== */
 
 .event-editor-loading {

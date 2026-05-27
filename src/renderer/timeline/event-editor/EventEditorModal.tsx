@@ -14,6 +14,7 @@ import {
   deriveFilename,
   getColorPresetValue,
   buildTagChips,
+  hasReservedTagPrefix,
   type EditorBuffer,
   type EditorMode,
 } from './domain';
@@ -503,6 +504,11 @@ export function EventEditorModal({
                     placeholder="plot:beast, location:fort"
                     autoComplete="off"
                   />
+                  {hasReservedTagPrefix(buffer.tagsText) && (
+                    <span className="event-editor-field-warning">
+                      Tags starting with &apos;id:&apos; are reserved for system-generated tags
+                    </span>
+                  )}
                   <TagChipPreview
                     tagsText={buffer.tagsText}
                     body={buffer.body}

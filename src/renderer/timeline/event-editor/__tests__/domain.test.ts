@@ -8,6 +8,7 @@ import {
   getColorPresetValue,
   parseTagsText,
   buildTagChips,
+  hasReservedTagPrefix,
   type EditorBuffer,
 } from '../domain';
 import { ThemeProvider } from '../../../theme';
@@ -224,6 +225,16 @@ describe('bufferToFrontmatter', () => {
     expect(fm.tags).toEqual(['combat']);
   });
 
+  it('filters out manually-entered entity-format tags from tagsText', () => {
+    const fm = bufferToFrontmatter(buf({ tagsText: 'id:ab12, combat', body: '' }));
+    expect(fm.tags).toEqual(['combat']);
+  });
+
+  it('omits tags field entirely when only entity-format tags were typed', () => {
+    const fm = bufferToFrontmatter(buf({ tagsText: 'id:ab12', body: '' }));
+    expect('tags' in fm).toBe(false);
+  });
+
   it('round-trips through bufferFromEvent', () => {
     const original = buf({
       title: 'Round-trip',
@@ -249,6 +260,31 @@ describe('bufferToFrontmatter', () => {
     expect(restored.tagsText.split(', ').sort()).toEqual(original.tagsText.split(', ').sort());
     expect(restored.tagLabelOverride).toBe(original.tagLabelOverride);
     expect(restored.linkLabelOverride).toBe(original.linkLabelOverride);
+  });
+});
+
+// ---- hasReservedTagPrefix ----
+
+describe('hasReservedTagPrefix', () => {
+  it('returns false for empty tagsText', () => {
+    expect(hasReservedTagPrefix('')).toBe(false);
+  });
+
+  it('returns false for normal tags', () => {
+    expect(hasReservedTagPrefix('combat, plot, location:fort')).toBe(false);
+  });
+
+  it('returns true when a tag matches id:XXXX format', () => {
+    expect(hasReservedTagPrefix('id:ab12')).toBe(true);
+  });
+
+  it('returns true when one of multiple tags matches', () => {
+    expect(hasReservedTagPrefix('combat, id:ab12, plot')).toBe(true);
+  });
+
+  it('returns false for tags that start with id: but do not match the 4-char format', () => {
+    expect(hasReservedTagPrefix('id:toolong')).toBe(false);
+    expect(hasReservedTagPrefix('id:abc')).toBe(false);
   });
 });
 

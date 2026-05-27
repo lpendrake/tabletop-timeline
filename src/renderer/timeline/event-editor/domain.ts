@@ -58,8 +58,12 @@ export function parseTagsText(tagsText: string): string[] {
     .filter(Boolean);
 }
 
+export function hasReservedTagPrefix(tagsText: string): boolean {
+  return parseTagsText(tagsText).some(isEntityTag);
+}
+
 export function bufferToFrontmatter(buf: EditorBuffer): EventFrontmatter {
-  const tags = parseTagsText(buf.tagsText);
+  const tags = parseTagsText(buf.tagsText).filter((t) => !isEntityTag(t));
   const linkedIds = extractWikiLinkIds(buf.body);
   const syncedTags = syncEntityTags(tags, linkedIds);
   const fm: EventFrontmatter = {
