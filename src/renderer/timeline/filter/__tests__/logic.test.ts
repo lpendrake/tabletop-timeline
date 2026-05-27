@@ -237,6 +237,17 @@ describe('filterSummary', () => {
     expect(filterSummary(makeTagFilter(['a', 'b']))).toBe('Tags: a OR b');
   });
 
+  it('tag: resolves entity tag labels when map is provided', () => {
+    const map = new Map([['ab12', 'Bob the Wizard']]);
+    expect(filterSummary(makeTagFilter(['id:ab12', 'combat']), map)).toBe(
+      'Tags: Bob the Wizard OR combat',
+    );
+  });
+
+  it('tag: falls back to raw tag when entity id not in map', () => {
+    expect(filterSummary(makeTagFilter(['id:ab12']), new Map())).toBe('Tags: id:ab12');
+  });
+
   it('date in-game: both bounds', () => {
     expect(
       filterSummary(makeDateFilter({ field: 'in-game', from: '4726-01-01', to: '4726-12-31' })),
@@ -269,7 +280,36 @@ describe('collectAllTags', () => {
       makeEvent({ tags: ['a', 'b'] }),
       makeEvent({ tags: undefined }),
     ];
-    expect(collectAllTags(events)).toEqual(['a', 'b', 'z']);
+    const result = collectAllTags(events);
+    expect(result.map((t) => t.raw)).toEqual(['a', 'b', 'z']);
+    expect(result.every((t) => !t.isEntity)).toBe(true);
+  });
+
+  it('resolves entity tag labels when map is provided', () => {
+    const events = [makeEvent({ tags: ['id:ab12', 'combat'] })];
+    const map = new Map([['ab12', 'Bob the Wizard']]);
+    const result = collectAllTags(events, map);
+    const entity = result.find((t) => t.raw === 'id:ab12')!;
+    expect(entity.display).toBe('Bob the Wizard');
+    expect(entity.isEntity).toBe(true);
+    const custom = result.find((t) => t.raw === 'combat')!;
+    expect(custom.display).toBe('combat');
+    expect(custom.isEntity).toBe(false);
+  });
+
+  it('sorts by display label (entity labels sort among resolved names)', () => {
+    const events = [makeEvent({ tags: ['id:ab12', 'aardvark'] })];
+    const map = new Map([['ab12', 'Zara']]);
+    const result = collectAllTags(events, map);
+    expect(result[0].raw).toBe('aardvark');
+    expect(result[1].raw).toBe('id:ab12');
+  });
+
+  it('falls back to raw tag when entity id not in map', () => {
+    const events = [makeEvent({ tags: ['id:ab12'] })];
+    const result = collectAllTags(events, new Map());
+    expect(result[0].display).toBe('id:ab12');
+    expect(result[0].isEntity).toBe(false);
   });
 });
 

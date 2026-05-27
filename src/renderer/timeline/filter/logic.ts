@@ -2,6 +2,13 @@ import type { EventListItem, Session } from '../data/types';
 import { parseISOString, toAbsoluteSeconds } from '../calendar/golarian';
 import { computeSessionLabel } from '../render/session-bands';
 import type { DateField, TagFilter, DateFilter, Filter, FilterState } from './types';
+import { resolveEntityTagLabel } from '../../../shared/entity-tags';
+
+export interface TagInfo {
+  raw: string;
+  display: string;
+  isEntity: boolean;
+}
 
 export function makeInitialFilterState(): FilterState {
   return { filters: [] };
@@ -77,10 +84,11 @@ function toUTCDateOnly(isoOrRFC: string): string {
   return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-export function filterSummary(f: Filter): string {
+export function filterSummary(f: Filter, entityTagLabels?: Map<string, string>): string {
   if (f.type === 'tag') {
     if (f.tags.length === 0) return '(no tags selected)';
-    return 'Tags: ' + f.tags.join(' OR ');
+    const displayTags = f.tags.map((t) => resolveEntityTagLabel(t, entityTagLabels).display);
+    return 'Tags: ' + displayTags.join(' OR ');
   }
   const label = f.field === 'in-game' ? 'In-game' : f.field === 'session' ? 'Session' : 'Created';
   if (!f.from && !f.to) return `${label}: (any)`;
@@ -93,10 +101,15 @@ export function newFilterId(): string {
   return 'f_' + Math.random().toString(36).slice(2, 10);
 }
 
-export function collectAllTags(events: EventListItem[]): string[] {
-  const s = new Set<string>();
-  for (const ev of events) for (const t of ev.tags ?? []) s.add(t);
-  return [...s].sort();
+export function collectAllTags(
+  events: EventListItem[],
+  entityTagLabels?: Map<string, string>,
+): TagInfo[] {
+  const rawSet = new Set<string>();
+  for (const ev of events) for (const t of ev.tags ?? []) rawSet.add(t);
+  return [...rawSet]
+    .map((raw) => ({ raw, ...resolveEntityTagLabel(raw, entityTagLabels) }))
+    .sort((a, b) => a.display.localeCompare(b.display));
 }
 
 export function nowForField(field: DateField, inGameNow: string, realWorldNow: string): string {

@@ -32,11 +32,15 @@ export function bufferFromEvent(ev: Event): EditorBuffer {
   };
 }
 
-export function bufferToFrontmatter(buf: EditorBuffer): EventFrontmatter {
-  const tags = buf.tagsText
+export function parseTagsText(tagsText: string): string[] {
+  return tagsText
     .split(',')
     .map((t) => t.trim())
     .filter(Boolean);
+}
+
+export function bufferToFrontmatter(buf: EditorBuffer): EventFrontmatter {
+  const tags = parseTagsText(buf.tagsText);
   const fm: EventFrontmatter = {
     title: buf.title.trim(),
     date: buf.date.trim(),

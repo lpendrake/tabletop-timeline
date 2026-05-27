@@ -10,6 +10,7 @@ export interface FilterChipProps {
   events: EventListItem[];
   sessions: Session[];
   inGameNow: string;
+  entityTagLabelMap?: Map<string, string>;
   onToggle: () => void;
   onPin: () => void;
   onRemove: () => void;
@@ -23,6 +24,7 @@ export function FilterChip({
   isEditing,
   events,
   inGameNow,
+  entityTagLabelMap,
   onToggle,
   onPin,
   onRemove,
@@ -39,7 +41,7 @@ export function FilterChip({
         onChange={onToggle}
       />
       <button type="button" className="filter-chip-summary" title="Edit" onClick={onEditClick}>
-        {filterSummary(filter)}
+        {filterSummary(filter, entityTagLabelMap)}
       </button>
       <button
         type="button"
@@ -54,7 +56,13 @@ export function FilterChip({
       </button>
       {isEditing &&
         (filter.type === 'tag' ? (
-          <TagEditor filter={filter} events={events} onUpdate={onUpdate} onDone={onDoneEditing} />
+          <TagEditor
+            filter={filter}
+            events={events}
+            entityTagLabelMap={entityTagLabelMap}
+            onUpdate={onUpdate}
+            onDone={onDoneEditing}
+          />
         ) : (
           <DateEditor
             filter={filter}

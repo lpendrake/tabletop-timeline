@@ -2,6 +2,7 @@ import { useCallback, useMemo, type CSSProperties, type ReactElement } from 'rea
 import './cards.css';
 import type { EventListItem } from '../data/types';
 import type { WeekdayColors } from '../../theme';
+import { resolveEntityTagLabel } from '../../../shared/entity-tags';
 import type { ViewState, ViewportSize } from '../math/zoom';
 import { formatCardFace } from '../calendar/format';
 import {
@@ -50,6 +51,7 @@ interface CardsProps {
   onContextMenu?: (item: EventListItem, x: number, y: number) => void;
   onOpenById?: (id: string) => void;
   entityLabelMap?: Map<string, string>;
+  entityTagLabelMap?: Map<string, string>;
 }
 
 export function Cards({
@@ -68,6 +70,7 @@ export function Cards({
   onContextMenu,
   onOpenById,
   entityLabelMap,
+  entityTagLabelMap,
 }: CardsProps): ReactElement | null {
   const laidOut = useMemo(
     () => layoutCards(events, view, size, inGameNowSeconds),
@@ -139,6 +142,7 @@ export function Cards({
             onContextMenu={onContextMenu}
             onOpenById={onOpenById}
             entityLabelMap={entityLabelMap}
+            entityTagLabelMap={entityTagLabelMap}
           />
         );
       })}
@@ -163,6 +167,7 @@ interface CardItemProps {
   onContextMenu?: (item: EventListItem, x: number, y: number) => void;
   onOpenById?: (id: string) => void;
   entityLabelMap?: Map<string, string>;
+  entityTagLabelMap?: Map<string, string>;
 }
 
 function CardItem({
@@ -182,6 +187,7 @@ function CardItem({
   onContextMenu,
   onOpenById,
   entityLabelMap,
+  entityTagLabelMap,
 }: CardItemProps): ReactElement {
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
@@ -267,11 +273,17 @@ function CardItem({
         <div className="event-card-date">{formatCardFace(card.parsedDate)}</div>
         {tags && tags.length > 0 && (
           <div className="event-card-tags">
-            {tags.map((t) => (
-              <span key={t} className="event-card-tag">
-                {t}
-              </span>
-            ))}
+            {tags.map((t) => {
+              const { display, isEntity } = resolveEntityTagLabel(t, entityTagLabelMap);
+              return (
+                <span
+                  key={t}
+                  className={`event-card-tag${isEntity ? ' entity-tag-chip--resolved' : ''}`}
+                >
+                  {display}
+                </span>
+              );
+            })}
           </div>
         )}
       </div>
