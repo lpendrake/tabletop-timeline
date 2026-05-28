@@ -12,3 +12,7 @@ export function buildNewEventContent(title: string): { body: string; cursorOffse
   const body = `# ${title}\n\n`;
   return { body, cursorOffset: body.length };
 }
+
+export function duplicateEventMessage(title: string): string {
+  return `An event titled "${title}" already exists at that time — pick a different title.`;
+}

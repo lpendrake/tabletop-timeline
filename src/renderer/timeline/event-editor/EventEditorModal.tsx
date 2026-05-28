@@ -613,6 +613,7 @@ export function EventEditorModal({
                   content={buffer.body}
                   onChange={(s) => updateBuffer({ body: s })}
                   viewRef={viewRef}
+                  initialCursor={mode.kind === 'edit' ? mode.initialCursor : undefined}
                   wikiLinks={{
                     suggest: suggestLinksForIndex,
                     onOpen: onOpenById,

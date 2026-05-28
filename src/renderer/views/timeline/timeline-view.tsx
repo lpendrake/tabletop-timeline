@@ -25,6 +25,7 @@ import { useReschedule } from '../../timeline/interactions/useReschedule';
 import { useQuickAddZones } from '../../timeline/interactions/useQuickAddZones';
 import { useEventEditor } from '../../timeline/event-editor/useEventEditor';
 import { EventEditorModal } from '../../timeline/event-editor/EventEditorModal';
+import { NewEventModal } from '../../timeline/event-editor/new-event-modal';
 import { sessionTagsForSeconds } from '../../timeline/render/session-bands';
 import { AdvanceTimePopover } from '../../timeline/render/AdvanceTimePopover';
 import {
@@ -358,7 +359,7 @@ export function TimelineView({
     shouldSuppressClick: () =>
       pan.wasMoved() || reschedule.wasActivated() || sessionModeActiveRef.current,
     onQuickAdd: (seconds) => {
-      editor.openCreate(toISOString(fromAbsoluteSeconds(seconds)));
+      editor.openNewEventPrompt(toISOString(fromAbsoluteSeconds(seconds)));
     },
     onSetNow: async (seconds) => {
       const current = gameStateRef.current;
@@ -486,7 +487,12 @@ export function TimelineView({
   const inGameNow = loadedData.gameState?.in_game_now || null;
   const inGameNowSeconds = inGameNow ? toAbsoluteSeconds(parseISOString(inGameNow)) : Infinity;
 
-  const anyModalOpen = !!(editor.editorMode || sessionEditor.mode || labelEditorTarget);
+  const anyModalOpen = !!(
+    editor.editorMode ||
+    editor.newEventPrompt ||
+    sessionEditor.mode ||
+    labelEditorTarget
+  );
 
   return (
     <>
@@ -654,6 +660,17 @@ export function TimelineView({
         />
       )}
 
+      {/* New event title prompt */}
+      {editor.newEventPrompt && (
+        <NewEventModal
+          error={editor.newEventPrompt.error}
+          onCreate={(title) => {
+            void editor.createAndOpen(title);
+          }}
+          onCancel={editor.cancelNewEventPrompt}
+        />
+      )}
+
       {/* Event editor modal — rendered outside viewport to avoid pan/zoom transform */}
       {editor.editorMode && (
         <EventEditorModal
@@ -721,7 +738,11 @@ export function TimelineView({
           <FooterPortal slot="center">
             <FooterButton
               variant="primary"
-              onClick={() => editor.openCreate()}
+              onClick={() =>
+                editor.openNewEventPrompt(
+                  toISOString(fromAbsoluteSeconds(viewRef.current.centerSeconds)),
+                )
+              }
               title="Create a new event"
             >
               + Event
