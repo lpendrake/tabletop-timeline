@@ -24,7 +24,7 @@ export interface EditorBuffer {
 
 export type EditorMode =
   | { kind: 'create'; initialDate?: string }
-  | { kind: 'edit'; filename: string };
+  | { kind: 'edit'; filename: string; initialCursor?: number };
 
 export type { ColorPreset } from '../../theme';
 

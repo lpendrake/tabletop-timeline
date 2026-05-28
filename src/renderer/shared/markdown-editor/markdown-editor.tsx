@@ -9,7 +9,7 @@ import {
   highlightActiveLine,
   keymap,
 } from '@codemirror/view';
-import { Compartment, EditorState, Prec, type Extension } from '@codemirror/state';
+import { Compartment, EditorSelection, EditorState, Prec, type Extension } from '@codemirror/state';
 import { history, historyKeymap, defaultKeymap, indentWithTab } from '@codemirror/commands';
 import {
   indentOnInput,
@@ -85,6 +85,13 @@ export interface MarkdownEditorProps {
 
   /** Enables Ctrl/Cmd+click on standard markdown links `[text](url)`. */
   mdLinks?: MarkdownLinkClickConfig;
+
+  /**
+   * Document offset at which to place the caret when the editor first mounts
+   * with fresh content (i.e. no `savedInstance`). Clamped to [0, doc.length].
+   * Omit (or pass `undefined`) to keep the default behaviour of caret at 0.
+   */
+  initialCursor?: number;
 }
 
 export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
@@ -100,6 +107,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   imagePaste: imagePasteConfig,
   dropLink: dropLinkConfig,
   mdLinks: mdLinksConfig,
+  initialCursor,
 }) => {
   const editorRef = useRef<HTMLDivElement>(null);
   const internalViewRef = useRef<EditorView | null>(null);
@@ -202,9 +210,18 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     }
 
     // Restore a previously saved instance (preserves doc, selection, undo history).
-    const initialState = savedInstance
-      ? savedInstance.state
-      : EditorState.create({ doc: content, extensions: baseExtensions });
+    let initialState: EditorState;
+    if (savedInstance) {
+      initialState = savedInstance.state;
+    } else {
+      const docLen = content.length;
+      const anchor = initialCursor !== undefined ? Math.min(Math.max(0, initialCursor), docLen) : 0;
+      initialState = EditorState.create({
+        doc: content,
+        selection: EditorSelection.single(anchor),
+        extensions: baseExtensions,
+      });
+    }
 
     const view = new EditorView({ state: initialState, parent: editorRef.current });
     internalViewRef.current = view;

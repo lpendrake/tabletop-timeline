@@ -2,6 +2,9 @@ import { useState, useCallback } from 'react';
 import { timelinePort, ConflictError } from '../data/ports';
 import type { EventListItem } from '../data/types';
 import type { EditorMode } from './domain';
+import { emptyBuffer, bufferToFrontmatter, deriveFilename } from './domain';
+import { buildNewEventContent, duplicateEventMessage } from './domain/new-event-content';
+import { createEventChecked } from './create-event-checked';
 
 export type { EditorMode };
 
@@ -10,10 +13,15 @@ export interface CardDeleteConflict {
   title: string;
 }
 
+export interface NewEventPromptState {
+  initialDate?: string;
+  error: string | null;
+}
+
 export interface UseEventEditorResult {
   editorMode: EditorMode | null;
   openCreate: (initialDate?: string) => void;
-  openEdit: (filename: string) => void;
+  openEdit: (filename: string, initialCursor?: number) => void;
   closeEditor: () => void;
   handleSaved: (filename: string) => void;
   handleAutosaved: (filename: string) => void;
@@ -21,6 +29,10 @@ export interface UseEventEditorResult {
   requestDeleteFromCard: (item: EventListItem) => Promise<void>;
   cardDeleteConflict: CardDeleteConflict | null;
   resolveCardDeleteConflict: (choice: 'overwrite' | 'cancel') => Promise<void>;
+  newEventPrompt: NewEventPromptState | null;
+  openNewEventPrompt: (initialDate?: string) => void;
+  cancelNewEventPrompt: () => void;
+  createAndOpen: (title: string) => Promise<void>;
 }
 
 export function useEventEditor(
@@ -29,13 +41,18 @@ export function useEventEditor(
 ): UseEventEditorResult {
   const [editorMode, setEditorMode] = useState<EditorMode | null>(null);
   const [cardDeleteConflict, setCardDeleteConflict] = useState<CardDeleteConflict | null>(null);
+  const [newEventPrompt, setNewEventPrompt] = useState<NewEventPromptState | null>(null);
 
   const openCreate = useCallback((initialDate?: string) => {
     setEditorMode({ kind: 'create', ...(initialDate ? { initialDate } : {}) });
   }, []);
 
-  const openEdit = useCallback((filename: string) => {
-    setEditorMode({ kind: 'edit', filename });
+  const openEdit = useCallback((filename: string, initialCursor?: number) => {
+    setEditorMode({
+      kind: 'edit',
+      filename,
+      ...(initialCursor !== undefined ? { initialCursor } : {}),
+    });
   }, []);
 
   const closeEditor = useCallback(() => {
@@ -101,6 +118,32 @@ export function useEventEditor(
     [campaignPath, cardDeleteConflict, onEventsChanged],
   );
 
+  const openNewEventPrompt = useCallback((initialDate?: string) => {
+    setNewEventPrompt({ initialDate, error: null });
+  }, []);
+
+  const cancelNewEventPrompt = useCallback(() => {
+    setNewEventPrompt(null);
+  }, []);
+
+  const createAndOpen = useCallback(
+    async (title: string) => {
+      const buf = { ...emptyBuffer(newEventPrompt?.initialDate), title };
+      const { body, cursorOffset } = buildNewEventContent(title);
+      const frontmatter = bufferToFrontmatter(buf);
+      const filename = deriveFilename(buf);
+      const result = await createEventChecked(campaignPath, filename, frontmatter, body);
+      if (!result.ok) {
+        setNewEventPrompt((p) => (p ? { ...p, error: duplicateEventMessage(title) } : p));
+        return;
+      }
+      setNewEventPrompt(null);
+      onEventsChanged();
+      openEdit(result.event.event.filename, cursorOffset);
+    },
+    [campaignPath, newEventPrompt, onEventsChanged, openEdit],
+  );
+
   return {
     editorMode,
     openCreate,
@@ -112,5 +155,9 @@ export function useEventEditor(
     requestDeleteFromCard,
     cardDeleteConflict,
     resolveCardDeleteConflict,
+    newEventPrompt,
+    openNewEventPrompt,
+    cancelNewEventPrompt,
+    createAndOpen,
   };
 }
