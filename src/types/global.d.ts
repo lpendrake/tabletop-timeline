@@ -93,6 +93,7 @@ declare global {
         frontmatter: EventFrontmatter,
         body: string,
         ifUnmodifiedSince: string,
+        desiredFilename?: string,
       ) => Promise<EventWithMtime | ConflictResult>;
       timelineDeleteEvent: (
         campaignPath: string,

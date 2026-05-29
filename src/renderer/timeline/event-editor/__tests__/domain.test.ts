@@ -3,6 +3,7 @@ import {
   emptyBuffer,
   bufferFromEvent,
   bufferToFrontmatter,
+  effectiveTitle,
   validateBuffer,
   deriveFilename,
   getColorPresetValue,
@@ -203,6 +204,16 @@ describe('bufferToFrontmatter', () => {
     expect(fm.date).toBe('4726-05-04');
   });
 
+  it('sets frontmatter title from body H1 when present', () => {
+    const fm = bufferToFrontmatter(buf({ title: 'Old Title', body: '# H1 Title\nContent.' }));
+    expect(fm.title).toBe('H1 Title');
+  });
+
+  it('falls back to buf.title when body has no H1', () => {
+    const fm = bufferToFrontmatter(buf({ title: 'Buf Title', body: 'No heading.' }));
+    expect(fm.title).toBe('Buf Title');
+  });
+
   it('includes tagLabelOverride when set', () => {
     const fm = bufferToFrontmatter(buf({ tagLabelOverride: 'Custom Tag' }));
     expect(fm.tagLabelOverride).toBe('Custom Tag');
@@ -305,6 +316,36 @@ describe('bufferToFrontmatter', () => {
     expect(restored.tagsText.split(', ').sort()).toEqual(original.tagsText.split(', ').sort());
     expect(restored.tagLabelOverride).toBe(original.tagLabelOverride);
     expect(restored.linkLabelOverride).toBe(original.linkLabelOverride);
+  });
+});
+
+// ---- effectiveTitle ----
+
+describe('effectiveTitle', () => {
+  it('prefers the body H1 over the title field', () => {
+    expect(effectiveTitle(buf({ title: 'Old Title', body: '# New Heading\nText' }))).toBe(
+      'New Heading',
+    );
+  });
+
+  it('falls back to the title field when the body has no H1', () => {
+    expect(effectiveTitle(buf({ title: 'Just Title', body: 'No heading here.' }))).toBe(
+      'Just Title',
+    );
+  });
+
+  it('tracks the H1 as it changes, ignoring a stale title field', () => {
+    expect(
+      effectiveTitle(buf({ title: 'Walking up the mountain', body: '# Walking up the mountains' })),
+    ).toBe('Walking up the mountains');
+  });
+
+  it('trims surrounding whitespace from the H1', () => {
+    expect(effectiveTitle(buf({ title: '', body: '#   Spaced Out   \nBody' }))).toBe('Spaced Out');
+  });
+
+  it('returns an empty string when there is no H1 and no title', () => {
+    expect(effectiveTitle(buf({ title: '', body: 'plain text' }))).toBe('');
   });
 });
 
@@ -478,37 +519,59 @@ describe('validateBuffer', () => {
 // ---- deriveFilename ----
 
 describe('deriveFilename', () => {
-  it('derives slug from title and date prefix', () => {
-    expect(deriveFilename(buf({ title: 'The Big Heist', date: '4726-05-04T09:30' }))).toBe(
-      '4726-05-04-the-big-heist.md',
+  it('uses H1 from body as slug when present', () => {
+    expect(
+      deriveFilename(
+        buf({ title: 'Old Title', body: '# The Big Heist\nSome text', date: '4726-05-04' }),
+      ),
+    ).toBe('4726-05-04-the-big-heist.md');
+  });
+
+  it('falls back to title when body has no H1', () => {
+    expect(
+      deriveFilename(buf({ title: 'The Big Heist', body: 'Just prose', date: '4726-05-04' })),
+    ).toBe('4726-05-04-the-big-heist.md');
+  });
+
+  it('uses "event" fallback when body has no H1 and title is blank', () => {
+    expect(deriveFilename(buf({ title: '', body: '', date: '4726-05-04' }))).toBe(
+      '4726-05-04-event.md',
     );
   });
 
-  it('strips apostrophes from title', () => {
-    expect(deriveFilename(buf({ title: "It's Time", date: '4726-05-04' }))).toBe(
+  it('includes full datetime (colons stripped) when date has time component', () => {
+    expect(deriveFilename(buf({ title: 'Battle', body: '', date: '4726-05-04T09:30' }))).toBe(
+      '4726-05-04T0930-battle.md',
+    );
+  });
+
+  it('uses date-only prefix when date has no time component', () => {
+    expect(deriveFilename(buf({ title: 'Battle', body: '', date: '4726-05-04' }))).toBe(
+      '4726-05-04-battle.md',
+    );
+  });
+
+  it('strips apostrophes from H1', () => {
+    expect(deriveFilename(buf({ title: '', body: "# It's Time\n", date: '4726-05-04' }))).toBe(
       '4726-05-04-its-time.md',
     );
   });
 
-  it('uses "event" fallback when title is blank', () => {
-    expect(deriveFilename(buf({ title: '', date: '4726-05-04' }))).toBe('4726-05-04-event.md');
-  });
-
   it('truncates slug at 60 characters', () => {
-    const longTitle = 'a'.repeat(80);
-    const filename = deriveFilename(buf({ title: longTitle, date: '4726-05-04' }));
+    const longH1 = '# ' + 'a'.repeat(80);
+    const filename = deriveFilename(buf({ title: '', body: longH1, date: '4726-05-04' }));
     const slug = filename.replace('4726-05-04-', '').replace('.md', '');
     expect(slug.length).toBeLessThanOrEqual(60);
   });
 
   it('replaces non-alphanumeric runs with single dash', () => {
-    expect(deriveFilename(buf({ title: 'Battle!!! At Dawn', date: '4726-01-01' }))).toBe(
-      '4726-01-01-battle-at-dawn.md',
-    );
+    expect(
+      deriveFilename(buf({ title: '', body: '# Battle!!! At Dawn', date: '4726-01-01' })),
+    ).toBe('4726-01-01-battle-at-dawn.md');
   });
 
   it('strips leading/trailing dashes from slug', () => {
-    expect(deriveFilename(buf({ title: '---Test---', date: '4726-01-01' }))).toBe(
+    expect(deriveFilename(buf({ title: '', body: '# ---Test---', date: '4726-01-01' }))).toBe(
       '4726-01-01-test.md',
     );
   });

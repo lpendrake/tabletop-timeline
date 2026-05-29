@@ -44,7 +44,9 @@ export interface Session {
   notes?: string;
 }
 
-export type ConflictResult = { conflict: true };
+export type ConflictResult =
+  | { conflict: true; reason?: undefined } // mtime conflict (existing behaviour)
+  | { conflict: true; reason: 'filename-taken'; filename: string }; // desired filename already exists
 
 export interface EventWithMtime {
   event: Event;

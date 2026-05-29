@@ -16,6 +16,17 @@ export class ConflictError extends Error {
   }
 }
 
+export class FilenameConflictError extends Error {
+  readonly takenFilename: string;
+  constructor(filename: string) {
+    super(
+      `Filename "${filename}" is already in use — the date + first H1 combination must be unique.`,
+    );
+    this.name = 'FilenameConflictError';
+    this.takenFilename = filename;
+  }
+}
+
 function assertNotConflict<T>(result: T | ConflictResult): asserts result is T {
   if (result !== null && typeof result === 'object' && 'conflict' in result) {
     throw new ConflictError();
@@ -46,6 +57,7 @@ export const timelinePort = {
     frontmatter: EventFrontmatter,
     body: string,
     ifUnmodifiedSince: string,
+    desiredFilename?: string,
   ): Promise<EventWithMtime> {
     const result = await window.fsApi.timelineUpdateEvent(
       campaignPath,
@@ -53,9 +65,15 @@ export const timelinePort = {
       frontmatter,
       body,
       ifUnmodifiedSince,
+      desiredFilename,
     );
-    assertNotConflict(result);
-    return result;
+    if (result !== null && typeof result === 'object' && 'conflict' in result) {
+      if (result.reason === 'filename-taken') {
+        throw new FilenameConflictError(result.filename);
+      }
+      throw new ConflictError();
+    }
+    return result as EventWithMtime;
   },
 
   async deleteEvent(

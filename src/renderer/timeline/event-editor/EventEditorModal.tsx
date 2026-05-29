@@ -4,12 +4,13 @@ import { MarkdownEditor, FormatToolbar } from '../../shared/markdown-editor';
 import { suggestLinks } from '../../shared/suggest-links';
 import { FooterPortal } from '../../components/footer-portal';
 import { openFromWikiLink, closeFromWikiLink } from '../../peek/stack';
-import { timelinePort, ConflictError } from '../data/ports';
+import { timelinePort, ConflictError, FilenameConflictError } from '../data/ports';
 import { notesData } from '../../notes/data';
 import {
   emptyBuffer,
   bufferFromEvent,
   bufferToFrontmatter,
+  effectiveTitle,
   validateBuffer,
   deriveFilename,
   getColorPresetValue,
@@ -103,6 +104,9 @@ export function EventEditorModal({
   const [saveState, setSaveState] = useState<SaveState>('clean');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [conflictPending, setConflictPending] = useState<ConflictPending | null>(null);
+  const [currentFilename, setCurrentFilename] = useState<string>(
+    mode.kind === 'edit' ? mode.filename : '',
+  );
   const [entityIndex, setEntityIndex] = useState<
     Awaited<ReturnType<typeof notesData.getEntityIndex>>
   >([]);
@@ -217,13 +221,17 @@ export function EventEditorModal({
         let result;
         // After the first auto-save in create mode, filenameRef is set — update from then on.
         if (filenameRef.current !== null) {
+          const desiredFilename = deriveFilename(current);
           result = await timelinePort.updateEvent(
             campaignPath,
             filenameRef.current,
             frontmatter,
             current.body,
             mtime!,
+            desiredFilename,
           );
+          filenameRef.current = result.event.filename;
+          setCurrentFilename(result.event.filename);
         } else {
           const filename = deriveFilename(current);
           result = await timelinePort.createEvent(
@@ -233,6 +241,7 @@ export function EventEditorModal({
             current.body,
           );
           filenameRef.current = result.event.filename;
+          setCurrentFilename(result.event.filename ?? '');
         }
         lastModifiedRef.current = result.lastModified;
         setConflictPending(null);
@@ -255,6 +264,11 @@ export function EventEditorModal({
           );
         }
       } catch (err) {
+        if (err instanceof FilenameConflictError) {
+          setSaveState('error');
+          setErrorMessage(err.message);
+          return;
+        }
         if (err instanceof ConflictError) {
           setSaveState('dirty');
           // Auto-save conflict: silently revert so user can resolve manually.
@@ -355,9 +369,9 @@ export function EventEditorModal({
       const mtime = overrideMtime ?? lastModifiedRef.current;
       setSaveState('saving');
       try {
-        await timelinePort.deleteEvent(campaignPath, mode.filename, mtime!);
+        await timelinePort.deleteEvent(campaignPath, filenameRef.current ?? mode.filename, mtime!);
         setConflictPending(null);
-        onDeleted(mode.filename);
+        onDeleted(filenameRef.current ?? mode.filename);
       } catch (err) {
         if (err instanceof ConflictError) {
           setSaveState('dirty');
@@ -412,6 +426,9 @@ export function EventEditorModal({
   }, [mode, buffer.title, doDelete]);
 
   const colorPresetValue = getColorPresetValue(buffer.color);
+  // Placeholder for the override fields: the live effective title (body H1,
+  // falling back to the title field), so it tracks the H1 as the user types.
+  const titlePlaceholder = effectiveTitle(buffer) || 'event title';
   const isEditMode = mode.kind === 'edit';
   const isBusy = saveState === 'saving' || saveState === 'saved';
 
@@ -458,7 +475,7 @@ export function EventEditorModal({
           {/* Header */}
           <div className="event-editor-header">
             <h2 className="event-editor-title">
-              {isEditMode ? `Edit: ${mode.filename}` : 'New event'}
+              {isEditMode ? `Edit: ${currentFilename || mode.filename}` : 'New event'}
             </h2>
             <div className={`event-editor-save-status event-editor-save-status--${saveState}`}>
               {saveState === 'dirty'
@@ -527,7 +544,7 @@ export function EventEditorModal({
                     className="event-editor-input"
                     value={buffer.linkLabelOverride}
                     onChange={(e) => updateBuffer({ linkLabelOverride: e.target.value })}
-                    placeholder={buffer.title || 'event title'}
+                    placeholder={titlePlaceholder}
                     autoComplete="off"
                   />
                 </label>
@@ -539,7 +556,7 @@ export function EventEditorModal({
                     className="event-editor-input"
                     value={buffer.tagLabelOverride}
                     onChange={(e) => updateBuffer({ tagLabelOverride: e.target.value })}
-                    placeholder={buffer.title || 'event title'}
+                    placeholder={titlePlaceholder}
                     autoComplete="off"
                   />
                 </label>
