@@ -46,6 +46,7 @@ export const timelinePort = {
     frontmatter: EventFrontmatter,
     body: string,
     ifUnmodifiedSince: string,
+    desiredFilename?: string,
   ): Promise<EventWithMtime> {
     const result = await window.fsApi.timelineUpdateEvent(
       campaignPath,
@@ -53,6 +54,7 @@ export const timelinePort = {
       frontmatter,
       body,
       ifUnmodifiedSince,
+      desiredFilename,
     );
     assertNotConflict(result);
     return result;

@@ -60,6 +60,7 @@ contextBridge.exposeInMainWorld('fsApi', {
     frontmatter: unknown,
     body: string,
     ifUnmodifiedSince: string,
+    desiredFilename?: string,
   ) =>
     ipcRenderer.invoke(
       'timeline:updateEvent',
@@ -68,6 +69,7 @@ contextBridge.exposeInMainWorld('fsApi', {
       frontmatter,
       body,
       ifUnmodifiedSince,
+      desiredFilename,
     ),
   timelineDeleteEvent: (campaignPath: string, filename: string, ifUnmodifiedSince: string) =>
     ipcRenderer.invoke('timeline:deleteEvent', campaignPath, filename, ifUnmodifiedSince),

@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
 import { generateShortId } from '../shared/ids.js';
+import { extractH1 } from '../shared/frontmatter.js';
 
 import type {
   CreateEventResult,
@@ -71,9 +72,10 @@ function parseEventFile(
   const raw = fs.readFileSync(filePath, 'utf-8');
   const { data, content: body } = matter(raw, MATTER_OPTS);
   const lastModified = fileMtime(filePath);
+  const h1 = extractH1(body.trimStart());
   const event: Event = {
     filename,
-    title: String(data.title ?? ''),
+    title: h1 ?? String(data.title ?? ''),
     date: String(data.date ?? ''),
     tags: Array.isArray(data.tags) ? data.tags : [],
     ...(data.color !== undefined ? { color: String(data.color) } : {}),
@@ -89,6 +91,56 @@ function parseEventFile(
     mtime: lastModified,
   };
   return { event, lastModified };
+}
+
+export function updateEventHandler(
+  campaignPath: string,
+  filename: string,
+  frontmatter: EventFrontmatter,
+  body: string,
+  ifUnmodifiedSince: string,
+  desiredFilename?: string,
+): EventWithMtime | ConflictResult {
+  const dir = eventsDir(campaignPath);
+  assertSafeFilename(dir, filename);
+  const filePath = path.join(dir, filename);
+  const currentMtime = fileMtime(filePath);
+  if (currentMtime !== ifUnmodifiedSince) return { conflict: true };
+
+  // Preserve frontmatter fields the editor doesn't manage.
+  const editorFields = new Set([
+    'title',
+    'date',
+    'tags',
+    'color',
+    'id',
+    'tagLabelOverride',
+    'linkLabelOverride',
+  ]);
+  const existing = matter(fs.readFileSync(filePath, 'utf-8'), MATTER_OPTS).data;
+  const preserved: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(existing)) {
+    if (!editorFields.has(key)) preserved[key] = value;
+  }
+  const content = matter.stringify(
+    body,
+    { ...preserved, ...(frontmatter as unknown as Record<string, unknown>) },
+    MATTER_OPTS,
+  );
+  fs.writeFileSync(filePath, content, 'utf-8');
+
+  // Optional rename: only if a different desired filename was supplied.
+  if (desiredFilename && desiredFilename !== filename) {
+    assertSafeFilename(dir, desiredFilename);
+    const newFilePath = path.join(dir, desiredFilename);
+    if (fs.existsSync(newFilePath)) {
+      return { conflict: true, reason: 'filename-taken', filename: desiredFilename };
+    }
+    fs.renameSync(path.join(dir, filename), newFilePath);
+    return parseEventFile(newFilePath, desiredFilename);
+  }
+
+  return parseEventFile(filePath, filename);
 }
 
 export function createEventHandler(
@@ -131,10 +183,11 @@ export function registerTimelineIpcHandlers() {
       .map((filename) => {
         const filePath = path.join(dir, filename);
         const raw = fs.readFileSync(filePath, 'utf-8');
-        const { data } = matter(raw, MATTER_OPTS);
+        const { data, content: body } = matter(raw, MATTER_OPTS);
+        const h1 = extractH1(body.trimStart());
         return {
           filename,
-          title: String(data.title ?? ''),
+          title: h1 ?? String(data.title ?? ''),
           date: String(data.date ?? ''),
           tags: Array.isArray(data.tags) ? data.tags : [],
           ...(data.id !== undefined ? { id: String(data.id) } : {}),
@@ -163,36 +216,16 @@ export function registerTimelineIpcHandlers() {
       frontmatter: EventFrontmatter,
       body: string,
       ifUnmodifiedSince: string,
-    ): EventWithMtime | ConflictResult => {
-      const dir = eventsDir(campaignPath);
-      assertSafeFilename(dir, filename);
-      const filePath = path.join(dir, filename);
-      const currentMtime = fileMtime(filePath);
-      if (currentMtime !== ifUnmodifiedSince) return { conflict: true };
-      // Preserve frontmatter fields the editor doesn't manage (e.g. label overrides).
-      // Only fields that bufferToFrontmatter can produce are considered editor-owned.
-      const editorFields = new Set([
-        'title',
-        'date',
-        'tags',
-        'color',
-        'id',
-        'tagLabelOverride',
-        'linkLabelOverride',
-      ]);
-      const existing = matter(fs.readFileSync(filePath, 'utf-8'), MATTER_OPTS).data;
-      const preserved: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(existing)) {
-        if (!editorFields.has(key)) preserved[key] = value;
-      }
-      const content = matter.stringify(
+      desiredFilename?: string,
+    ) =>
+      updateEventHandler(
+        campaignPath,
+        filename,
+        frontmatter,
         body,
-        { ...preserved, ...(frontmatter as unknown as Record<string, unknown>) },
-        MATTER_OPTS,
-      );
-      fs.writeFileSync(filePath, content, 'utf-8');
-      return parseEventFile(filePath, filename);
-    },
+        ifUnmodifiedSince,
+        desiredFilename,
+      ),
   );
 
   ipcMain.handle(
