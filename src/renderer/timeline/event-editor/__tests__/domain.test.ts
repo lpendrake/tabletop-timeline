@@ -3,6 +3,7 @@ import {
   emptyBuffer,
   bufferFromEvent,
   bufferToFrontmatter,
+  effectiveTitle,
   validateBuffer,
   deriveFilename,
   getColorPresetValue,
@@ -315,6 +316,36 @@ describe('bufferToFrontmatter', () => {
     expect(restored.tagsText.split(', ').sort()).toEqual(original.tagsText.split(', ').sort());
     expect(restored.tagLabelOverride).toBe(original.tagLabelOverride);
     expect(restored.linkLabelOverride).toBe(original.linkLabelOverride);
+  });
+});
+
+// ---- effectiveTitle ----
+
+describe('effectiveTitle', () => {
+  it('prefers the body H1 over the title field', () => {
+    expect(effectiveTitle(buf({ title: 'Old Title', body: '# New Heading\nText' }))).toBe(
+      'New Heading',
+    );
+  });
+
+  it('falls back to the title field when the body has no H1', () => {
+    expect(effectiveTitle(buf({ title: 'Just Title', body: 'No heading here.' }))).toBe(
+      'Just Title',
+    );
+  });
+
+  it('tracks the H1 as it changes, ignoring a stale title field', () => {
+    expect(
+      effectiveTitle(buf({ title: 'Walking up the mountain', body: '# Walking up the mountains' })),
+    ).toBe('Walking up the mountains');
+  });
+
+  it('trims surrounding whitespace from the H1', () => {
+    expect(effectiveTitle(buf({ title: '', body: '#   Spaced Out   \nBody' }))).toBe('Spaced Out');
+  });
+
+  it('returns an empty string when there is no H1 and no title', () => {
+    expect(effectiveTitle(buf({ title: '', body: 'plain text' }))).toBe('');
   });
 });
 

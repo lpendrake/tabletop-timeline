@@ -10,6 +10,7 @@ import {
   emptyBuffer,
   bufferFromEvent,
   bufferToFrontmatter,
+  effectiveTitle,
   validateBuffer,
   deriveFilename,
   getColorPresetValue,
@@ -425,6 +426,9 @@ export function EventEditorModal({
   }, [mode, buffer.title, doDelete]);
 
   const colorPresetValue = getColorPresetValue(buffer.color);
+  // Placeholder for the override fields: the live effective title (body H1,
+  // falling back to the title field), so it tracks the H1 as the user types.
+  const titlePlaceholder = effectiveTitle(buffer) || 'event title';
   const isEditMode = mode.kind === 'edit';
   const isBusy = saveState === 'saving' || saveState === 'saved';
 
@@ -540,7 +544,7 @@ export function EventEditorModal({
                     className="event-editor-input"
                     value={buffer.linkLabelOverride}
                     onChange={(e) => updateBuffer({ linkLabelOverride: e.target.value })}
-                    placeholder={buffer.title || 'event title'}
+                    placeholder={titlePlaceholder}
                     autoComplete="off"
                   />
                 </label>
@@ -552,7 +556,7 @@ export function EventEditorModal({
                     className="event-editor-input"
                     value={buffer.tagLabelOverride}
                     onChange={(e) => updateBuffer({ tagLabelOverride: e.target.value })}
-                    placeholder={buffer.title || 'event title'}
+                    placeholder={titlePlaceholder}
                     autoComplete="off"
                   />
                 </label>

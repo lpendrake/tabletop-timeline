@@ -82,13 +82,24 @@ export function removeTagFromText(currentText: string, tag: string): string {
     .join(', ');
 }
 
+/**
+ * The title that drives display, links, and tags: the body's first H1 if
+ * present, otherwise the buffer's title field. Trimmed. This is the single
+ * source of truth the editor should show for the effective title — the H1
+ * wins so the override placeholders and saved frontmatter stay in sync with
+ * what the user actually typed in the body.
+ */
+export function effectiveTitle(buf: EditorBuffer): string {
+  return (extractH1(buf.body) ?? buf.title).trim();
+}
+
 export function bufferToFrontmatter(buf: EditorBuffer): EventFrontmatter {
   const tags = parseTagsText(buf.tagsText).filter(isValidCustomTag);
   const linkedIds = extractWikiLinkIds(buf.body);
   const syncedTags = syncEntityTags(tags, linkedIds);
   const allTags = [...syncedTags, ...buf.systemTags];
   const fm: EventFrontmatter = {
-    title: (extractH1(buf.body) ?? buf.title).trim(),
+    title: effectiveTitle(buf),
     date: buf.date.trim(),
   };
   if (allTags.length > 0) fm.tags = allTags;
