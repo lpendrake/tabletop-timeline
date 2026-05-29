@@ -88,7 +88,7 @@ export function bufferToFrontmatter(buf: EditorBuffer): EventFrontmatter {
   const syncedTags = syncEntityTags(tags, linkedIds);
   const allTags = [...syncedTags, ...buf.systemTags];
   const fm: EventFrontmatter = {
-    title: buf.title.trim(),
+    title: (extractH1(buf.body) ?? buf.title).trim(),
     date: buf.date.trim(),
   };
   if (allTags.length > 0) fm.tags = allTags;

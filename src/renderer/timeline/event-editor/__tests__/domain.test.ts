@@ -203,6 +203,16 @@ describe('bufferToFrontmatter', () => {
     expect(fm.date).toBe('4726-05-04');
   });
 
+  it('sets frontmatter title from body H1 when present', () => {
+    const fm = bufferToFrontmatter(buf({ title: 'Old Title', body: '# H1 Title\nContent.' }));
+    expect(fm.title).toBe('H1 Title');
+  });
+
+  it('falls back to buf.title when body has no H1', () => {
+    const fm = bufferToFrontmatter(buf({ title: 'Buf Title', body: 'No heading.' }));
+    expect(fm.title).toBe('Buf Title');
+  });
+
   it('includes tagLabelOverride when set', () => {
     const fm = bufferToFrontmatter(buf({ tagLabelOverride: 'Custom Tag' }));
     expect(fm.tagLabelOverride).toBe('Custom Tag');
