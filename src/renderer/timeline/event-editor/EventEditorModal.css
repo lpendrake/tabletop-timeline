@@ -205,13 +205,18 @@
   width: 160px;
 }
 
-/* Label-override fields — share remaining row space after the date input */
+/* Label-override fields — fixed modest width, do not flex-grow */
 .event-editor-label-field {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  flex: 1 1 140px;
-  min-width: 120px;
+  flex: 0 0 auto;
+  width: 200px;
+}
+
+/* Row 2 (date + label fields) — bottom-align so the input boxes share a baseline */
+.event-editor-row--meta {
+  align-items: flex-end;
 }
 
 /* ===== Conflict overlay ===== */

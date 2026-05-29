@@ -565,7 +565,7 @@ export function EventEditorModal({
                 </div>
 
                 {/* Row 2: date + Tag Label + Link Label */}
-                <div className="event-editor-row">
+                <div className="event-editor-row event-editor-row--meta">
                   <input
                     type="text"
                     className="event-editor-input event-editor-date-input"
