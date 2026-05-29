@@ -111,7 +111,7 @@ export function bufferToFrontmatter(buf: EditorBuffer): EventFrontmatter {
 }
 
 export function validateBuffer(buf: EditorBuffer): string | null {
-  if (!buf.title.trim()) return 'Title is required.';
+  if (!effectiveTitle(buf)) return 'Title is required.';
   if (!buf.date.trim()) return 'Date is required.';
   try {
     parseISOString(buf.date.trim());

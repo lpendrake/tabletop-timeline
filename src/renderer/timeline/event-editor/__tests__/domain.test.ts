@@ -494,12 +494,20 @@ describe('validateBuffer', () => {
     expect(validateBuffer(buf())).toBeNull();
   });
 
-  it('returns error when title is empty', () => {
-    expect(validateBuffer(buf({ title: '' }))).toBe('Title is required.');
+  it('returns error when title field is empty and body has no H1', () => {
+    expect(validateBuffer(buf({ title: '', body: 'no heading here' }))).toBe('Title is required.');
   });
 
-  it('returns error when title is whitespace only', () => {
-    expect(validateBuffer(buf({ title: '   ' }))).toBe('Title is required.');
+  it('returns error when title field is whitespace only and body has no H1', () => {
+    expect(validateBuffer(buf({ title: '   ', body: '' }))).toBe('Title is required.');
+  });
+
+  it('returns null when title field is empty but body has an H1', () => {
+    expect(validateBuffer(buf({ title: '', body: '# H1 Title\nContent.' }))).toBeNull();
+  });
+
+  it('returns null when title field is whitespace-only but body has an H1', () => {
+    expect(validateBuffer(buf({ title: '   ', body: '# My Event\nContent.' }))).toBeNull();
   });
 
   it('returns error when date is empty', () => {

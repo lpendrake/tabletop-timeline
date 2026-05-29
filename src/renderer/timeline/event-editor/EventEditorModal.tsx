@@ -300,11 +300,17 @@ export function EventEditorModal({
     void doSave({ silent: true });
   }, [doSave]);
 
-  /** Close the editor, saving first if there are unsaved changes. */
+  /** Close the editor, saving first if there are unsaved changes.
+   * If the buffer is invalid (can't be saved), discard and close immediately
+   * so a leave gesture can never trap the user. */
   const requestClose = useCallback(() => {
     if (saveState === 'saving') return;
     if (saveState === 'dirty' || saveState === 'error') {
-      void doSave({ closeAfterSave: true });
+      if (validateBuffer(bufferRef.current) !== null) {
+        onClose();
+      } else {
+        void doSave({ closeAfterSave: true });
+      }
     } else {
       onClose();
     }

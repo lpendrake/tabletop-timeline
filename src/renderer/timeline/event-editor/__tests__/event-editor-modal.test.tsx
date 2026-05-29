@@ -362,6 +362,41 @@ describe('EventEditorModal', () => {
     expect(onSaved).toHaveBeenCalledTimes(1);
   });
 
+  // ── Close when buffer is INVALID discards and closes without saving ──
+  // In create mode the title field starts empty; if the body also has no H1,
+  // effectiveTitle is '' and validateBuffer returns an error. Clicking Close must
+  // call onClose (discard) instead of attempting to save — the user must never
+  // be trapped by an un-saveable edit.
+
+  it('Close when buffer is invalid calls onClose without saving', async () => {
+    vi.useFakeTimers();
+    setup();
+
+    // Create mode: title field is '' by default.
+    const { onClose, onSaved } = renderCreate();
+
+    // Dirty the buffer with body that has no H1 (effectiveTitle stays '').
+    const editor = container.querySelector<HTMLTextAreaElement>('[data-testid="markdown-editor"]');
+    expect(editor).not.toBeNull();
+    await act(async () => {
+      fireEvent.change(editor!, { target: { value: 'just some prose, no heading' } });
+    });
+
+    const closeBtn = findButton('Close');
+    expect(closeBtn).not.toBeUndefined();
+
+    await act(async () => {
+      closeBtn!.click();
+    });
+    await flush();
+
+    // onClose must have been called (user is not trapped)
+    expect(onClose).toHaveBeenCalledTimes(1);
+    // No save must have been attempted
+    expect(timelinePort.createEvent).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+
   // ── Test 1: blurring a control input flushes pending save before 500ms ──
 
   it('blurring the date input flushes pending autosave before 500ms timer fires', async () => {
