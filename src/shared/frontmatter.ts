@@ -64,7 +64,7 @@ export function joinFrontmatter(frontmatter: string, body: string): string {
   return `---\n${frontmatter}\n---\n${body}`;
 }
 
-function extractH1(body: string): string | null {
+export function extractH1(body: string): string | null {
   const m = /^#\s+(.+)$/m.exec(body);
   return m ? m[1].trim() : null;
 }

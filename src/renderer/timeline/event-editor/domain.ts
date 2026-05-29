@@ -9,6 +9,7 @@ import {
   formatEntityTag,
   resolveEntityTagLabel,
 } from '../../../shared/entity-tags';
+import { extractH1 } from '../../../shared/frontmatter';
 
 export interface EditorBuffer {
   title: string;
@@ -118,10 +119,24 @@ function slugify(s: string): string {
     .slice(0, 60);
 }
 
+function deriveFilenameDatePart(date: string): string {
+  const trimmed = date.trim();
+  const tIdx = trimmed.indexOf('T');
+  if (tIdx >= 0) {
+    const datePart = trimmed.slice(0, tIdx);
+    const timePart = trimmed.slice(tIdx + 1).replace(/:/g, '');
+    if (timePart) return `${datePart}T${timePart}`;
+    return datePart.slice(0, 10) || 'event';
+  }
+  return trimmed.slice(0, 10) || 'event';
+}
+
 export function deriveFilename(buf: EditorBuffer): string {
-  const dateOnly = buf.date.trim().slice(0, 10);
-  const slug = slugify(buf.title);
-  return `${dateOnly}-${slug || 'event'}.md`;
+  const h1 = extractH1(buf.body);
+  const titleToSlug = h1 ?? buf.title;
+  const slug = slugify(titleToSlug);
+  const datePart = deriveFilenameDatePart(buf.date);
+  return `${datePart}-${slug || 'event'}.md`;
 }
 
 /** Returns the <select> value for the color field (or '__custom__' for non-preset hex). */
