@@ -12,10 +12,12 @@ import {
   hasReservedTagPrefix,
   addTagsToText,
   removeTagFromText,
+  weekdayColorForDateText,
   type EditorBuffer,
 } from '../domain';
 import { ThemeProvider } from '../../../theme';
 import type { Event } from '../../data/types';
+import type { WeekdayColors } from '../../../theme/types';
 
 // ---- helpers ----
 
@@ -106,7 +108,7 @@ describe('bufferFromEvent', () => {
     });
     const b = bufferFromEvent(ev);
     expect(b.title).toBe('Big Battle');
-    expect(b.date).toBe('4726-05-04T09:30');
+    expect(b.date).toBe('4726-05-04T09:30:00');
     expect(b.tagsText).toBe('combat, plot');
     expect(b.color).toBe('#a83030');
     expect(b.body).toBe('# Notes\nHello');
@@ -172,6 +174,21 @@ describe('bufferFromEvent', () => {
   it('populates empty systemTags when the event has no session tags', () => {
     const ev = event({ tags: ['combat', 'id:ab12'] });
     expect(bufferFromEvent(ev).systemTags).toEqual([]);
+  });
+
+  it('normalizes a legacy ISO timestamp date to date-only when time is midnight', () => {
+    const ev = event({ date: '4726-05-08T00:00:00.000Z' });
+    expect(bufferFromEvent(ev).date).toBe('4726-05-08');
+  });
+
+  it('normalizes a partial time string to canonical form with seconds', () => {
+    const ev = event({ date: '4726-05-04T09:30' });
+    expect(bufferFromEvent(ev).date).toBe('4726-05-04T09:30:00');
+  });
+
+  it('preserves an unparseable date verbatim so validation can flag it', () => {
+    const ev = event({ date: 'not-a-date' });
+    expect(bufferFromEvent(ev).date).toBe('not-a-date');
   });
 });
 
@@ -493,12 +510,20 @@ describe('validateBuffer', () => {
     expect(validateBuffer(buf())).toBeNull();
   });
 
-  it('returns error when title is empty', () => {
-    expect(validateBuffer(buf({ title: '' }))).toBe('Title is required.');
+  it('returns error when title field is empty and body has no H1', () => {
+    expect(validateBuffer(buf({ title: '', body: 'no heading here' }))).toBe('Title is required.');
   });
 
-  it('returns error when title is whitespace only', () => {
-    expect(validateBuffer(buf({ title: '   ' }))).toBe('Title is required.');
+  it('returns error when title field is whitespace only and body has no H1', () => {
+    expect(validateBuffer(buf({ title: '   ', body: '' }))).toBe('Title is required.');
+  });
+
+  it('returns null when title field is empty but body has an H1', () => {
+    expect(validateBuffer(buf({ title: '', body: '# H1 Title\nContent.' }))).toBeNull();
+  });
+
+  it('returns null when title field is whitespace-only but body has an H1', () => {
+    expect(validateBuffer(buf({ title: '   ', body: '# My Event\nContent.' }))).toBeNull();
   });
 
   it('returns error when date is empty', () => {
@@ -541,7 +566,7 @@ describe('deriveFilename', () => {
 
   it('includes full datetime (colons stripped) when date has time component', () => {
     expect(deriveFilename(buf({ title: 'Battle', body: '', date: '4726-05-04T09:30' }))).toBe(
-      '4726-05-04T0930-battle.md',
+      '4726-05-04T093000-battle.md',
     );
   });
 
@@ -573,6 +598,24 @@ describe('deriveFilename', () => {
   it('strips leading/trailing dashes from slug', () => {
     expect(deriveFilename(buf({ title: '', body: '# ---Test---', date: '4726-01-01' }))).toBe(
       '4726-01-01-test.md',
+    );
+  });
+
+  it('produces no "." or "Z" in filename when date is a legacy ISO timestamp with milliseconds', () => {
+    const filename = deriveFilename(
+      buf({ title: '', body: '# The Big Battle\n', date: '4726-05-08T00:00:00.000Z' }),
+    );
+    // Only allowed "." is the .md extension
+    expect(filename.slice(0, -3)).not.toContain('.');
+    expect(filename).not.toContain('Z');
+    expect(filename.endsWith('.md')).toBe(true);
+    // midnight collapses to date-only prefix
+    expect(filename).toBe('4726-05-08-the-big-battle.md');
+  });
+
+  it('includes full datetime with colons stripped for a timed date', () => {
+    expect(deriveFilename(buf({ title: 'Battle', body: '', date: '4726-05-08T09:30:00' }))).toBe(
+      '4726-05-08T093000-battle.md',
     );
   });
 });
@@ -614,5 +657,51 @@ describe('getColorPresetValue', () => {
 
   it('does not treat __custom__ itself as a valid preset', () => {
     expect(getColorPresetValue('__custom__')).toBe('__custom__');
+  });
+});
+
+// ---- weekdayColorForDateText ----
+
+describe('weekdayColorForDateText', () => {
+  // Seven distinct sentinel hexes, one per weekday (Golarion week: mon…sun).
+  const fakeWeekdays: WeekdayColors = {
+    monday: '#aa0001',
+    tuesday: '#aa0002',
+    wednesday: '#aa0003',
+    thursday: '#aa0004',
+    friday: '#aa0005',
+    saturday: '#aa0006',
+    sunday: '#aa0007',
+  };
+
+  it('returns null for an empty string', () => {
+    expect(weekdayColorForDateText('', fakeWeekdays)).toBeNull();
+  });
+
+  it('returns null for an unparseable string', () => {
+    expect(weekdayColorForDateText('not-a-date', fakeWeekdays)).toBeNull();
+  });
+
+  it('returns one of the seven weekday colours for a valid date', () => {
+    const result = weekdayColorForDateText('4726-05-04', fakeWeekdays);
+    expect(result).not.toBeNull();
+    const values = Object.values(fakeWeekdays);
+    expect(values).toContain(result);
+  });
+
+  it('returns the same colour for two dates exactly 7 days apart', () => {
+    // 4726-05-04 and 4726-05-11 are exactly one week apart.
+    const a = weekdayColorForDateText('4726-05-04', fakeWeekdays);
+    const b = weekdayColorForDateText('4726-05-11', fakeWeekdays);
+    expect(a).not.toBeNull();
+    expect(a).toBe(b);
+  });
+
+  it('returns different colours for two consecutive days', () => {
+    const a = weekdayColorForDateText('4726-05-04', fakeWeekdays);
+    const b = weekdayColorForDateText('4726-05-05', fakeWeekdays);
+    expect(a).not.toBeNull();
+    expect(b).not.toBeNull();
+    expect(a).not.toBe(b);
   });
 });
