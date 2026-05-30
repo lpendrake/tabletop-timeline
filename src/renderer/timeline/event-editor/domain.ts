@@ -1,4 +1,4 @@
-import { parseISOString, tryParseDate } from '../calendar/golarian';
+import { parseISOString, tryParseDate, toISOString } from '../calendar/golarian';
 import type { Event, EventFrontmatter } from '../data/types';
 import { ThemeProvider } from '../../theme';
 import { weekdayColor } from '../render/cards';
@@ -44,10 +44,15 @@ export function emptyBuffer(initialDate?: string): EditorBuffer {
   };
 }
 
+function normalizeDateText(raw: string): string {
+  const parsed = tryParseDate(raw.trim());
+  return parsed ? toISOString(parsed) : raw.trim();
+}
+
 export function bufferFromEvent(ev: Event): EditorBuffer {
   return {
     title: ev.title,
-    date: ev.date,
+    date: normalizeDateText(ev.date),
     tagsText: (ev.tags ?? []).filter(isValidCustomTag).join(', '),
     color: ev.color ?? '',
     body: ev.body,
@@ -133,15 +138,14 @@ function slugify(s: string): string {
 }
 
 function deriveFilenameDatePart(date: string): string {
-  const trimmed = date.trim();
-  const tIdx = trimmed.indexOf('T');
-  if (tIdx >= 0) {
-    const datePart = trimmed.slice(0, tIdx);
-    const timePart = trimmed.slice(tIdx + 1).replace(/:/g, '');
-    if (timePart) return `${datePart}T${timePart}`;
-    return datePart.slice(0, 10) || 'event';
+  const parsed = tryParseDate(date.trim());
+  if (parsed) {
+    // toISOString → 'YYYY-MM-DD' or 'YYYY-MM-DDTHH:MM:SS' (never '.'/'Z'); strip ':' for the filename.
+    return toISOString(parsed).replace(/:/g, '');
   }
-  return trimmed.slice(0, 10) || 'event';
+  // Unparseable: keep only filename-safe date characters as a fallback.
+  const safe = date.trim().replace(/[^0-9T-]/g, '');
+  return safe.slice(0, 20) || 'event';
 }
 
 export function deriveFilename(buf: EditorBuffer): string {

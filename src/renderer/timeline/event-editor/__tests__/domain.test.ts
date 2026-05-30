@@ -108,7 +108,7 @@ describe('bufferFromEvent', () => {
     });
     const b = bufferFromEvent(ev);
     expect(b.title).toBe('Big Battle');
-    expect(b.date).toBe('4726-05-04T09:30');
+    expect(b.date).toBe('4726-05-04T09:30:00');
     expect(b.tagsText).toBe('combat, plot');
     expect(b.color).toBe('#a83030');
     expect(b.body).toBe('# Notes\nHello');
@@ -174,6 +174,21 @@ describe('bufferFromEvent', () => {
   it('populates empty systemTags when the event has no session tags', () => {
     const ev = event({ tags: ['combat', 'id:ab12'] });
     expect(bufferFromEvent(ev).systemTags).toEqual([]);
+  });
+
+  it('normalizes a legacy ISO timestamp date to date-only when time is midnight', () => {
+    const ev = event({ date: '4726-05-08T00:00:00.000Z' });
+    expect(bufferFromEvent(ev).date).toBe('4726-05-08');
+  });
+
+  it('normalizes a partial time string to canonical form with seconds', () => {
+    const ev = event({ date: '4726-05-04T09:30' });
+    expect(bufferFromEvent(ev).date).toBe('4726-05-04T09:30:00');
+  });
+
+  it('preserves an unparseable date verbatim so validation can flag it', () => {
+    const ev = event({ date: 'not-a-date' });
+    expect(bufferFromEvent(ev).date).toBe('not-a-date');
   });
 });
 
@@ -551,7 +566,7 @@ describe('deriveFilename', () => {
 
   it('includes full datetime (colons stripped) when date has time component', () => {
     expect(deriveFilename(buf({ title: 'Battle', body: '', date: '4726-05-04T09:30' }))).toBe(
-      '4726-05-04T0930-battle.md',
+      '4726-05-04T093000-battle.md',
     );
   });
 
@@ -583,6 +598,24 @@ describe('deriveFilename', () => {
   it('strips leading/trailing dashes from slug', () => {
     expect(deriveFilename(buf({ title: '', body: '# ---Test---', date: '4726-01-01' }))).toBe(
       '4726-01-01-test.md',
+    );
+  });
+
+  it('produces no "." or "Z" in filename when date is a legacy ISO timestamp with milliseconds', () => {
+    const filename = deriveFilename(
+      buf({ title: '', body: '# The Big Battle\n', date: '4726-05-08T00:00:00.000Z' }),
+    );
+    // Only allowed "." is the .md extension
+    expect(filename.slice(0, -3)).not.toContain('.');
+    expect(filename).not.toContain('Z');
+    expect(filename.endsWith('.md')).toBe(true);
+    // midnight collapses to date-only prefix
+    expect(filename).toBe('4726-05-08-the-big-battle.md');
+  });
+
+  it('includes full datetime with colons stripped for a timed date', () => {
+    expect(deriveFilename(buf({ title: 'Battle', body: '', date: '4726-05-08T09:30:00' }))).toBe(
+      '4726-05-08T093000-battle.md',
     );
   });
 });
