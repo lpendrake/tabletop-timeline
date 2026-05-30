@@ -268,4 +268,104 @@ describe('ConfirmDialog', () => {
       console.error = originalError;
     }
   });
+
+  it('a second confirm request resolves the first promise as false', async () => {
+    const handle = renderConsumer({ action: 'confirm', options: { message: 'First dialog' } });
+
+    // Open first dialog
+    await handle.triggerOpen();
+    const firstPromise = handle.capturedPromise as Promise<boolean>;
+
+    let firstResult: boolean | undefined;
+    void firstPromise.then((v) => {
+      firstResult = v;
+    });
+
+    // Re-render with a different message and trigger a second confirm
+    act(() => {
+      root.render(
+        <ConfirmDialogProvider>
+          <TestConsumer
+            action="confirm"
+            options={{ message: 'Second dialog' }}
+            onPromise={(p) => {
+              handle.capturedPromise = p;
+            }}
+          />
+        </ConfirmDialogProvider>,
+      );
+    });
+
+    const trigger = container.querySelector<HTMLButtonElement>('[data-testid="trigger"]');
+    if (!trigger) throw new Error('trigger button not found');
+    await act(async () => {
+      trigger.click();
+    });
+
+    // First promise must have resolved as false (cancelled)
+    expect(firstResult).toBe(false);
+
+    // The second dialog message should now be displayed
+    const msgEl = container.querySelector('.confirm-dialog-message');
+    expect(msgEl?.textContent).toContain('Second dialog');
+  });
+
+  it('clicking the backdrop cancels the dialog (resolves false)', async () => {
+    const handle = renderConsumer({ action: 'confirm' });
+
+    await handle.triggerOpen();
+
+    let result: boolean | undefined;
+    void (handle.capturedPromise as Promise<boolean>).then((v) => {
+      result = v;
+    });
+
+    const backdrop = container.querySelector<HTMLDivElement>('.confirm-dialog-backdrop');
+    expect(backdrop).not.toBeNull();
+
+    await act(async () => {
+      // Dispatch mousedown where target === currentTarget (i.e. on the backdrop itself)
+      const event = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'target', { value: backdrop, writable: false });
+      backdrop!.dispatchEvent(event);
+    });
+
+    expect(result).toBe(false);
+    // Dialog should be unmounted
+    expect(container.querySelector('.confirm-dialog-backdrop')).toBeNull();
+  });
+
+  it('the primary/confirm button is focused on mount', async () => {
+    const handle = renderConsumer({ action: 'confirm' });
+
+    await handle.triggerOpen();
+
+    const primaryBtn = container.querySelector<HTMLButtonElement>('.confirm-dialog-btn--primary');
+    expect(primaryBtn).not.toBeNull();
+    expect(document.activeElement).toBe(primaryBtn);
+  });
+
+  it('a pending confirm resolves false when the provider unmounts', async () => {
+    const handle = renderConsumer({ action: 'confirm' });
+
+    await handle.triggerOpen();
+    const promise = handle.capturedPromise as Promise<boolean>;
+
+    let result: boolean | undefined;
+    void promise.then((v) => {
+      result = v;
+    });
+
+    // Unmount the provider/root
+    await act(async () => {
+      root.unmount();
+    });
+
+    // Flush microtasks so the .then callback runs
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(result).toBe(false);
+  });
 });

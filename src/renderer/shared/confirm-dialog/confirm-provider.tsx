@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { ConfirmDialog } from './confirm-dialog';
 
 export interface ConfirmOptions {
@@ -46,6 +46,11 @@ export function ConfirmDialogProvider({ children }: { children: React.ReactNode 
 
   const confirm = useCallback((options: ConfirmOptions): Promise<boolean> => {
     return new Promise<boolean>((resolve) => {
+      if (resolverRef.current) {
+        const prev = resolverRef.current;
+        resolverRef.current = null;
+        prev(false);
+      }
       resolverRef.current = resolve;
       setDialog({
         title: options.title,
@@ -60,6 +65,11 @@ export function ConfirmDialogProvider({ children }: { children: React.ReactNode 
 
   const alert = useCallback((options: AlertOptions): Promise<void> => {
     return new Promise<void>((resolve) => {
+      if (resolverRef.current) {
+        const prev = resolverRef.current;
+        resolverRef.current = null;
+        prev(false);
+      }
       resolverRef.current = (value: boolean) => {
         void value;
         resolve();
@@ -85,6 +95,16 @@ export function ConfirmDialogProvider({ children }: { children: React.ReactNode 
     resolverRef.current = null;
     setDialog(null);
     resolve?.(false);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (resolverRef.current) {
+        const r = resolverRef.current;
+        resolverRef.current = null;
+        r(false);
+      }
+    };
   }, []);
 
   return (
