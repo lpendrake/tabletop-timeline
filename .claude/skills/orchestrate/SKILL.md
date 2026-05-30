@@ -418,13 +418,6 @@ When an agent stops mid-task:
    *Major problems*: discard the worktree and re-run with a better
    prompt. Don't pour effort into salvaging a bad start.
 
-> **Cheaper insurance:** for longer tasks, tell each agent to make an
-> intermediate **checkpoint commit** the moment its core change compiles
-> (in addition to the final squashed commit). A cut-off then leaves a
-> committed, cherry-pickable state and the resume step is trivial — but
-> note pre-commit hooks (lint + tests) still run on a checkpoint, so it
-> must at least pass those.
-
 ## Aborting mid-orchestration
 
 If the user asks to stop, or something goes fundamentally wrong:
