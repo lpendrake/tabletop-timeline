@@ -82,8 +82,18 @@ vi.mock('../../../theme', () => ({
       timeline: {
         eventColorPresets: [
           { label: 'Default (weekday)', value: '' },
+          { label: 'Red', value: '#a83030' },
           { label: 'Custom…', value: '__custom__' },
         ],
+        days: {
+          monday: '#bb0001',
+          tuesday: '#bb0002',
+          wednesday: '#bb0003',
+          thursday: '#bb0004',
+          friday: '#bb0005',
+          saturday: '#bb0006',
+          sunday: '#bb0007',
+        },
       },
     }),
   },
@@ -442,5 +452,82 @@ describe('EventEditorModal', () => {
       await vi.runAllTimersAsync();
     });
     expect(timelinePort.updateEvent).toHaveBeenCalledTimes(1);
+  });
+
+  // ── Field captions are rendered ──
+
+  it('renders the "Event Colour", "Tags", and "Event Date" captions', () => {
+    setup();
+    renderCreate();
+
+    const labels = Array.from(container.querySelectorAll('.event-editor-field-label'));
+    const texts = labels.map((l) => l.textContent?.trim());
+    expect(texts).toContain('Event Colour');
+    expect(texts).toContain('Tags');
+    expect(texts).toContain('Event Date');
+  });
+
+  // ── Colour trigger opens the popover ──
+
+  it('clicking the colour trigger opens a listbox popover with one option per preset', () => {
+    setup();
+    renderCreate();
+
+    const trigger = container.querySelector<HTMLButtonElement>('[aria-label="Event colour"]');
+    expect(trigger).not.toBeNull();
+
+    act(() => {
+      trigger!.click();
+    });
+
+    const listbox = document.querySelector('[role="listbox"]');
+    expect(listbox).not.toBeNull();
+
+    // One option per preset (3 in the mock: Default, Red, Custom…)
+    const options = document.querySelectorAll('[role="option"]');
+    expect(options.length).toBe(3);
+  });
+
+  // ── Selecting a colour preset persists the change ──
+
+  it('selecting a preset colour from the popover calls updateEvent (via auto-save)', async () => {
+    vi.useFakeTimers();
+    setup();
+    vi.mocked(timelinePort.updateEvent).mockResolvedValue({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      event: { ...BASE_EVENT_DATA.event } as any,
+      lastModified: '2026-01-02T00:00:00.000Z',
+    });
+
+    await renderEdit();
+
+    const trigger = container.querySelector<HTMLButtonElement>('[aria-label="Event colour"]');
+    expect(trigger).not.toBeNull();
+
+    act(() => {
+      trigger!.click();
+    });
+
+    // Find the "Red" option in the popover
+    const options = Array.from(document.querySelectorAll('[role="option"]'));
+    const redOption = options.find((o) => o.textContent?.includes('Red')) as
+      | HTMLElement
+      | undefined;
+    expect(redOption).not.toBeUndefined();
+
+    await act(async () => {
+      redOption!.click();
+    });
+
+    // Flush the auto-save
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+    await flush();
+
+    expect(timelinePort.updateEvent).toHaveBeenCalledTimes(1);
+    const callArgs = vi.mocked(timelinePort.updateEvent).mock.calls[0];
+    // The frontmatter (4th arg) should include the selected color
+    expect(callArgs[2]).toMatchObject({ color: '#a83030' });
   });
 });

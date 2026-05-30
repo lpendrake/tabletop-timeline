@@ -1,6 +1,8 @@
-import { parseISOString } from '../calendar/golarian';
+import { parseISOString, tryParseDate } from '../calendar/golarian';
 import type { Event, EventFrontmatter } from '../data/types';
 import { ThemeProvider } from '../../theme';
+import { weekdayColor } from '../render/cards';
+import type { WeekdayColors } from '../../theme/types';
 import {
   extractWikiLinkIds,
   syncEntityTags,
@@ -148,6 +150,16 @@ export function deriveFilename(buf: EditorBuffer): string {
   const slug = slugify(titleToSlug);
   const datePart = deriveFilenameDatePart(buf.date);
   return `${datePart}-${slug || 'event'}.md`;
+}
+
+/**
+ * The weekday-default colour an event would display for the given date, or
+ * null if the date can't be parsed. Mirrors the timeline's fallback when an
+ * event has no explicit colour.
+ */
+export function weekdayColorForDateText(dateText: string, weekdays: WeekdayColors): string | null {
+  const date = tryParseDate(dateText);
+  return date ? weekdayColor(date, weekdays) : null;
 }
 
 /** Returns the <select> value for the color field (or '__custom__' for non-preset hex). */

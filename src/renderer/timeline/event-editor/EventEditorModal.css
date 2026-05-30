@@ -214,7 +214,21 @@
   width: 200px;
 }
 
-/* Row 2 (date + label fields) — bottom-align so the input boxes share a baseline */
+/* Compact date field — narrower than the default label field */
+.event-editor-label-field--date {
+  width: 160px;
+}
+
+/* Colour control field — column wrapper for the colour picker trigger + swatch */
+.event-editor-control-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 0 0 auto;
+  width: 220px;
+}
+
+/* Row 1 and Row 2 — bottom-align so input boxes share a baseline with captioned fields */
 .event-editor-row--meta {
   align-items: flex-end;
 }

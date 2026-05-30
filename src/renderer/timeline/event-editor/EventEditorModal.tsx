@@ -18,11 +18,13 @@ import {
   hasReservedTagPrefix,
   addTagsToText,
   removeTagFromText,
+  weekdayColorForDateText,
   type EditorBuffer,
   type EditorMode,
 } from './domain';
 import { resolveInitialCursor } from './domain/initial-cursor';
 import { ThemeProvider } from '../../theme';
+import { ColorSelect } from './color-select';
 import { isValidCustomTag } from '../../../shared/entity-tags';
 import {
   buildEntityLabelMap,
@@ -104,6 +106,7 @@ export function EventEditorModal({
   const [saveState, setSaveState] = useState<SaveState>('clean');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [conflictPending, setConflictPending] = useState<ConflictPending | null>(null);
+  const [customMode, setCustomMode] = useState(false);
   const [entityIndex, setEntityIndex] = useState<
     Awaited<ReturnType<typeof notesData.getEntityIndex>>
   >([]);
@@ -164,7 +167,9 @@ export function EventEditorModal({
     timelinePort
       .getEvent(target.campaignPath, target.filename)
       .then(({ event, lastModified }) => {
-        setBuffer(bufferFromEvent(event));
+        const loaded = bufferFromEvent(event);
+        setBuffer(loaded);
+        setCustomMode(getColorPresetValue(loaded.color) === '__custom__');
         lastModifiedRef.current = lastModified;
         setLoadState('ready');
       })
@@ -431,7 +436,35 @@ export function EventEditorModal({
     void doDelete();
   }, [mode, buffer.title, doDelete]);
 
-  const colorPresetValue = getColorPresetValue(buffer.color);
+  const colorSelectValue = customMode ? '__custom__' : getColorPresetValue(buffer.color);
+  const isCustomColor = colorSelectValue === '__custom__';
+  const weekdayColorForEvent = weekdayColorForDateText(
+    buffer.date,
+    ThemeProvider.get().timeline.days,
+  );
+
+  const handleColorChange = useCallback(
+    (v: string) => {
+      if (v === '__custom__') {
+        setCustomMode(true);
+        // keep current color; user will type a hex
+      } else {
+        setCustomMode(false);
+        // Update ref synchronously so flushSave reads the new colour immediately.
+        bufferRef.current = { ...bufferRef.current, color: v };
+        setBuffer(bufferRef.current);
+        setSaveState((s) => (s === 'saving' ? s : 'dirty'));
+        setErrorMessage(null);
+        if (autoSaveTimerRef.current !== null) {
+          window.clearTimeout(autoSaveTimerRef.current);
+          autoSaveTimerRef.current = null;
+        }
+        void doSave({ silent: true });
+      }
+    },
+    [doSave],
+  );
+
   // Placeholder for the override fields: the live effective title (body H1,
   // falling back to the title field), so it tracks the H1 as the user types.
   const titlePlaceholder = effectiveTitle(buffer) || 'event title';
@@ -505,56 +538,57 @@ export function EventEditorModal({
 
               {/* Bottom controls */}
               <div className="event-editor-controls">
-                {/* Row 1: colour (small) + tag input + tag chips */}
-                <div className="event-editor-row">
-                  <div className="event-editor-color-row event-editor-color-row--inline">
-                    <select
-                      className="event-editor-input event-editor-color-select--small"
-                      value={colorPresetValue}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        updateBuffer({ color: val === '__custom__' ? '' : val });
-                      }}
-                      onBlur={flushSave}
-                    >
-                      {ThemeProvider.get().timeline.eventColorPresets.map((p) => (
-                        <option key={p.value} value={p.value}>
-                          {p.label}
-                        </option>
-                      ))}
-                    </select>
-                    {colorPresetValue === '__custom__' && (
-                      <input
-                        type="text"
-                        className="event-editor-input event-editor-color-custom"
-                        value={buffer.color}
-                        onChange={(e) => updateBuffer({ color: e.target.value })}
-                        onBlur={flushSave}
-                        placeholder="#c43"
-                        autoComplete="off"
+                {/* Row 1: colour + tag input + tag chips */}
+                <div className="event-editor-row event-editor-row--meta">
+                  <div className="event-editor-control-field">
+                    <span className="event-editor-field-label">Event Colour</span>
+                    <div className="event-editor-color-row event-editor-color-row--inline">
+                      <ColorSelect
+                        presets={ThemeProvider.get().timeline.eventColorPresets}
+                        value={colorSelectValue}
+                        weekdayColor={weekdayColorForEvent}
+                        customColor={isCustomColor ? buffer.color : undefined}
+                        onChange={handleColorChange}
+                        ariaLabel="Event colour"
                       />
-                    )}
-                    <span
-                      className="event-editor-color-swatch"
-                      style={{ background: buffer.color || 'transparent' }}
-                      title={buffer.color || 'weekday default'}
-                    />
+                      {isCustomColor && (
+                        <input
+                          type="text"
+                          className="event-editor-input event-editor-color-custom"
+                          value={buffer.color}
+                          onChange={(e) => updateBuffer({ color: e.target.value })}
+                          onBlur={flushSave}
+                          placeholder="#c43"
+                          autoComplete="off"
+                        />
+                      )}
+                      <span
+                        className="event-editor-color-swatch"
+                        style={{
+                          background: buffer.color || weekdayColorForEvent || 'transparent',
+                        }}
+                        title={buffer.color || weekdayColorForEvent || 'weekday default'}
+                      />
+                    </div>
                   </div>
-                  <input
-                    type="text"
-                    className="event-editor-input event-editor-tag-input"
-                    value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
-                    onKeyDown={handleTagInputKeyDown}
-                    placeholder="add tags…"
-                    autoComplete="off"
-                    aria-label="Add tags (comma-separated, Enter to confirm)"
-                  />
-                  {hasReservedTagPrefix(tagInput) && (
-                    <span className="event-editor-field-warning">
-                      {"Tags starting with 'id:' or 'sesh:' are reserved"}
-                    </span>
-                  )}
+                  <div className="event-editor-label-field">
+                    <span className="event-editor-field-label">Tags</span>
+                    <input
+                      type="text"
+                      className="event-editor-input event-editor-tag-input"
+                      value={tagInput}
+                      onChange={(e) => setTagInput(e.target.value)}
+                      onKeyDown={handleTagInputKeyDown}
+                      placeholder="add tags…"
+                      autoComplete="off"
+                      aria-label="Add tags (comma-separated, Enter to confirm)"
+                    />
+                    {hasReservedTagPrefix(tagInput) && (
+                      <span className="event-editor-field-warning">
+                        {"Tags starting with 'id:' or 'sesh:' are reserved"}
+                      </span>
+                    )}
+                  </div>
                   <TagChipList
                     tagsText={buffer.tagsText}
                     body={buffer.body}
@@ -566,16 +600,19 @@ export function EventEditorModal({
 
                 {/* Row 2: date + Tag Label + Link Label */}
                 <div className="event-editor-row event-editor-row--meta">
-                  <input
-                    type="text"
-                    className="event-editor-input event-editor-date-input"
-                    value={buffer.date}
-                    onChange={(e) => updateBuffer({ date: e.target.value })}
-                    onBlur={flushSave}
-                    placeholder="4726-05-04T09:30"
-                    autoComplete="off"
-                    aria-label="Date (Golarian ISO)"
-                  />
+                  <label className="event-editor-label-field event-editor-label-field--date">
+                    <span className="event-editor-field-label">Event Date</span>
+                    <input
+                      type="text"
+                      className="event-editor-input event-editor-date-input"
+                      value={buffer.date}
+                      onChange={(e) => updateBuffer({ date: e.target.value })}
+                      onBlur={flushSave}
+                      placeholder="4726-05-04T09:30"
+                      autoComplete="off"
+                      aria-label="Date (Golarian ISO)"
+                    />
+                  </label>
                   <label className="event-editor-label-field">
                     <span className="event-editor-field-label">Tag Label</span>
                     <input

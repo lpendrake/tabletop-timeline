@@ -12,10 +12,12 @@ import {
   hasReservedTagPrefix,
   addTagsToText,
   removeTagFromText,
+  weekdayColorForDateText,
   type EditorBuffer,
 } from '../domain';
 import { ThemeProvider } from '../../../theme';
 import type { Event } from '../../data/types';
+import type { WeekdayColors } from '../../../theme/types';
 
 // ---- helpers ----
 
@@ -622,5 +624,51 @@ describe('getColorPresetValue', () => {
 
   it('does not treat __custom__ itself as a valid preset', () => {
     expect(getColorPresetValue('__custom__')).toBe('__custom__');
+  });
+});
+
+// ---- weekdayColorForDateText ----
+
+describe('weekdayColorForDateText', () => {
+  // Seven distinct sentinel hexes, one per weekday (Golarion week: mon…sun).
+  const fakeWeekdays: WeekdayColors = {
+    monday: '#aa0001',
+    tuesday: '#aa0002',
+    wednesday: '#aa0003',
+    thursday: '#aa0004',
+    friday: '#aa0005',
+    saturday: '#aa0006',
+    sunday: '#aa0007',
+  };
+
+  it('returns null for an empty string', () => {
+    expect(weekdayColorForDateText('', fakeWeekdays)).toBeNull();
+  });
+
+  it('returns null for an unparseable string', () => {
+    expect(weekdayColorForDateText('not-a-date', fakeWeekdays)).toBeNull();
+  });
+
+  it('returns one of the seven weekday colours for a valid date', () => {
+    const result = weekdayColorForDateText('4726-05-04', fakeWeekdays);
+    expect(result).not.toBeNull();
+    const values = Object.values(fakeWeekdays);
+    expect(values).toContain(result);
+  });
+
+  it('returns the same colour for two dates exactly 7 days apart', () => {
+    // 4726-05-04 and 4726-05-11 are exactly one week apart.
+    const a = weekdayColorForDateText('4726-05-04', fakeWeekdays);
+    const b = weekdayColorForDateText('4726-05-11', fakeWeekdays);
+    expect(a).not.toBeNull();
+    expect(a).toBe(b);
+  });
+
+  it('returns different colours for two consecutive days', () => {
+    const a = weekdayColorForDateText('4726-05-04', fakeWeekdays);
+    const b = weekdayColorForDateText('4726-05-05', fakeWeekdays);
+    expect(a).not.toBeNull();
+    expect(b).not.toBeNull();
+    expect(a).not.toBe(b);
   });
 });
