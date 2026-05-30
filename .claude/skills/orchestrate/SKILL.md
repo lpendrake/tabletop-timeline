@@ -194,7 +194,7 @@ Read the key files the agent created/modified. Check for:
 | Verdict | Action |
 |---|---|
 | **Approve** | Cherry-pick the commit into your branch (Phase 5) |
-| **Minor fix needed** | Send a follow-up message to the same agent (via `SendMessage` with the agent's ID) with specific fix instructions. Or spin up a new agent in the same worktree. |
+| **Minor fix needed** | Spin up a fresh agent **in the same worktree** with specific fix instructions (see *Resuming a cut-off or incomplete agent*). Don't rely on `SendMessage`/continue-the-same-agent — that lives behind experimental Agent Teams (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`) and is not available to a plain orchestrator. |
 | **Major problems** | Discard the worktree. Diagnose what went wrong with the prompt. Rewrite the prompt and launch a fresh agent. |
 
 ### Rogue agent detection
@@ -371,6 +371,59 @@ When a cherry-pick does conflict:
   up after each batch with `npm run prune-worktrees` (see Phase 5).
   Note: `vite.config.ts` excludes `.claude/worktrees/**` from
   vitest, but always prune anyway to avoid disk bloat.
+
+## Resuming a cut-off or incomplete agent (resume-by-worktree)
+
+An agent can stop before it finishes and commits — a usage-limit reset,
+a crash, or a turn that ends early. **You cannot send it a "continue"
+message.** The tool for that (`SendMessage`, the agent "mailbox") belongs
+to experimental **Agent Teams**, which is disabled by default
+(`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`); plain subagents are
+spawn-and-return and have no resume channel. The prompt/notifications may
+still *mention* `SendMessage` — ignore that, it isn't wired up.
+
+**The good news: the work is not lost.** Each agent runs in a git
+worktree under `.claude/worktrees/agent-<id>/` on its own branch
+`worktree-agent-<id>`. Its changes — **committed *and* uncommitted** —
+sit on disk until you prune that worktree. A cut-off only loses the
+agent's *reasoning context*, not its files. So don't restart from zero;
+resume from the worktree.
+
+When an agent stops mid-task:
+
+1. **Don't prune its worktree.** That's the only copy of uncommitted
+   work.
+2. **Inspect what's there:**
+   ```bash
+   git -C <wt> log --oneline <feature-branch>..HEAD   # any commits?
+   git -C <wt> status --short                          # uncommitted files
+   git -C <wt> diff                                    # the actual edits
+   ```
+3. **If a usage limit caused the stop, wait for the reset window**
+   before relaunching — otherwise the new agent stops too. Check the
+   reset time in the completion notice.
+4. **If the partial work is sound, finish it in place.** Spawn a
+   **fresh** agent *without* `isolation: "worktree"` and tell it to work
+   in the existing worktree path, so it sees the uncommitted edits:
+   > "Work in the existing worktree at `<absolute wt path>`
+   > (`cd` there first). A previous agent partially completed
+   > `<task>` and left edits to `<files>`: `<one-line summary of
+   > what's done>`. Finish the remaining work: `<X, Y>`. Then run
+   > `npm test` and `npm run lint` (both must pass) and commit as a
+   > single commit `#<issue> <message>`."
+
+   This keeps every on-disk change; only the lost context is rebuilt.
+   Then review and cherry-pick as in Phase 5, and prune.
+5. **If the partial work is wrong or unsalvageable,** treat it as
+   *Major problems*: discard the worktree and re-run with a better
+   prompt. Don't pour effort into salvaging a bad start.
+
+> **Cheaper insurance:** for longer tasks, tell each agent to make an
+> intermediate **checkpoint commit** the moment its core change compiles
+> (in addition to the final squashed commit). A cut-off then leaves a
+> committed, cherry-pickable state and the resume step is trivial — but
+> note pre-commit hooks (lint + tests) still run on a checkpoint, so it
+> must at least pass those.
 
 ## Aborting mid-orchestration
 
