@@ -131,12 +131,12 @@
 }
 
 .campaign-settings-section__title {
-  margin: 0 0 4px;
-  font-size: 14px;
+  margin: 0 -28px;
+  padding: 10px 28px;
+  font-size: 20px;
   font-weight: 600;
   color: var(--theme-text-primary);
-  border-bottom: 1px solid var(--theme-border);
-  padding-bottom: 8px;
+  background: var(--theme-panel);
 }
 
 /* Templates subheading */
