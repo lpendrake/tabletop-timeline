@@ -6,9 +6,15 @@ interface FooterProps {
   currentView: ViewType;
   onChangeView: (view: ViewType) => void;
   onBackToCampaigns: () => void;
+  onOpenSettings: () => void;
 }
 
-export function Footer({ currentView, onChangeView, onBackToCampaigns }: FooterProps) {
+export function Footer({
+  currentView,
+  onChangeView,
+  onBackToCampaigns,
+  onOpenSettings,
+}: FooterProps) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const viewNames: Record<ViewType, string> = {
@@ -119,6 +125,33 @@ export function Footer({ currentView, onChangeView, onBackToCampaigns }: FooterP
                 margin: '4px 8px',
               }}
             />
+
+            <button
+              onClick={() => {
+                onOpenSettings();
+                setMenuOpen(false);
+              }}
+              style={{
+                background: 'transparent',
+                color: 'var(--theme-text-primary)',
+                border: 'none',
+                padding: '10px 12px',
+                borderRadius: '2px',
+                textAlign: 'left',
+                cursor: 'pointer',
+                fontWeight: 500,
+                fontSize: '14px',
+                transition: 'background 0.1s',
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.background = 'var(--theme-panel)';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.background = 'transparent';
+              }}
+            >
+              ⚙ Settings
+            </button>
 
             <button
               onClick={() => {
