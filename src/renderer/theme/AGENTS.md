@@ -6,10 +6,20 @@ Single source of truth for every color in the app.
 
 | File | Role |
 |------|------|
-| `dark-pathfinder.ts` | The one and only theme. Every color value lives here. |
+| `dark-pathfinder.ts` | Default (dark) theme. Every dark-mode color value lives here. |
+| `lightfinder.ts` | Light counterpart theme. Cream-parchment aesthetic, all values rebalanced for a light background. |
 | `types.ts` | `Theme` interface plus helpers (`DeepPartial`, `WeekdayColors`, `KindColors`, `ColorPreset`). |
-| `provider.ts` | `ThemeProvider` singleton — reads `activeTheme`, applies CSS vars to `document.documentElement`. |
+| `provider.ts` | `ThemeProvider` singleton — registry, active theme, CSS vars, subscriptions. |
 | `index.ts` | Barrel — import everything from here, not from individual files. |
+
+## Core themes
+
+There are two built-in ("core") themes in the registry:
+
+| id | Display name | File |
+|----|--------------|------|
+| `dark-pathfinder` | Dark Pathfinder | `dark-pathfinder.ts` |
+| `lightfinder` | Lightfinder | `lightfinder.ts` |
 
 ## ThemeProvider API
 
@@ -24,11 +34,41 @@ ThemeProvider.init();
 // Read the active theme object anywhere (TypeScript / canvas / non-React code).
 const theme = ThemeProvider.get();
 
-// Override individual tokens. Deep-merges on top of darkPathfinder and re-applies CSS vars.
+// Override individual tokens. Deep-merges on top of the CURRENT active theme
+// and re-applies CSS vars.
 ThemeProvider.set({ chrome: { accentGold: '#ffcc00' } });
+
+// Switch to a named theme by registry id (applies the full theme, not merged).
+ThemeProvider.setByName('lightfinder');
+ThemeProvider.setByName('dark-pathfinder');
+// Unknown ids fall back to 'dark-pathfinder' without throwing.
+
+// Get the id of the currently active theme.
+const id = ThemeProvider.getActiveThemeId(); // e.g. 'lightfinder'
+
+// List all registered themes (id / name / kind — no Theme objects).
+const items = ThemeProvider.listThemes();
+// [{ id: 'dark-pathfinder', name: 'Dark Pathfinder', kind: 'core' }, ...]
+
+// Subscribe to theme changes (any setByName or set call notifies all listeners).
+const unsubscribe = ThemeProvider.subscribe(() => {
+  // re-render or update derived state here
+});
+unsubscribe(); // call the returned function to remove the listener
 ```
 
 `init()` is called in `main.tsx` before `ReactDOM.createRoot(...)`, so CSS variables are available before the first React render.
+
+### Registering an additional theme
+
+1. Create `src/renderer/theme/my-theme.ts` exporting `export const myTheme: Theme = { ... }`.
+2. In `provider.ts`, import the constant and add an entry to the `registry` array:
+   ```ts
+   { id: 'my-theme', name: 'My Theme', kind: 'core', theme: myTheme }
+   ```
+   Use `kind: 'custom'` for user-defined or plugin-supplied themes.
+3. Re-export the constant from `index.ts`.
+4. Add a test file mirroring `__tests__/lightfinder.test.ts`.
 
 ## Theme sections (`Theme` interface)
 
