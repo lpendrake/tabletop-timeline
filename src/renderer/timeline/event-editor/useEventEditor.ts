@@ -34,6 +34,7 @@ export interface UseEventEditorResult {
   openNewEventPrompt: (initialDate?: string) => void;
   cancelNewEventPrompt: () => void;
   createAndOpen: (title: string) => Promise<void>;
+  createOnly: (title: string) => Promise<void>;
 }
 
 export function useEventEditor(
@@ -150,6 +151,24 @@ export function useEventEditor(
     [campaignPath, newEventPrompt, onEventsChanged, openEdit],
   );
 
+  const createOnly = useCallback(
+    async (title: string) => {
+      const buf = { ...emptyBuffer(newEventPrompt?.initialDate), title };
+      const template = await timelinePort.readTemplate(campaignPath, 'event');
+      const { body } = buildNewEventContent(title, template);
+      const frontmatter = bufferToFrontmatter(buf);
+      const filename = deriveFilename(buf);
+      const result = await createEventChecked(campaignPath, filename, frontmatter, body);
+      if (!result.ok) {
+        setNewEventPrompt((p) => (p ? { ...p, error: duplicateEventMessage(title) } : p));
+        return;
+      }
+      setNewEventPrompt(null);
+      onEventsChanged();
+    },
+    [campaignPath, newEventPrompt, onEventsChanged],
+  );
+
   return {
     editorMode,
     openCreate,
@@ -165,5 +184,6 @@ export function useEventEditor(
     openNewEventPrompt,
     cancelNewEventPrompt,
     createAndOpen,
+    createOnly,
   };
 }
