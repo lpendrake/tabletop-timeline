@@ -34,10 +34,21 @@ export function matches(text: string | undefined, query: string): boolean {
   return !!text && text.toLowerCase().includes(query.toLowerCase());
 }
 
-export function matchesTags(tags: string[] | undefined, query: string): boolean {
+export function matchesTags(
+  tags: string[] | undefined,
+  query: string,
+  labelMap?: Map<string, string>,
+): boolean {
   if (!tags || tags.length === 0) return false;
   const q = query.toLowerCase();
-  return tags.some((t) => t.toLowerCase().includes(q));
+  return tags.some((t) => {
+    if (t.toLowerCase().includes(q)) return true;
+    if (labelMap && t.startsWith('id:')) {
+      const label = labelMap.get(t.slice(3));
+      if (label && label.toLowerCase().includes(q)) return true;
+    }
+    return false;
+  });
 }
 
 export function extractSnippet(text: string, query: string): string {
@@ -74,6 +85,7 @@ export function SearchOverlay({
   const [events, setEvents] = useState<SearchableEvent[]>([]);
   const [notes, setNotes] = useState<SearchableNote[]>([]);
   const [bodiesLoading, setBodiesLoading] = useState(false);
+  const [labelMap, setLabelMap] = useState<Map<string, string>>(new Map());
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -97,9 +109,16 @@ export function SearchOverlay({
       if (cancelled) return;
 
       const initialEvents: SearchableEvent[] = eventList;
-      const initialNotes: SearchableNote[] = (entityIndex as EntityIndexEntry[])
+      const typedIndex = entityIndex as EntityIndexEntry[];
+      const initialNotes: SearchableNote[] = typedIndex
         .filter((e) => e.type === 'note')
         .map((e) => ({ path: e.path, title: e.title, tags: e.tags }));
+
+      const map = new Map<string, string>();
+      for (const entry of typedIndex) {
+        if (entry.id) map.set(entry.id, entry.tagLabelOverride ?? entry.title);
+      }
+      setLabelMap(map);
 
       setEvents(initialEvents);
       setNotes(initialNotes);
@@ -156,18 +175,20 @@ export function SearchOverlay({
   const results: SearchResult[] = useMemo(() => {
     if (!query.trim()) return [];
     const out: SearchResult[] = [];
+    const seenEvents = new Set<string>();
+    const seenNotes = new Set<string>();
 
     if (includeEvents) {
       for (const ev of events) {
-        if (
-          matches(ev.title, query) ||
-          matches(ev.body, query) ||
-          (includeTags && matchesTags(ev.tags, query))
-        ) {
-          const snippet = ev.body ? extractSnippet(ev.body, query) : '';
-          out.push({ kind: 'event', item: ev, snippet });
-        }
         if (out.length >= 30) break;
+        if (matches(ev.title, query) || matches(ev.body, query)) {
+          seenEvents.add(ev.filename);
+          out.push({
+            kind: 'event',
+            item: ev,
+            snippet: ev.body ? extractSnippet(ev.body, query) : '',
+          });
+        }
       }
     }
 
@@ -175,20 +196,42 @@ export function SearchOverlay({
       for (const note of notes) {
         if (out.length >= 30) break;
         const bodyIdx = note.body ? note.body.toLowerCase().indexOf(query.toLowerCase()) : -1;
-        if (
-          matches(note.title, query) ||
-          bodyIdx !== -1 ||
-          (includeTags && matchesTags(note.tags, query))
-        ) {
+        if (matches(note.title, query) || bodyIdx !== -1) {
+          seenNotes.add(note.path);
           const snippet = note.body && bodyIdx !== -1 ? extractSnippet(note.body, query) : '';
-          const matchOffset = bodyIdx !== -1 ? bodyIdx : undefined;
-          out.push({ kind: 'note', item: note, snippet, matchOffset });
+          out.push({
+            kind: 'note',
+            item: note,
+            snippet,
+            matchOffset: bodyIdx !== -1 ? bodyIdx : undefined,
+          });
+        }
+      }
+    }
+
+    if (includeTags) {
+      for (const ev of events) {
+        if (out.length >= 30) break;
+        if (!seenEvents.has(ev.filename) && matchesTags(ev.tags, query, labelMap)) {
+          seenEvents.add(ev.filename);
+          out.push({
+            kind: 'event',
+            item: ev,
+            snippet: ev.body ? extractSnippet(ev.body, query) : '',
+          });
+        }
+      }
+      for (const note of notes) {
+        if (out.length >= 30) break;
+        if (!seenNotes.has(note.path) && matchesTags(note.tags, query, labelMap)) {
+          seenNotes.add(note.path);
+          out.push({ kind: 'note', item: note, snippet: '', matchOffset: undefined });
         }
       }
     }
 
     return out;
-  }, [query, events, notes, includeEvents, includeNotes, includeTags]);
+  }, [query, events, notes, includeEvents, includeNotes, includeTags, labelMap]);
 
   // Reset selectedIdx when results change
   useEffect(() => {

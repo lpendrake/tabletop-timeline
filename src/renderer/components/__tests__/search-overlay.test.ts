@@ -83,4 +83,18 @@ describe('matchesTags', () => {
   it('returns false for empty tags array', () => {
     expect(matchesTags([], 'x')).toBe(false);
   });
+
+  it('resolves entity tag id via labelMap when raw tag does not match', () => {
+    const map = new Map([['a1b2', "So-Yun's Ruins"]]);
+    expect(matchesTags(['id:a1b2'], 'so-yun', map)).toBe(true);
+  });
+
+  it('does not resolve entity tag when labelMap is absent', () => {
+    expect(matchesTags(['id:a1b2'], 'so-yun')).toBe(false);
+  });
+
+  it('still matches raw tag even when labelMap is provided', () => {
+    const map = new Map([['a1b2', 'Something Else']]);
+    expect(matchesTags(['plot:dragon'], 'dragon', map)).toBe(true);
+  });
 });
