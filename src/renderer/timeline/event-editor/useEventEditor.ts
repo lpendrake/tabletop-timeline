@@ -132,7 +132,7 @@ export function useEventEditor(
     setNewEventPrompt(null);
   }, []);
 
-  const createAndOpen = useCallback(
+  const createEvent = useCallback(
     async (title: string) => {
       const buf = { ...emptyBuffer(newEventPrompt?.initialDate), title };
       const template = await timelinePort.readTemplate(campaignPath, 'event');
@@ -142,31 +142,29 @@ export function useEventEditor(
       const result = await createEventChecked(campaignPath, filename, frontmatter, body);
       if (!result.ok) {
         setNewEventPrompt((p) => (p ? { ...p, error: duplicateEventMessage(title) } : p));
-        return;
+        return null;
       }
       setNewEventPrompt(null);
       onEventsChanged();
-      openEdit(result.event.event.filename, cursorOffset);
+      return { result, cursorOffset };
     },
-    [campaignPath, newEventPrompt, onEventsChanged, openEdit],
+    [campaignPath, newEventPrompt, onEventsChanged],
+  );
+
+  const createAndOpen = useCallback(
+    async (title: string) => {
+      const created = await createEvent(title);
+      if (!created) return;
+      openEdit(created.result.event.event.filename, created.cursorOffset);
+    },
+    [createEvent, openEdit],
   );
 
   const createOnly = useCallback(
     async (title: string) => {
-      const buf = { ...emptyBuffer(newEventPrompt?.initialDate), title };
-      const template = await timelinePort.readTemplate(campaignPath, 'event');
-      const { body } = buildNewEventContent(title, template);
-      const frontmatter = bufferToFrontmatter(buf);
-      const filename = deriveFilename(buf);
-      const result = await createEventChecked(campaignPath, filename, frontmatter, body);
-      if (!result.ok) {
-        setNewEventPrompt((p) => (p ? { ...p, error: duplicateEventMessage(title) } : p));
-        return;
-      }
-      setNewEventPrompt(null);
-      onEventsChanged();
+      await createEvent(title);
     },
-    [campaignPath, newEventPrompt, onEventsChanged],
+    [createEvent],
   );
 
   return {
