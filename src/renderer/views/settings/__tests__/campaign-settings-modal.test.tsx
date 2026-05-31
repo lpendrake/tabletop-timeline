@@ -91,16 +91,25 @@ describe('CampaignSettingsModal', () => {
   });
 
   it('clicking the footer Close button calls onClose', () => {
-    setup();
-    const onClose = vi.fn();
-    act(() => root.render(<CampaignSettingsModal campaignName="Test" onClose={onClose} />));
+    // The Close button portals into #footer-slot-settings which only exists when
+    // the real Footer is mounted. Create and tear down the target div in isolation.
+    const slotDiv = document.createElement('div');
+    slotDiv.id = 'footer-slot-settings';
+    document.body.appendChild(slotDiv);
 
-    const footer = container.querySelector('.campaign-settings-footer') as HTMLElement;
-    const closeBtn = footer.querySelector('button') as HTMLButtonElement;
+    setup();
+    const onCloseFn = vi.fn();
+    act(() => root.render(<CampaignSettingsModal campaignName="Test" onClose={onCloseFn} />));
+
+    const closeBtn = document
+      .getElementById('footer-slot-settings')!
+      .querySelector('button') as HTMLButtonElement;
     act(() => {
       closeBtn.click();
     });
-    expect(onClose).toHaveBeenCalledOnce();
+    expect(onCloseFn).toHaveBeenCalledOnce();
+
+    slotDiv.remove();
   });
 
   it('clicking a sidebar header calls scrollIntoView on the matching section', () => {

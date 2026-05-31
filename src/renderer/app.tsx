@@ -247,6 +247,7 @@ export default function App() {
           onChangeView={setCurrentView}
           onBackToCampaigns={handleCloseCampaign}
           onOpenSettings={() => setSettingsOpen(true)}
+          settingsOpen={settingsOpen}
         />
         <SearchOverlay
           isOpen={isSearchOpen}

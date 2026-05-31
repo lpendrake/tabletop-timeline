@@ -7,6 +7,7 @@ interface FooterProps {
   onChangeView: (view: ViewType) => void;
   onBackToCampaigns: () => void;
   onOpenSettings: () => void;
+  settingsOpen: boolean;
 }
 
 export function Footer({
@@ -14,6 +15,7 @@ export function Footer({
   onChangeView,
   onBackToCampaigns,
   onOpenSettings,
+  settingsOpen,
 }: FooterProps) {
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -225,6 +227,27 @@ export function Footer({
           }}
         />
       </div>
+
+      {/* Settings masking bar — covers burger menu and view buttons when settings modal is open */}
+      {settingsOpen && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundColor: 'var(--theme-panel)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            padding: '0 20px',
+            zIndex: 1,
+          }}
+        >
+          <div
+            id="footer-slot-settings"
+            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+          />
+        </div>
+      )}
     </div>
   );
 }

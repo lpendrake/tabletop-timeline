@@ -1,6 +1,9 @@
 .campaign-settings-overlay {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 50px;
   background: rgba(0, 0, 0, 0.7);
   z-index: 2000;
   display: flex;
@@ -12,8 +15,10 @@
   background: var(--theme-surface);
   border: 1px solid var(--theme-border-strong);
   border-radius: 6px;
-  width: min(900px, 92vw);
-  height: min(680px, 88vh);
+  width: min(1100px, 94vw);
+  height: calc(100vh - 50px - 32px);
+  max-height: calc(100vh - 50px - 32px);
+  max-width: 94vw;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -134,29 +139,3 @@
   padding-bottom: 8px;
 }
 
-/* Footer */
-.campaign-settings-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 12px 20px;
-  border-top: 1px solid var(--theme-border);
-  flex-shrink: 0;
-  background: var(--theme-panel);
-}
-
-.campaign-settings-footer__close-btn {
-  background: var(--theme-panel-accent);
-  border: 1px solid var(--theme-border);
-  color: var(--theme-text-primary);
-  border-radius: 4px;
-  padding: 7px 20px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.campaign-settings-footer__close-btn:hover {
-  border-color: var(--theme-border-strong);
-  color: var(--theme-accent-warm);
-}

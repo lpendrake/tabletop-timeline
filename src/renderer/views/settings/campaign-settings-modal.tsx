@@ -6,6 +6,8 @@ import { SelectField } from './controls/select-field';
 import { SliderField } from './controls/slider-field';
 import { TextField } from './controls/text-field';
 import { FilePickerField } from './controls/file-picker-field';
+import { FooterPortal } from '../../components/footer-portal';
+import { FooterButton } from '../../components/footer-button';
 import './campaign-settings-modal.css';
 
 export interface CampaignSettingsModalProps {
@@ -72,207 +74,205 @@ export function CampaignSettingsModal({ campaignName, onClose }: CampaignSetting
   };
 
   return (
-    <div
-      className="campaign-settings-overlay"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div className="campaign-settings-modal">
-        {/* Header */}
-        <div className="campaign-settings-header">
-          <div className="campaign-settings-header__titles">
-            <h2 className="campaign-settings-header__title">Campaign Settings</h2>
-            <p className="campaign-settings-header__subtitle">{campaignName}</p>
+    <>
+      <div
+        className="campaign-settings-overlay"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
+        <div className="campaign-settings-modal">
+          {/* Header */}
+          <div className="campaign-settings-header">
+            <div className="campaign-settings-header__titles">
+              <h2 className="campaign-settings-header__title">Campaign Settings</h2>
+              <p className="campaign-settings-header__subtitle">{campaignName}</p>
+            </div>
+            <button
+              type="button"
+              className="campaign-settings-close"
+              aria-label="Close"
+              onClick={onClose}
+            >
+              ×
+            </button>
           </div>
-          <button
-            type="button"
-            className="campaign-settings-close"
-            aria-label="Close"
-            onClick={onClose}
-          >
-            ×
-          </button>
-        </div>
 
-        {/* Body */}
-        <div className="campaign-settings-body">
-          {/* Sidebar */}
-          <nav className="campaign-settings-sidebar" aria-label="Settings sections">
-            {SETTINGS_SECTIONS.map((section) => (
-              <button
-                key={section.id}
-                type="button"
-                className={`campaign-settings-sidebar__btn${activeSection === section.id ? ' campaign-settings-sidebar__btn--active' : ''}`}
-                onClick={() => handleSidebarClick(section.id)}
-              >
-                {section.label}
-              </button>
-            ))}
-          </nav>
+          {/* Body */}
+          <div className="campaign-settings-body">
+            {/* Sidebar */}
+            <nav className="campaign-settings-sidebar" aria-label="Settings sections">
+              {SETTINGS_SECTIONS.map((section) => (
+                <button
+                  key={section.id}
+                  type="button"
+                  className={`campaign-settings-sidebar__btn${activeSection === section.id ? ' campaign-settings-sidebar__btn--active' : ''}`}
+                  onClick={() => handleSidebarClick(section.id)}
+                >
+                  {section.label}
+                </button>
+              ))}
+            </nav>
 
-          {/* Content */}
-          <div className="campaign-settings-content" ref={contentRef}>
-            {/* Timeline section */}
-            <section
-              id="timeline"
-              className="campaign-settings-section"
-              ref={(el) => {
-                sectionRefs.current['timeline'] = el;
-              }}
-            >
-              <h3 className="campaign-settings-section__title">Timeline</h3>
-              <SettingRow
-                label="Show future events as dotted"
-                description="Render events after today with a dashed border on the timeline."
-                htmlFor="timeline-future-events"
+            {/* Content */}
+            <div className="campaign-settings-content" ref={contentRef}>
+              {/* Timeline section */}
+              <section
+                id="timeline"
+                className="campaign-settings-section"
+                ref={(el) => {
+                  sectionRefs.current['timeline'] = el;
+                }}
               >
-                <Toggle
-                  id="timeline-future-events"
-                  checked={showFutureEvents}
-                  onChange={setShowFutureEvents}
-                />
-              </SettingRow>
-              <SettingRow
-                label="Default calendar"
-                description="The calendar system used for in-game dates."
-                htmlFor="timeline-calendar"
-              >
-                <SelectField
-                  id="timeline-calendar"
-                  value={defaultCalendar}
-                  options={[
-                    { value: 'gregorian', label: 'Gregorian' },
-                    { value: 'golarian', label: 'Golarian' },
-                    { value: 'harptos', label: 'Harptos (Faerûn)' },
-                  ]}
-                  onChange={setDefaultCalendar}
-                />
-              </SettingRow>
-              <SettingRow
-                label="Default zoom level"
-                description="The initial zoom when opening a campaign (0 = zoomed out, 100 = zoomed in)."
-                htmlFor="timeline-zoom"
-              >
-                <SliderField
-                  id="timeline-zoom"
-                  value={defaultZoom}
-                  min={0}
-                  max={100}
-                  step={5}
-                  onChange={setDefaultZoom}
-                />
-              </SettingRow>
-            </section>
+                <h3 className="campaign-settings-section__title">Timeline</h3>
+                <SettingRow
+                  label="Show future events as dotted"
+                  description="Render events after today with a dashed border on the timeline."
+                  htmlFor="timeline-future-events"
+                >
+                  <Toggle
+                    id="timeline-future-events"
+                    checked={showFutureEvents}
+                    onChange={setShowFutureEvents}
+                  />
+                </SettingRow>
+                <SettingRow
+                  label="Default calendar"
+                  description="The calendar system used for in-game dates."
+                  htmlFor="timeline-calendar"
+                >
+                  <SelectField
+                    id="timeline-calendar"
+                    value={defaultCalendar}
+                    options={[
+                      { value: 'gregorian', label: 'Gregorian' },
+                      { value: 'golarian', label: 'Golarian' },
+                      { value: 'harptos', label: 'Harptos (Faerûn)' },
+                    ]}
+                    onChange={setDefaultCalendar}
+                  />
+                </SettingRow>
+                <SettingRow
+                  label="Default zoom level"
+                  description="The initial zoom when opening a campaign (0 = zoomed out, 100 = zoomed in)."
+                  htmlFor="timeline-zoom"
+                >
+                  <SliderField
+                    id="timeline-zoom"
+                    value={defaultZoom}
+                    min={0}
+                    max={100}
+                    step={5}
+                    onChange={setDefaultZoom}
+                  />
+                </SettingRow>
+              </section>
 
-            {/* Theme section */}
-            <section
-              id="theme"
-              className="campaign-settings-section"
-              ref={(el) => {
-                sectionRefs.current['theme'] = el;
-              }}
-            >
-              <h3 className="campaign-settings-section__title">Theme</h3>
-              <SettingRow
-                label="Theme"
-                description="The visual theme applied to the entire application."
-                htmlFor="theme-select"
+              {/* Theme section */}
+              <section
+                id="theme"
+                className="campaign-settings-section"
+                ref={(el) => {
+                  sectionRefs.current['theme'] = el;
+                }}
               >
-                <SelectField
-                  id="theme-select"
-                  value={selectedTheme}
-                  options={[{ value: 'dark-pathfinder', label: 'Dark Pathfinder' }]}
-                  onChange={setSelectedTheme}
-                />
-              </SettingRow>
-              <SettingRow
-                label="High-contrast mode"
-                description="Increase contrast for improved readability."
-                htmlFor="theme-high-contrast"
-              >
-                <Toggle
-                  id="theme-high-contrast"
-                  checked={highContrast}
-                  onChange={setHighContrast}
-                />
-              </SettingRow>
-            </section>
+                <h3 className="campaign-settings-section__title">Theme</h3>
+                <SettingRow
+                  label="Theme"
+                  description="The visual theme applied to the entire application."
+                  htmlFor="theme-select"
+                >
+                  <SelectField
+                    id="theme-select"
+                    value={selectedTheme}
+                    options={[{ value: 'dark-pathfinder', label: 'Dark Pathfinder' }]}
+                    onChange={setSelectedTheme}
+                  />
+                </SettingRow>
+                <SettingRow
+                  label="High-contrast mode"
+                  description="Increase contrast for improved readability."
+                  htmlFor="theme-high-contrast"
+                >
+                  <Toggle
+                    id="theme-high-contrast"
+                    checked={highContrast}
+                    onChange={setHighContrast}
+                  />
+                </SettingRow>
+              </section>
 
-            {/* Templates section */}
-            <section
-              id="templates"
-              className="campaign-settings-section"
-              ref={(el) => {
-                sectionRefs.current['templates'] = el;
-              }}
-            >
-              <h3 className="campaign-settings-section__title">Templates</h3>
-              <SettingRow
-                label="Templates folder name"
-                description="The subfolder within the campaign directory where templates are stored."
-                htmlFor="templates-folder"
+              {/* Templates section */}
+              <section
+                id="templates"
+                className="campaign-settings-section"
+                ref={(el) => {
+                  sectionRefs.current['templates'] = el;
+                }}
               >
-                <TextField
-                  id="templates-folder"
-                  value={templatesFolder}
-                  onChange={setTemplatesFolder}
-                  placeholder="templates"
-                />
-              </SettingRow>
-              <SettingRow
-                label="Default event template"
-                description="The template file used when creating a new event."
-                htmlFor="templates-default"
-              >
-                <FilePickerField
-                  id="templates-default"
-                  value={defaultTemplate}
-                  onChange={setDefaultTemplate}
-                  buttonLabel="Choose template…"
-                />
-              </SettingRow>
-            </section>
+                <h3 className="campaign-settings-section__title">Templates</h3>
+                <SettingRow
+                  label="Templates folder name"
+                  description="The subfolder within the campaign directory where templates are stored."
+                  htmlFor="templates-folder"
+                >
+                  <TextField
+                    id="templates-folder"
+                    value={templatesFolder}
+                    onChange={setTemplatesFolder}
+                    placeholder="templates"
+                  />
+                </SettingRow>
+                <SettingRow
+                  label="Default event template"
+                  description="The template file used when creating a new event."
+                  htmlFor="templates-default"
+                >
+                  <FilePickerField
+                    id="templates-default"
+                    value={defaultTemplate}
+                    onChange={setDefaultTemplate}
+                    buttonLabel="Choose template…"
+                  />
+                </SettingRow>
+              </section>
 
-            {/* Keybindings section */}
-            <section
-              id="keybindings"
-              className="campaign-settings-section"
-              ref={(el) => {
-                sectionRefs.current['keybindings'] = el;
-              }}
-            >
-              <h3 className="campaign-settings-section__title">Keybindings</h3>
-              <SettingRow
-                label="Quick-search shortcut"
-                description="The keyboard shortcut that opens the quick-search panel."
-                htmlFor="keybindings-search"
+              {/* Keybindings section */}
+              <section
+                id="keybindings"
+                className="campaign-settings-section"
+                ref={(el) => {
+                  sectionRefs.current['keybindings'] = el;
+                }}
               >
-                <TextField
-                  id="keybindings-search"
-                  value={quickSearchShortcut}
-                  onChange={setQuickSearchShortcut}
-                  placeholder="Ctrl+F"
-                />
-              </SettingRow>
-              <SettingRow
-                label="Enable Vim-style keys"
-                description="Use h/j/k/l navigation in lists and the timeline."
-                htmlFor="keybindings-vim"
-              >
-                <Toggle id="keybindings-vim" checked={vimKeys} onChange={setVimKeys} />
-              </SettingRow>
-            </section>
+                <h3 className="campaign-settings-section__title">Keybindings</h3>
+                <SettingRow
+                  label="Quick-search shortcut"
+                  description="The keyboard shortcut that opens the quick-search panel."
+                  htmlFor="keybindings-search"
+                >
+                  <TextField
+                    id="keybindings-search"
+                    value={quickSearchShortcut}
+                    onChange={setQuickSearchShortcut}
+                    placeholder="Ctrl+F"
+                  />
+                </SettingRow>
+                <SettingRow
+                  label="Enable Vim-style keys"
+                  description="Use h/j/k/l navigation in lists and the timeline."
+                  htmlFor="keybindings-vim"
+                >
+                  <Toggle id="keybindings-vim" checked={vimKeys} onChange={setVimKeys} />
+                </SettingRow>
+              </section>
+            </div>
           </div>
-        </div>
-
-        {/* Footer */}
-        <div className="campaign-settings-footer">
-          <button type="button" className="campaign-settings-footer__close-btn" onClick={onClose}>
-            Close
-          </button>
         </div>
       </div>
-    </div>
+      <FooterPortal slot="settings">
+        <FooterButton onClick={onClose}>Close</FooterButton>
+      </FooterPortal>
+    </>
   );
 }
