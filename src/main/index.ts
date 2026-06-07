@@ -5,6 +5,7 @@ import pkg from 'electron-updater';
 const { autoUpdater } = pkg;
 import { windowManager } from './windowManager.js';
 import { registerIpcHandlers } from './ipcHandlers.js';
+import { registerCalendarIpcHandlers } from './calendar-ipc-handlers.js';
 import { FileWatcher } from './fileWatcher.js';
 import { getCampaignPath, setCampaignPath } from './campaign-state.js';
 import { CampaignLoader } from './campaign-loader.js';
@@ -27,6 +28,7 @@ protocol.registerSchemesAsPrivileged([
 
 const fileWatcher = new FileWatcher();
 registerIpcHandlers();
+registerCalendarIpcHandlers();
 
 app.whenReady().then(() => {
   // URL shape: notes-asset://current/notes/<folder>/assets/<file>

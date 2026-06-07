@@ -11,6 +11,7 @@ import type {
   ConflictResult,
 } from '../renderer/timeline/data/types';
 export type { EntityIndexEntry, EntityIndexDelta } from '../shared/entity-index-entry';
+import type { CalendarSpec } from '../shared/calendar';
 
 export interface Campaign {
   id: string;
@@ -121,6 +122,14 @@ declare global {
       getCampaignTheme: (campaignPath: string) => Promise<string | null>;
       setCampaignTheme: (campaignPath: string, themeId: string | null) => Promise<void>;
       getCampaignThemeOverrides: (campaignPaths: string[]) => Promise<Record<string, string>>;
+
+      // Calendar Settings
+      getCampaignCalendarId: () => Promise<string | null>;
+      setCampaignCalendarId: (calendarId: string | null) => Promise<void>;
+      listCustomCalendars: (rootDir: string) => Promise<CalendarSpec[]>;
+      saveCustomCalendar: (rootDir: string, spec: CalendarSpec) => Promise<void>;
+      deleteCustomCalendar: (rootDir: string, id: string) => Promise<void>;
+      listSystemCalendars: () => Promise<CalendarSpec[]>;
     };
   }
 }

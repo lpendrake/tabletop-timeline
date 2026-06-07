@@ -8,6 +8,7 @@ import type {
   TagsRegistry,
   ConflictResult,
 } from './types';
+import type { CalendarSpec } from '../../../shared/calendar';
 
 export class ConflictError extends Error {
   constructor() {
@@ -111,5 +112,31 @@ export const timelinePort = {
 
   async readTemplate(campaignPath: string, name: string): Promise<string | null> {
     return window.fsApi.templateRead(campaignPath, name);
+  },
+};
+
+export const calendarPort = {
+  async getCampaignCalendarId(): Promise<string | null> {
+    return window.fsApi.getCampaignCalendarId();
+  },
+
+  async setCampaignCalendarId(calendarId: string | null): Promise<void> {
+    await window.fsApi.setCampaignCalendarId(calendarId);
+  },
+
+  async listCustomCalendars(rootDir: string): Promise<CalendarSpec[]> {
+    return window.fsApi.listCustomCalendars(rootDir);
+  },
+
+  async saveCustomCalendar(rootDir: string, spec: CalendarSpec): Promise<void> {
+    await window.fsApi.saveCustomCalendar(rootDir, spec);
+  },
+
+  async deleteCustomCalendar(rootDir: string, id: string): Promise<void> {
+    await window.fsApi.deleteCustomCalendar(rootDir, id);
+  },
+
+  async listSystemCalendars(): Promise<CalendarSpec[]> {
+    return window.fsApi.listSystemCalendars();
   },
 };
