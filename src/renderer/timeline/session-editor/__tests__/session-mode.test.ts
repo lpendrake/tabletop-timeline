@@ -8,14 +8,15 @@ import {
 } from '../session-mode';
 import type { Session } from '../../data/types';
 import type { ViewState, ViewportSize } from '../../math/zoom';
-import { parseISOString, toAbsoluteSeconds } from '../../calendar/golarian';
+import { CalendarProvider } from '../../calendar/provider';
 
-// --- absolute seconds for known Golarian dates ---
+// --- absolute seconds for known Golarion dates ---
 // These are computed once so tests can reason about exact values.
-const A_START_SECS = toAbsoluteSeconds(parseISOString('4725-01-01T00:00'));
-const A_END_SECS = toAbsoluteSeconds(parseISOString('4725-01-01T02:00'));
-const B_START_SECS = toAbsoluteSeconds(parseISOString('4725-01-01T04:00'));
-const B_END_SECS = toAbsoluteSeconds(parseISOString('4725-01-01T06:00'));
+const cal = CalendarProvider.get();
+const A_START_SECS = cal.toEpochSeconds(cal.tryParse('4725-01-01T00:00:00')!);
+const A_END_SECS = cal.toEpochSeconds(cal.tryParse('4725-01-01T02:00:00')!);
+const B_START_SECS = cal.toEpochSeconds(cal.tryParse('4725-01-01T04:00:00')!);
+const B_END_SECS = cal.toEpochSeconds(cal.tryParse('4725-01-01T06:00:00')!);
 
 // View centered on session A so handles are visible during renderHandles
 const VIEW: ViewState = { centerSeconds: A_START_SECS, secondsPerPixel: 100 };
@@ -212,9 +213,9 @@ describe('clampWholeDragDelta', () => {
 
   it('clamps to the nearest neighbor when sessions exist on both sides', () => {
     // SESSION_C sits between A and B; moving it far right → stops at B_START
-    const sessionC = makeSession('c', '4725-01-01T03:30', '4725-01-01T03:45');
-    const cStart = toAbsoluteSeconds(parseISOString(sessionC.inGameStart));
-    const cEnd = toAbsoluteSeconds(parseISOString(sessionC.inGameEnd));
+    const sessionC = makeSession('c', '4725-01-01T03:30:00', '4725-01-01T03:45:00');
+    const cStart = cal.toEpochSeconds(cal.tryParse(sessionC.inGameStart)!);
+    const cEnd = cal.toEpochSeconds(cal.tryParse(sessionC.inGameEnd)!);
     // Moving right by 10000 s should be clamped to gap to SESSION_B
     const result = clampWholeDragDelta(cStart, cEnd, 10000, [SESSION_A, SESSION_B], 'c');
     expect(result).toBe(B_START_SECS - cEnd);

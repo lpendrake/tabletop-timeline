@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   emptyBuffer,
   bufferFromEvent,
@@ -16,6 +16,7 @@ import {
   type EditorBuffer,
 } from '../domain';
 import { ThemeProvider } from '../../../theme';
+import { CalendarProvider } from '../../calendar/provider';
 import type { Event } from '../../data/types';
 import type { WeekdayColors } from '../../../theme/types';
 
@@ -37,7 +38,7 @@ function buf(overrides: Partial<EditorBuffer> = {}): EditorBuffer {
 
 function event(overrides: Partial<Event> = {}): Event {
   return {
-    filename: '4726-05-04-test.md',
+    filename: '4726-124-test.md',
     title: 'Test Event',
     date: '4726-05-04',
     tags: [],
@@ -46,6 +47,14 @@ function event(overrides: Partial<Event> = {}): Event {
     ...overrides,
   };
 }
+
+beforeEach(() => {
+  CalendarProvider._reset();
+});
+
+afterEach(() => {
+  CalendarProvider._reset();
+});
 
 // ---- emptyBuffer ----
 
@@ -190,6 +199,26 @@ describe('bufferFromEvent', () => {
     const ev = event({ date: 'not-a-date' });
     expect(bufferFromEvent(ev).date).toBe('not-a-date');
   });
+
+  it('uses epochSeconds to derive date text when present, ignoring date field', () => {
+    const cal = CalendarProvider.get();
+    // 4726-05-04 → parse and get epochSeconds
+    const parsed = cal.tryParse('4726-05-04')!;
+    const epochSeconds = cal.toEpochSeconds(parsed);
+    // event has a wrong date field but correct epochSeconds
+    const ev = event({ date: 'wrong-date', epochSeconds });
+    const b = bufferFromEvent(ev);
+    expect(b.date).toBe('4726-05-04');
+  });
+
+  it('round-trips epochSeconds through bufferFromEvent', () => {
+    const cal = CalendarProvider.get();
+    const parsed = cal.tryParse('4726-05-04T09:30:00')!;
+    const epochSeconds = cal.toEpochSeconds(parsed);
+    const ev = event({ date: '4726-05-04T09:30:00', epochSeconds });
+    const b = bufferFromEvent(ev);
+    expect(b.date).toBe('4726-05-04T09:30:00');
+  });
 });
 
 // ---- bufferToFrontmatter ----
@@ -306,6 +335,19 @@ describe('bufferToFrontmatter', () => {
   it('omits tags field when only systemTags and no custom/entity tags', () => {
     const fm = bufferToFrontmatter(buf({ tagsText: '', systemTags: [] }));
     expect('tags' in fm).toBe(false);
+  });
+
+  it('sets epochSeconds when the date parses', () => {
+    const cal = CalendarProvider.get();
+    const fm = bufferToFrontmatter(buf({ date: '4726-05-04' }));
+    expect(fm.epochSeconds).toBeDefined();
+    const parsed = cal.tryParse('4726-05-04')!;
+    expect(fm.epochSeconds).toBe(cal.toEpochSeconds(parsed));
+  });
+
+  it('does not set epochSeconds when the date does not parse', () => {
+    const fm = bufferToFrontmatter(buf({ date: 'not-a-date' }));
+    expect('epochSeconds' in fm).toBe(false);
   });
 
   it('round-trips through bufferFromEvent', () => {
@@ -530,10 +572,11 @@ describe('validateBuffer', () => {
     expect(validateBuffer(buf({ date: '' }))).toBe('Date is required.');
   });
 
-  it('returns error when date is invalid Golarian format', () => {
+  it('returns error when date is invalid for this calendar', () => {
     const err = validateBuffer(buf({ date: 'not-a-date' }));
     expect(err).not.toBeNull();
-    expect(err).toMatch(/golarian date/i);
+    expect(err).toMatch(/not valid for this calendar/i);
+    expect(err).not.toMatch(/golarian/i);
   });
 
   it('accepts date with time component', () => {
@@ -544,60 +587,90 @@ describe('validateBuffer', () => {
 // ---- deriveFilename ----
 
 describe('deriveFilename', () => {
+  // Golarion 4726-05-04:
+  //   months before May: Jan(31) + Feb(28) + Mar(31) + Apr(30) = 120
+  //   + day 4 = day-of-year 124
+  // Expected prefix: 4726-124
+  it('uses YYYY-DDD scheme: 4726-05-04 → day-of-year 124 → prefix 4726-124', () => {
+    expect(deriveFilename(buf({ title: 'The Big Heist', body: '', date: '4726-05-04' }))).toBe(
+      '4726-124-the-big-heist.md',
+    );
+  });
+
   it('uses H1 from body as slug when present', () => {
     expect(
       deriveFilename(
         buf({ title: 'Old Title', body: '# The Big Heist\nSome text', date: '4726-05-04' }),
       ),
-    ).toBe('4726-05-04-the-big-heist.md');
+    ).toBe('4726-124-the-big-heist.md');
   });
 
   it('falls back to title when body has no H1', () => {
     expect(
       deriveFilename(buf({ title: 'The Big Heist', body: 'Just prose', date: '4726-05-04' })),
-    ).toBe('4726-05-04-the-big-heist.md');
+    ).toBe('4726-124-the-big-heist.md');
   });
 
   it('uses "event" fallback when body has no H1 and title is blank', () => {
     expect(deriveFilename(buf({ title: '', body: '', date: '4726-05-04' }))).toBe(
-      '4726-05-04-event.md',
+      '4726-124-event.md',
     );
   });
 
-  it('includes full datetime (colons stripped) when date has time component', () => {
-    expect(deriveFilename(buf({ title: 'Battle', body: '', date: '4726-05-04T09:30' }))).toBe(
-      '4726-05-04T093000-battle.md',
+  it('includes Thhmmss (no colons) when date has non-zero time component', () => {
+    expect(deriveFilename(buf({ title: 'Battle', body: '', date: '4726-05-04T09:30:00' }))).toBe(
+      '4726-124T093000-battle.md',
+    );
+  });
+
+  it('uses date-only prefix (no T suffix) when time is midnight', () => {
+    expect(deriveFilename(buf({ title: 'Battle', body: '', date: '4726-05-04T00:00:00' }))).toBe(
+      '4726-124-battle.md',
     );
   });
 
   it('uses date-only prefix when date has no time component', () => {
     expect(deriveFilename(buf({ title: 'Battle', body: '', date: '4726-05-04' }))).toBe(
-      '4726-05-04-battle.md',
+      '4726-124-battle.md',
+    );
+  });
+
+  it('produces correct day-of-year for month 1 day 1', () => {
+    // 4726-01-01 → day-of-year 1
+    expect(deriveFilename(buf({ title: 'Start', body: '', date: '4726-01-01' }))).toBe(
+      '4726-001-start.md',
+    );
+  });
+
+  it('produces correct day-of-year for last day of year (non-leap)', () => {
+    // Golarion 4726 is not a leap year: 365 days → 4726-12-31 = day 365
+    expect(deriveFilename(buf({ title: 'End', body: '', date: '4726-12-31' }))).toBe(
+      '4726-365-end.md',
     );
   });
 
   it('strips apostrophes from H1', () => {
     expect(deriveFilename(buf({ title: '', body: "# It's Time\n", date: '4726-05-04' }))).toBe(
-      '4726-05-04-its-time.md',
+      '4726-124-its-time.md',
     );
   });
 
   it('truncates slug at 60 characters', () => {
     const longH1 = '# ' + 'a'.repeat(80);
     const filename = deriveFilename(buf({ title: '', body: longH1, date: '4726-05-04' }));
-    const slug = filename.replace('4726-05-04-', '').replace('.md', '');
+    const slug = filename.replace('4726-124-', '').replace('.md', '');
     expect(slug.length).toBeLessThanOrEqual(60);
   });
 
   it('replaces non-alphanumeric runs with single dash', () => {
     expect(
       deriveFilename(buf({ title: '', body: '# Battle!!! At Dawn', date: '4726-01-01' })),
-    ).toBe('4726-01-01-battle-at-dawn.md');
+    ).toBe('4726-001-battle-at-dawn.md');
   });
 
   it('strips leading/trailing dashes from slug', () => {
     expect(deriveFilename(buf({ title: '', body: '# ---Test---', date: '4726-01-01' }))).toBe(
-      '4726-01-01-test.md',
+      '4726-001-test.md',
     );
   });
 
@@ -609,14 +682,21 @@ describe('deriveFilename', () => {
     expect(filename.slice(0, -3)).not.toContain('.');
     expect(filename).not.toContain('Z');
     expect(filename.endsWith('.md')).toBe(true);
-    // midnight collapses to date-only prefix
-    expect(filename).toBe('4726-05-08-the-big-battle.md');
+    // midnight collapses to date-only prefix (YYYY-DDD scheme)
+    // 4726-05-08: Jan(31)+Feb(28)+Mar(31)+Apr(30)+May days 1-8 = 120+8 = 128
+    expect(filename).toBe('4726-128-the-big-battle.md');
   });
 
-  it('includes full datetime with colons stripped for a timed date', () => {
+  it('includes Thhmmss with colons stripped for a timed date', () => {
+    // 4726-05-08: day 128
     expect(deriveFilename(buf({ title: 'Battle', body: '', date: '4726-05-08T09:30:00' }))).toBe(
-      '4726-05-08T093000-battle.md',
+      '4726-128T093000-battle.md',
     );
+  });
+
+  it('produces a filename matching /^[A-Za-z0-9._-]+\\.md$/', () => {
+    const filename = deriveFilename(buf({ title: 'Test Event', body: '', date: '4726-05-04' }));
+    expect(filename).toMatch(/^[A-Za-z0-9._-]+\.md$/);
   });
 });
 

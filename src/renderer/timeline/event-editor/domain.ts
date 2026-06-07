@@ -1,4 +1,4 @@
-import { parseISOString, tryParseDate, toISOString } from '../calendar/golarian';
+import { CalendarProvider } from '../calendar/provider';
 import type { Event, EventFrontmatter } from '../data/types';
 import { ThemeProvider } from '../../theme';
 import { weekdayColor } from '../render/cards';
@@ -45,14 +45,20 @@ export function emptyBuffer(initialDate?: string): EditorBuffer {
 }
 
 function normalizeDateText(raw: string): string {
-  const parsed = tryParseDate(raw.trim());
-  return parsed ? toISOString(parsed) : raw.trim();
+  const cal = CalendarProvider.get();
+  const parsed = cal.tryParse(raw.trim());
+  return parsed ? cal.format(parsed) : raw.trim();
 }
 
 export function bufferFromEvent(ev: Event): EditorBuffer {
+  const cal = CalendarProvider.get();
+  const dateText =
+    ev.epochSeconds != null
+      ? cal.format(cal.fromEpochSeconds(ev.epochSeconds))
+      : normalizeDateText(ev.date);
   return {
     title: ev.title,
-    date: normalizeDateText(ev.date),
+    date: dateText,
     tagsText: (ev.tags ?? []).filter(isValidCustomTag).join(', '),
     color: ev.color ?? '',
     body: ev.body,
@@ -101,6 +107,7 @@ export function effectiveTitle(buf: EditorBuffer): string {
 }
 
 export function bufferToFrontmatter(buf: EditorBuffer): EventFrontmatter {
+  const cal = CalendarProvider.get();
   const tags = parseTagsText(buf.tagsText).filter(isValidCustomTag);
   const linkedIds = extractWikiLinkIds(buf.body);
   const syncedTags = syncEntityTags(tags, linkedIds);
@@ -109,6 +116,8 @@ export function bufferToFrontmatter(buf: EditorBuffer): EventFrontmatter {
     title: effectiveTitle(buf),
     date: buf.date.trim(),
   };
+  const parsed = cal.tryParse(buf.date.trim());
+  if (parsed) fm.epochSeconds = cal.toEpochSeconds(parsed);
   if (allTags.length > 0) fm.tags = allTags;
   if (buf.color) fm.color = buf.color;
   if (buf.id) fm.id = buf.id;
@@ -120,11 +129,9 @@ export function bufferToFrontmatter(buf: EditorBuffer): EventFrontmatter {
 export function validateBuffer(buf: EditorBuffer): string | null {
   if (!effectiveTitle(buf)) return 'Title is required.';
   if (!buf.date.trim()) return 'Date is required.';
-  try {
-    parseISOString(buf.date.trim());
-  } catch (err: unknown) {
-    return `Date is not a valid Golarian date: ${err instanceof Error ? err.message : String(err)}`;
-  }
+  const cal = CalendarProvider.get();
+  const parsed = cal.tryParse(buf.date.trim());
+  if (!parsed) return `Date is not valid for this calendar: "${buf.date.trim()}"`;
   return null;
 }
 
@@ -138,10 +145,26 @@ function slugify(s: string): string {
 }
 
 function deriveFilenameDatePart(date: string): string {
-  const parsed = tryParseDate(date.trim());
+  const cal = CalendarProvider.get();
+  const parsed = cal.tryParse(date.trim());
   if (parsed) {
-    // toISOString → 'YYYY-MM-DD' or 'YYYY-MM-DDTHH:MM:SS' (never '.'/'Z'); strip ':' for the filename.
-    return toISOString(parsed).replace(/:/g, '');
+    if (parsed.kind !== 'month') {
+      // intercalary: fall back to safe string
+      const safe = date.trim().replace(/[^0-9T-]/g, '');
+      return safe.slice(0, 20) || 'event';
+    }
+    // Build YYYY-DDD scheme
+    const absYear = Math.abs(parsed.year);
+    const yearStr = (parsed.year < 0 ? '-' : '') + String(absYear).padStart(4, '0');
+    const doy = String(cal.dayOfYear(parsed)).padStart(3, '0');
+    const hasNonZeroTime = parsed.hour !== 0 || parsed.minute !== 0 || parsed.second !== 0;
+    if (hasNonZeroTime) {
+      const hh = String(parsed.hour).padStart(2, '0');
+      const mm = String(parsed.minute).padStart(2, '0');
+      const ss = String(parsed.second).padStart(2, '0');
+      return `${yearStr}-${doy}T${hh}${mm}${ss}`;
+    }
+    return `${yearStr}-${doy}`;
   }
   // Unparseable: keep only filename-safe date characters as a fallback.
   const safe = date.trim().replace(/[^0-9T-]/g, '');
@@ -162,8 +185,9 @@ export function deriveFilename(buf: EditorBuffer): string {
  * event has no explicit colour.
  */
 export function weekdayColorForDateText(dateText: string, weekdays: WeekdayColors): string | null {
-  const date = tryParseDate(dateText);
-  return date ? weekdayColor(date, weekdays) : null;
+  const cal = CalendarProvider.get();
+  const d = cal.tryParse(dateText);
+  return d ? weekdayColor(d, weekdays) : null;
 }
 
 /** Returns the <select> value for the color field (or '__custom__' for non-preset hex). */
