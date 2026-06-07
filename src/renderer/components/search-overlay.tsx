@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { timelinePort } from '../timeline/data/ports';
 import type { EventListItem } from '../timeline/data/types';
-import { parseISOString } from '../timeline/calendar/golarian';
+import { CalendarProvider } from '../timeline/calendar/provider';
 import { formatCompact } from '../timeline/calendar/format';
 import type { EntityIndexEntry } from '../../types/global';
 import { splitFrontmatter } from '../../shared/frontmatter';
@@ -347,7 +347,14 @@ export function SearchOverlay({
               const ev = result.item;
               let dateStr = '';
               try {
-                dateStr = formatCompact(parseISOString(ev.date));
+                const cal = CalendarProvider.get();
+                let calDate;
+                if (ev.epochSeconds != null) {
+                  calDate = cal.fromEpochSeconds(ev.epochSeconds);
+                } else {
+                  calDate = cal.tryParse(ev.date);
+                }
+                dateStr = calDate ? formatCompact(calDate) : ev.date;
               } catch {
                 dateStr = ev.date;
               }

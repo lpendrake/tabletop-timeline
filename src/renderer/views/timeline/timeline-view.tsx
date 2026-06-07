@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { timelinePort, ConflictError, FilenameConflictError } from '../../timeline/data/ports';
+import {
+  timelinePort,
+  calendarPort,
+  ConflictError,
+  FilenameConflictError,
+} from '../../timeline/data/ports';
 import type { EventListItem, Session, State } from '../../timeline/data/types';
 import {
   DEFAULT_SECONDS_PER_PIXEL,
   type ViewState,
   type ViewportSize,
 } from '../../timeline/math/zoom';
-import {
-  parseISOString,
-  toAbsoluteSeconds,
-  fromAbsoluteSeconds,
-  toISOString,
-} from '../../timeline/calendar/golarian';
+import { CalendarProvider } from '../../timeline/calendar/provider';
+import { createCalendar, resolveCalendar, GOLARION_ID } from '../../../shared/calendar';
+import { buildRescheduleFrontmatter } from './reschedule-domain';
 import { ThemeProvider } from '../../theme';
 import { Axis } from '../../timeline/render/axis';
 import { Cards } from '../../timeline/render/cards.tsx';
@@ -47,7 +49,6 @@ import { FooterButton } from '../../components/footer-button';
 import { loadSavedViewState, saveViewState } from './view-state-persistence';
 import { useFilterState } from '../../timeline/filter/use-filter-state';
 import { applyFilters } from '../../timeline/filter/logic';
-import { isSessionTag } from '../../../shared/entity-tags';
 import { FilterPanel } from '../../timeline/filter/filter-panel';
 import { EventContextMenu } from '../../timeline/components/event-context-menu';
 import { revealInExplorer } from '../../shared/reveal-in-explorer';
@@ -163,7 +164,14 @@ export function TimelineView({
       if (!ev) return false;
       let secs: number;
       try {
-        secs = toAbsoluteSeconds(parseISOString(ev.date));
+        const cal = CalendarProvider.get();
+        if (ev.epochSeconds != null) {
+          secs = ev.epochSeconds;
+        } else {
+          const parsed = cal.tryParse(ev.date);
+          if (!parsed) return false;
+          secs = cal.toEpochSeconds(parsed);
+        }
       } catch {
         return false;
       }
@@ -265,13 +273,11 @@ export function TimelineView({
     async (filename: string, newSeconds: number) => {
       try {
         const { event, lastModified } = await timelinePort.getEvent(campaignPath, filename);
-        const newDate = toISOString(fromAbsoluteSeconds(newSeconds));
-        const nonSeshTags = (event.tags ?? []).filter((t) => !isSessionTag(t));
-        const newSeshTags = sessionTagsForSeconds(newSeconds, sessionsRef.current);
-        const updatedTags = [...nonSeshTags, ...newSeshTags];
+        const cal = CalendarProvider.get();
+        const frontmatter = buildRescheduleFrontmatter(event, newSeconds, sessionsRef.current, cal);
         const desiredFilename = deriveFilename({
           title: event.title,
-          date: newDate,
+          date: frontmatter.date,
           body: event.body,
           tagsText: '',
           color: '',
@@ -282,13 +288,7 @@ export function TimelineView({
         await timelinePort.updateEvent(
           campaignPath,
           filename,
-          {
-            title: event.title,
-            date: newDate,
-            ...(updatedTags.length > 0 ? { tags: updatedTags } : {}),
-            ...(event.color ? { color: event.color } : {}),
-            ...(event.status ? { status: event.status } : {}),
-          },
+          frontmatter,
           event.body,
           lastModified,
           desiredFilename,
@@ -377,12 +377,18 @@ export function TimelineView({
     shouldSuppressClick: () =>
       pan.wasMoved() || reschedule.wasActivated() || sessionModeActiveRef.current,
     onQuickAdd: (seconds) => {
-      editor.openNewEventPrompt(toISOString(fromAbsoluteSeconds(seconds)));
+      const cal = CalendarProvider.get();
+      editor.openNewEventPrompt(cal.format(cal.fromEpochSeconds(seconds)));
     },
     onSetNow: async (seconds) => {
       const current = gameStateRef.current;
       if (!current) return;
-      const next: State = { ...current, in_game_now: toISOString(fromAbsoluteSeconds(seconds)) };
+      const cal = CalendarProvider.get();
+      const next: State = {
+        ...current,
+        in_game_now: cal.format(cal.fromEpochSeconds(seconds)),
+        in_game_now_seconds: seconds,
+      };
       await timelinePort.putState(campaignPath, next);
       setLoadedData((d) => ({ ...d, gameState: next }));
     },
@@ -404,12 +410,26 @@ export function TimelineView({
   useEffect(() => {
     isInitialized.current = false;
     let cancelled = false;
-    Promise.all([
-      timelinePort.getState(campaignPath),
-      timelinePort.listEvents(campaignPath),
-      timelinePort.getSessions(campaignPath),
-    ])
-      .then(([gameState, events, sessions]) => {
+    (async () => {
+      try {
+        // Initialise the calendar before anything is rendered.
+        try {
+          const [customSpecs, calId] = await Promise.all([
+            calendarPort.listCustomCalendars(campaignPath),
+            calendarPort.getCampaignCalendarId(),
+          ]);
+          CalendarProvider.init(createCalendar(resolveCalendar(calId ?? GOLARION_ID, customSpecs)));
+        } catch (calErr) {
+          console.error('[TimelineView] failed to load calendar, falling back to Golarion', calErr);
+          CalendarProvider.initFromId(GOLARION_ID);
+        }
+
+        const [gameState, events, sessions] = await Promise.all([
+          timelinePort.getState(campaignPath),
+          timelinePort.listEvents(campaignPath),
+          timelinePort.getSessions(campaignPath),
+        ]);
+
         if (cancelled) return;
         setLoadedData({ gameState, events, sessions });
 
@@ -418,13 +438,26 @@ export function TimelineView({
         if (saved) {
           setViewState(saved);
         } else {
-          const fallback = gameState.in_game_now || gameState.campaign_start;
-          const nowSeconds = fallback ? toAbsoluteSeconds(parseISOString(fallback)) : 0;
+          let nowSeconds = 0;
+          if (gameState.in_game_now_seconds != null) {
+            nowSeconds = gameState.in_game_now_seconds;
+          } else if (gameState.campaign_start_seconds != null) {
+            nowSeconds = gameState.campaign_start_seconds;
+          } else {
+            const cal = CalendarProvider.get();
+            const fallback = gameState.in_game_now || gameState.campaign_start;
+            if (fallback) {
+              const parsed = cal.tryParse(fallback);
+              nowSeconds = parsed ? cal.toEpochSeconds(parsed) : 0;
+            }
+          }
           setViewState({ centerSeconds: nowSeconds, secondsPerPixel: DEFAULT_SECONDS_PER_PIXEL });
         }
         isInitialized.current = true;
-      })
-      .catch((err) => console.error('[TimelineView] failed to load campaign data', err));
+      } catch (err) {
+        console.error('[TimelineView] failed to load campaign data', err);
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -465,7 +498,14 @@ export function TimelineView({
   const handleJumpToNow = useCallback(() => {
     const current = gameStateRef.current;
     if (!current) return;
-    const nowSeconds = toAbsoluteSeconds(parseISOString(current.in_game_now));
+    let nowSeconds: number;
+    if (current.in_game_now_seconds != null) {
+      nowSeconds = current.in_game_now_seconds;
+    } else {
+      const cal = CalendarProvider.get();
+      const parsed = cal.tryParse(current.in_game_now);
+      nowSeconds = parsed ? cal.toEpochSeconds(parsed) : 0;
+    }
     setViewState((v) => ({ ...v, centerSeconds: nowSeconds }));
   }, []);
 
@@ -474,7 +514,15 @@ export function TimelineView({
     if (!pendingJumpFilename || !loadedData.events.length) return;
     const ev = loadedData.events.find((e) => e.filename === pendingJumpFilename);
     if (!ev) return;
-    const seconds = toAbsoluteSeconds(parseISOString(ev.date));
+    let seconds: number;
+    if (ev.epochSeconds != null) {
+      seconds = ev.epochSeconds;
+    } else {
+      const cal = CalendarProvider.get();
+      const parsed = cal.tryParse(ev.date);
+      if (!parsed) return;
+      seconds = cal.toEpochSeconds(parsed);
+    }
     setViewState((v) => ({ ...v, centerSeconds: seconds }));
     onJumpHandled?.();
     const filename = pendingJumpFilename;
@@ -516,12 +564,22 @@ export function TimelineView({
     collapse,
     quickAddShowAt: quickAdd.keyboardShowAt,
     quickAddHide: quickAdd.keyboardHide,
-    createEventAt: (seconds) =>
-      editor.openNewEventPrompt(toISOString(fromAbsoluteSeconds(seconds))),
+    createEventAt: (seconds) => {
+      const cal = CalendarProvider.get();
+      editor.openNewEventPrompt(cal.format(cal.fromEpochSeconds(seconds)));
+    },
   });
 
   const inGameNow = loadedData.gameState?.in_game_now || null;
-  const inGameNowSeconds = inGameNow ? toAbsoluteSeconds(parseISOString(inGameNow)) : Infinity;
+  const inGameNowSeconds = (() => {
+    if (loadedData.gameState?.in_game_now_seconds != null) {
+      return loadedData.gameState.in_game_now_seconds;
+    }
+    if (!inGameNow) return Infinity;
+    const cal = CalendarProvider.get();
+    const parsed = cal.tryParse(inGameNow);
+    return parsed ? cal.toEpochSeconds(parsed) : Infinity;
+  })();
 
   const anyModalOpen = !!(
     editor.editorMode ||
@@ -783,11 +841,12 @@ export function TimelineView({
           <FooterPortal slot="center">
             <FooterButton
               variant="primary"
-              onClick={() =>
+              onClick={() => {
+                const cal = CalendarProvider.get();
                 editor.openNewEventPrompt(
-                  toISOString(fromAbsoluteSeconds(viewRef.current.centerSeconds)),
-                )
-              }
+                  cal.format(cal.fromEpochSeconds(viewRef.current.centerSeconds)),
+                );
+              }}
               title="Create a new event"
             >
               + Event
