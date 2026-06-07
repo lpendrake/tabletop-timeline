@@ -15,6 +15,8 @@ import {
   setCampaignTheme,
   getCampaignOverrides,
 } from './theme-settings.js';
+import { setCampaignVersion } from './migrations/campaign-version.js';
+import { LATEST_VERSION } from './migrations/registry.js';
 
 const { autoUpdater } = pkg;
 
@@ -168,6 +170,10 @@ ${description}
           path.join(campaignPath, 'timeline', 'state.json'),
           JSON.stringify({ in_game_now: '', campaign_start: '' }, null, 2),
         );
+
+        // Stamp the new campaign with the latest known migration version so it
+        // skips all existing migrations the first time it is opened.
+        setCampaignVersion(campaignPath, LATEST_VERSION);
 
         return { success: true, path: campaignPath };
       } catch (error: unknown) {
