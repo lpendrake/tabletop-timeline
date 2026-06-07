@@ -19,28 +19,24 @@ afterEach(() => {
   tmpDirs.length = 0;
 });
 
-// Test 1
 describe('getCampaignVersion', () => {
   it('returns 0 when settings.json does not exist', () => {
     const dir = makeTmpDir();
     expect(getCampaignVersion(dir)).toBe(0);
   });
 
-  // Test 2
   it('returns 0 when settings.json exists but has no version key', () => {
     const dir = makeTmpDir();
     fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify({ theme: 'dark-pathfinder' }));
     expect(getCampaignVersion(dir)).toBe(0);
   });
 
-  // Test 3
   it('setCampaignVersion roundtrip returns the written value', () => {
     const dir = makeTmpDir();
     setCampaignVersion(dir, 3);
     expect(getCampaignVersion(dir)).toBe(3);
   });
 
-  // Test 4
   it('setCampaignVersion preserves other keys such as theme', () => {
     const dir = makeTmpDir();
     const settingsFile = path.join(dir, 'settings.json');
@@ -51,14 +47,12 @@ describe('getCampaignVersion', () => {
     expect(obj.theme).toBe('dark-pathfinder');
   });
 
-  // Test 5
   it('returns 0 when settings.json contains malformed JSON', () => {
     const dir = makeTmpDir();
     fs.writeFileSync(path.join(dir, 'settings.json'), 'not valid json {{{');
     expect(getCampaignVersion(dir)).toBe(0);
   });
 
-  // Test 6
   it('returns 0 for non-integer and negative version values', () => {
     const dir = makeTmpDir();
     const settingsFile = path.join(dir, 'settings.json');

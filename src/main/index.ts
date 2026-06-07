@@ -58,13 +58,14 @@ app.whenReady().then(() => {
         name: 'Building entity index',
         task: async (onProgress) => {
           entityIndex = buildEntityIndex(resolvedPath, onProgress);
+          return `${entityIndex.length} files indexed`;
         },
       },
     ]);
 
     try {
-      await loader.run(event.sender);
-      return { success: true, entityIndex };
+      const messages = await loader.run(event.sender);
+      return { success: true, entityIndex, messages };
     } catch (err) {
       setCampaignPath(null);
       fileWatcher.stop();

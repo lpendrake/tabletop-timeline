@@ -32,11 +32,11 @@ function noopMigration(name: string, targetVersion: number): Migration {
     targetVersion,
     run: (_campaignPath, onProgress) => {
       onProgress(1, 1);
+      return 'did a thing';
     },
   };
 }
 
-// Test 1
 describe('buildMigrationTasks', () => {
   it('returns all migrations pending (ascending order) for a v0 campaign', () => {
     const dir = makeTmpDir();
@@ -56,7 +56,6 @@ describe('buildMigrationTasks', () => {
     expect(tasks[2].name).toBe('Migration C');
   });
 
-  // Test 2
   it('returns [] for an up-to-date campaign and leaves settings.json untouched', () => {
     const dir = makeTmpDir();
     setCampaignVersion(dir, 5);
@@ -84,7 +83,6 @@ describe('buildMigrationTasks', () => {
     expect(fs.existsSync(settingsFile)).toBe(false);
   });
 
-  // Test 3
   it('running a task bumps the campaign version to that migration targetVersion', async () => {
     const dir = makeTmpDir();
     const migrations: Migration[] = [noopMigration('Migration A', 7)];
@@ -97,7 +95,16 @@ describe('buildMigrationTasks', () => {
     expect(getCampaignVersion(dir)).toBe(7);
   });
 
-  // Test 4
+  it('running a task returns the formatted summary line', async () => {
+    const dir = makeTmpDir();
+    const migrations: Migration[] = [noopMigration('Migration A', 7)];
+
+    const tasks = buildMigrationTasks(dir, migrations);
+    const summary = await tasks[0].task(makeOnProgress());
+
+    expect(summary).toBe('Ran migration 7: Migration A\nresult: did a thing');
+  });
+
   it('when an earlier migration succeeds and a later one throws, version stays at the last success', async () => {
     const dir = makeTmpDir();
 
@@ -125,26 +132,33 @@ describe('buildMigrationTasks', () => {
     expect(getCampaignVersion(dir)).toBe(1);
   });
 
-  // Test 5
   it('sampleMigration is idempotent: running run() twice does not throw and produces the same version', async () => {
     const dir = makeTmpDir();
 
     const onProgress = makeOnProgress();
 
     // Run once
-    await sampleMigration.run(dir, onProgress);
+    const result1 = sampleMigration.run(dir, onProgress);
+    await result1;
     setCampaignVersion(dir, sampleMigration.targetVersion);
     const versionAfterFirst = getCampaignVersion(dir);
 
-    // Run again — run() may return void or a Promise<void>; either is fine
-    const result = sampleMigration.run(dir, onProgress);
-    if (result instanceof Promise) {
-      await result;
-    }
+    // Run again — idempotent; appending the same noop log entry is harmless
+    const result2 = sampleMigration.run(dir, onProgress);
+    await result2;
     setCampaignVersion(dir, sampleMigration.targetVersion);
     const versionAfterSecond = getCampaignVersion(dir);
 
     expect(versionAfterFirst).toBe(sampleMigration.targetVersion);
     expect(versionAfterSecond).toBe(versionAfterFirst);
+  });
+
+  it('sampleMigration returns "no changes" as its summary', async () => {
+    const dir = makeTmpDir();
+    const onProgress = makeOnProgress();
+
+    const summary = await sampleMigration.run(dir, onProgress);
+
+    expect(summary).toBe('no changes');
   });
 });

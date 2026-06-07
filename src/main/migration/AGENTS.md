@@ -9,15 +9,17 @@ that the framework runs once, in order, before the entity index is built.
 ```
 migration/
   migration.ts               # Migration interface (the contract)
+  migration-log.ts           # appendMigrationLog helper — call from inside run()
   campaign-version.ts        # getCampaignVersion / setCampaignVersion helpers
   registry.ts                # MIGRATIONS array + LATEST_VERSION constant
   build-migration-tasks.ts   # Core of the framework: produces NamedTask[]
   AGENTS.md                  # This file
   migrations/
-    0001-sample-migration.ts # No-op sample: documents the pattern; targetVersion 1
+    0001-sample-migration.ts # Template migration — demonstrates summary + log; targetVersion 1
   __tests__/
     campaign-version.test.ts
     build-migration-tasks.test.ts
+    migration-log.test.ts
 ```
 
 ## The `Migration` interface
@@ -29,7 +31,7 @@ interface Migration {
   run: (
     campaignPath: string,
     onProgress: (completed: number, total: number) => void,
-  ) => Promise<void> | void;
+  ) => Promise<string> | string;
 }
 ```
 
@@ -38,6 +40,40 @@ interface Migration {
 - `run` **must throw** if it encounters data it cannot convert — never silently skip.
   Throwing causes `CampaignLoader` to emit `campaign:loadError` and surfaces the
   problem to the user without corrupting the campaign's recorded version.
+- `run` **must return a short human-readable summary string** describing what it did.
+  This string is displayed to the user in the post-load notification (e.g.
+  `"renamed 3 files"`, `"updated 12 frontmatter entries"`). Return `"no changes"` for
+  a no-op migration.
+
+## Two reporting mechanisms (independent of each other)
+
+### 1. Summary string (notification)
+
+The string returned by `run` is collected by the framework and surfaced to the user
+after loading completes. It describes the migration at a high level. Use concise,
+user-friendly prose.
+
+### 2. Action log (per-migration NDJSON file)
+
+For a debuggable, potentially-reversible record, call `appendMigrationLog` from
+`migration-log.ts` for each discrete action the migration takes:
+
+```ts
+import { appendMigrationLog } from '../migration-log.js';
+
+appendMigrationLog(campaignPath, '0002-my-migration', {
+  renameFile: { oldPath: 'events/a.md', newPath: 'events/b.md' },
+});
+```
+
+- Each call appends one JSON line to `<campaignPath>/migration-log/<logName>.log.json`.
+- **Always pass campaign-relative paths** (e.g. `'events/some-event.md'`), never
+  absolute paths or full file contents — keep entries small and root-relative.
+- The `logName` argument should be the migration's file stem, e.g. `'0002-my-migration'`.
+
+These two mechanisms are independent: the summary string goes through the framework's
+return value; the log file is written directly by the migration via `appendMigrationLog`.
+The sample migration (`0001-sample-migration.ts`) demonstrates both.
 
 ## Versioning model
 
@@ -73,6 +109,9 @@ interface Migration {
    - Choose the next integer for `targetVersion` (look at `LATEST_VERSION` in
      `registry.ts`).
    - Make `run` idempotent and throw on unrecoverable data.
+   - Return a summary string (e.g. `"renamed 3 files"` or `"no changes"`).
+   - Call `appendMigrationLog(campaignPath, 'NNNN-my-migration', entry)` for each
+     discrete action to leave a debuggable NDJSON trail.
 2. Import your migration in `registry.ts` and append it to the `MIGRATIONS` array.
    The sort in `registry.ts` ensures order — but keeping the array in ascending order
    by convention is clearer.

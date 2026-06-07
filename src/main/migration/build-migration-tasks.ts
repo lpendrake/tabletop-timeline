@@ -25,8 +25,9 @@ export function buildMigrationTasks(
   return pending.map((migration) => ({
     name: migration.name,
     task: async (onProgress) => {
-      await migration.run(campaignPath, onProgress);
+      const summary = await migration.run(campaignPath, onProgress);
       setCampaignVersion(campaignPath, migration.targetVersion);
+      return `Ran migration ${migration.targetVersion}: ${migration.name}\nresult: ${summary}`;
     },
   }));
 }
