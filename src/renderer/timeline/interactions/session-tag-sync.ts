@@ -1,7 +1,15 @@
 import type { EventListItem, Session } from '../data/types';
-import { parseISOString, toAbsoluteSeconds } from '../calendar/golarian';
+import { CalendarProvider } from '../calendar/provider';
 import { sessionTagsForSeconds } from '../render/session-bands';
 import { isSessionTag } from '../../../shared/entity-tags';
+
+function eventSeconds(e: { epochSeconds?: number; date: string }): number {
+  if (typeof e.epochSeconds === 'number') return e.epochSeconds;
+  const cal = CalendarProvider.get();
+  const d = cal.tryParse(e.date);
+  if (!d) throw new Error(`unparseable event date: ${e.date}`);
+  return cal.toEpochSeconds(d);
+}
 
 export function seshTagsMatch(
   existingTags: readonly string[] | undefined,
@@ -27,7 +35,7 @@ export function computeEventsNeedingSeshTagUpdate(
   for (const ev of events) {
     let secs: number;
     try {
-      secs = toAbsoluteSeconds(parseISOString(ev.date));
+      secs = eventSeconds(ev);
     } catch {
       continue;
     }

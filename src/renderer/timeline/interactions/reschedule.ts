@@ -1,10 +1,18 @@
-import { parseISOString, toAbsoluteSeconds, fromAbsoluteSeconds } from '../calendar/golarian';
+import { CalendarProvider } from '../calendar/provider';
 import { formatAxisDay, formatAxisHour } from '../calendar/format';
 import { secondsToX, xToSeconds, SECONDS_PER_DAY } from '../math/zoom';
 import type { ViewState, ViewportSize } from '../math/zoom';
 import type { EventListItem } from '../data/types';
 
 const SNAP_SECS = 900;
+
+function eventSeconds(e: { epochSeconds?: number; date: string }): number {
+  if (typeof e.epochSeconds === 'number') return e.epochSeconds;
+  const cal = CalendarProvider.get();
+  const d = cal.tryParse(e.date);
+  if (!d) throw new Error(`unparseable event date: ${e.date}`);
+  return cal.toEpochSeconds(d);
+}
 
 export interface RescheduleDeps {
   getView(): ViewState;
@@ -64,7 +72,7 @@ export function createReschedule(
       return;
     }
 
-    const originalSecs = toAbsoluteSeconds(parseISOString(ev.date));
+    const originalSecs = eventSeconds(ev);
 
     session = {
       filename,
@@ -111,6 +119,7 @@ export function createReschedule(
   function onMouseMove(e: MouseEvent) {
     if (!session) return;
 
+    const cal = CalendarProvider.get();
     const view = deps.getView();
     const size = deps.getSize();
     const axisY = Math.floor(size.height * 0.8);
@@ -124,7 +133,7 @@ export function createReschedule(
     session.currentSecs = snappedSecs;
     const snappedX = placeAt(session, snappedSecs);
 
-    const date = fromAbsoluteSeconds(snappedSecs);
+    const date = cal.fromEpochSeconds(snappedSecs);
     const labelText = `${formatAxisDay(date)} ${formatAxisHour(date)}`;
     const label = deps.getDragLabel();
     if (label) {

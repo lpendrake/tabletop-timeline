@@ -1,4 +1,4 @@
-import { fromAbsoluteSeconds } from '../calendar/golarian';
+import { CalendarProvider } from '../calendar/provider';
 import { formatAxisDay, formatAxisHour, formatNowMarker } from '../calendar/format';
 import {
   xToSeconds,
@@ -98,7 +98,8 @@ export function createQuickAddZones(
     const rawSecs = xToSeconds(x, view, size);
     const snapUnit = e.ctrlKey ? SECONDS_PER_DAY : SNAP_SECS;
     const snapped = Math.round(rawSecs / snapUnit) * snapUnit;
-    const date = fromAbsoluteSeconds(snapped);
+    const cal = CalendarProvider.get();
+    const date = cal.fromEpochSeconds(snapped);
 
     if (e.shiftKey) {
       quickAdd.style.display = 'none';
@@ -172,7 +173,8 @@ export function createQuickAddZones(
     hide,
     keyboardShowAt(seconds: number) {
       quickAddSeconds = seconds;
-      const date = fromAbsoluteSeconds(seconds);
+      const cal = CalendarProvider.get();
+      const date = cal.fromEpochSeconds(seconds);
       const labelText = `${formatAxisDay(date)} ${formatAxisHour(date)}`;
       shiftPreview.style.display = 'none';
       shiftPreviewSeconds = null;

@@ -1,9 +1,11 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createReschedule } from '../reschedule';
 import type { RescheduleDeps } from '../reschedule';
 import type { ViewState, ViewportSize } from '../../math/zoom';
 import type { EventListItem } from '../../data/types';
+import { CalendarProvider } from '../../calendar/provider';
+import { createCalendar, golarionSpec } from '../../../../shared/calendar';
 
 // ---- Helpers ----
 
@@ -29,8 +31,14 @@ function makeSize(): ViewportSize {
   return { width: 1000, height: 600 };
 }
 
-function makeEvent(filename: string, date: string): EventListItem {
-  return { filename, title: 'Test', date, mtime: '2026-01-01T00:00:00Z' };
+function makeEvent(filename: string, date: string, epochSeconds?: number): EventListItem {
+  return {
+    filename,
+    title: 'Test',
+    date,
+    mtime: '2026-01-01T00:00:00Z',
+    ...(epochSeconds !== undefined ? { epochSeconds } : {}),
+  };
 }
 
 function makeCard(container: HTMLElement, filename: string): HTMLElement {
@@ -112,6 +120,11 @@ function esc() {
 
 beforeEach(() => {
   document.body.innerHTML = '';
+  CalendarProvider.init(createCalendar(golarionSpec));
+});
+
+afterEach(() => {
+  CalendarProvider._reset();
 });
 
 describe('createReschedule — initial state', () => {
@@ -388,5 +401,46 @@ describe('createReschedule — destroy', () => {
     move(600);
     await up();
     expect(saveReschedule).not.toHaveBeenCalled();
+  });
+});
+
+describe('createReschedule — epochSeconds round-trip', () => {
+  it('reads epochSeconds from the event instead of parsing date when both are present', async () => {
+    const cal = CalendarProvider.get();
+    const d = cal.tryParse('4726-05-04');
+    if (!d) throw new Error('parse failed');
+    const secs = cal.toEpochSeconds(d);
+
+    // Event has epochSeconds set; drag to a new position
+    const ev = makeEvent('a.md', '4726-05-04', secs);
+    const { container, saveReschedule } = setup([ev]);
+    const card = makeCard(container, 'a.md');
+    shiftDown(card, 500);
+    move(600);
+    await up();
+
+    expect(saveReschedule).toHaveBeenCalledOnce();
+    const newSecs = (saveReschedule.mock.calls[0] as [string, number])[1];
+    // The new seconds round-trips through the calendar: format then re-parse gives same value
+    const newDate = cal.fromEpochSeconds(newSecs);
+    const isoStr = cal.format(newDate);
+    const reparsed = cal.tryParse(isoStr);
+    expect(reparsed).not.toBeNull();
+    expect(cal.toEpochSeconds(reparsed!)).toBe(newSecs);
+  });
+
+  it('falls back to date string when epochSeconds is absent on the event', async () => {
+    // No epochSeconds — must parse date
+    const ev = makeEvent('a.md', '4726-05-04');
+    const { container, saveReschedule } = setup([ev]);
+    const card = makeCard(container, 'a.md');
+    shiftDown(card, 500);
+    move(600);
+    await up();
+
+    expect(saveReschedule).toHaveBeenCalledOnce();
+    const newSecs = (saveReschedule.mock.calls[0] as [string, number])[1];
+    expect(typeof newSecs).toBe('number');
+    expect(newSecs % 900).toBe(0); // snapped to 15 min
   });
 });
