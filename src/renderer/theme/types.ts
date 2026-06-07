@@ -1,12 +1,8 @@
-export interface WeekdayColors {
-  monday: string;
-  tuesday: string;
-  wednesday: string;
-  thursday: string;
-  friday: string;
-  saturday: string;
-  sunday: string;
-}
+/**
+ * One colour per weekday index (0 = first weekday in the calendar's week, N-1 = last).
+ * The array length must equal the calendar's weekLength().
+ */
+export type WeekdayColors = string[];
 
 export interface KindColors {
   pc: string;

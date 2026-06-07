@@ -663,16 +663,16 @@ describe('getColorPresetValue', () => {
 // ---- weekdayColorForDateText ----
 
 describe('weekdayColorForDateText', () => {
-  // Seven distinct sentinel hexes, one per weekday (Golarion week: mon…sun).
-  const fakeWeekdays: WeekdayColors = {
-    monday: '#aa0001',
-    tuesday: '#aa0002',
-    wednesday: '#aa0003',
-    thursday: '#aa0004',
-    friday: '#aa0005',
-    saturday: '#aa0006',
-    sunday: '#aa0007',
-  };
+  // Seven distinct sentinel hexes, one per weekday index (Golarion week: mon=0…sun=6).
+  const fakeWeekdays: WeekdayColors = [
+    '#aa0001', // 0 — monday
+    '#aa0002', // 1 — tuesday
+    '#aa0003', // 2 — wednesday
+    '#aa0004', // 3 — thursday
+    '#aa0005', // 4 — friday
+    '#aa0006', // 5 — saturday
+    '#aa0007', // 6 — sunday
+  ];
 
   it('returns null for an empty string', () => {
     expect(weekdayColorForDateText('', fakeWeekdays)).toBeNull();

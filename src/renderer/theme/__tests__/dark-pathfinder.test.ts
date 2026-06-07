@@ -29,10 +29,10 @@ describe('darkPathfinder', () => {
     expect(darkPathfinder.name).toBe('Darkfinder');
   });
 
-  it('defines all 7 weekday colors', () => {
+  it('defines all 7 weekday colours as an array of valid 6-digit hex values', () => {
     const days = darkPathfinder.timeline.days;
-    expect(Object.keys(days)).toHaveLength(7);
-    for (const color of Object.values(days)) {
+    expect(days).toHaveLength(7);
+    for (const color of days) {
       expect(color).toMatch(/^#[0-9a-fA-F]{6}$/);
     }
   });

@@ -31,15 +31,15 @@ export const lightfinder: Theme = {
   },
 
   timeline: {
-    days: {
-      monday: '#1e5a8e',
-      tuesday: '#6a4220',
-      wednesday: '#825a08',
-      thursday: '#1e455a',
-      friday: '#82241a',
-      saturday: '#3e2a68',
-      sunday: '#946a10',
-    },
+    days: [
+      '#1e5a8e', // index 0 — monday
+      '#6a4220', // index 1 — tuesday
+      '#825a08', // index 2 — wednesday
+      '#1e455a', // index 3 — thursday
+      '#82241a', // index 4 — friday
+      '#3e2a68', // index 5 — saturday
+      '#946a10', // index 6 — sunday
+    ],
     sessions: ['#3a4e2a', '#4a2e4e', '#4a3618', '#1f4038', '#4e1f18'],
     eventColorPresets: [
       { label: 'Default (weekday)', value: '' },

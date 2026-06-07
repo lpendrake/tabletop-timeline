@@ -23,15 +23,15 @@ export const darkPathfinder: Theme = {
   },
 
   timeline: {
-    days: {
-      monday: '#8da8c4',
-      tuesday: '#a07850',
-      wednesday: '#d4a850',
-      thursday: '#5a8090',
-      friday: '#c06040',
-      saturday: '#7560a0',
-      sunday: '#e5b860',
-    },
+    days: [
+      '#8da8c4', // index 0 — monday
+      '#a07850', // index 1 — tuesday
+      '#d4a850', // index 2 — wednesday
+      '#5a8090', // index 3 — thursday
+      '#c06040', // index 4 — friday
+      '#7560a0', // index 5 — saturday
+      '#e5b860', // index 6 — sunday
+    ],
     sessions: [
       '#6b7c5a', // sage
       '#7a5c7a', // plum
