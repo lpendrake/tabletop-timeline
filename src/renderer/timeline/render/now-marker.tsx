@@ -2,7 +2,7 @@ import type { ReactElement, MouseEvent } from 'react';
 import './now-marker.css';
 import type { ViewState, ViewportSize } from '../math/zoom';
 import { secondsToX } from '../math/zoom';
-import { parseISOString } from '../calendar/golarian';
+import { CalendarProvider } from '../calendar/provider';
 import { formatNowMarker } from '../calendar/format';
 
 export interface NowMarkerLayout {
@@ -31,7 +31,10 @@ export function computeNowMarkerLayout(
   if (x < 0 || x > size.width) return null;
 
   const axisY = Math.floor(size.height * 0.8);
-  const [dayMonth, year, time] = formatNowMarker(parseISOString(inGameNow));
+  const cal = CalendarProvider.get();
+  // Prefer the pre-computed seconds; fall back to parsing the ISO string.
+  const date = cal.fromEpochSeconds(inGameNowSeconds);
+  const [dayMonth, year, time] = formatNowMarker(date);
 
   return {
     x,

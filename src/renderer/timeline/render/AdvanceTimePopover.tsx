@@ -1,11 +1,6 @@
 import { useState, useEffect, useRef, useMemo, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
-import {
-  parseISOString,
-  toISOString,
-  toAbsoluteSeconds,
-  fromAbsoluteSeconds,
-} from '../calendar/golarian';
+import { CalendarProvider } from '../calendar/provider';
 import { formatExpanded } from '../calendar/format';
 import './AdvanceTimePopover.css';
 
@@ -17,20 +12,19 @@ interface AdvanceTimePopoverProps {
   onClose: () => void;
 }
 
-const QUICK_DELTAS: { label: string; delta: number }[] = [
-  { label: '+1 min', delta: 60 },
-  { label: '+10 min', delta: 600 },
-  { label: '+1 hour', delta: 3600 },
-  { label: '+1 day', delta: 86400 },
-  { label: '+1 week', delta: 7 * 86400 },
-];
-
 /** Parse "+5h", "+2d", "+30m", "+1w" style relative deltas. Returns seconds or null. */
 export function parseRelativeDelta(s: string): number | null {
   const m = /^\+\s*(\d+)\s*([mhdw])$/i.exec(s.trim());
   if (!m) return null;
   const n = parseInt(m[1], 10);
-  const multipliers: Record<string, number> = { m: 60, h: 3600, d: 86400, w: 7 * 86400 };
+  const cal = CalendarProvider.get();
+  const spd = cal.secondsPerDay();
+  const multipliers: Record<string, number> = {
+    m: 60,
+    h: 3600,
+    d: spd,
+    w: cal.weekLength() * spd,
+  };
   return n * multipliers[m[2].toLowerCase()];
 }
 
@@ -41,7 +35,13 @@ export function AdvanceTimePopover({
   onClose,
 }: AdvanceTimePopoverProps) {
   const popoverRef = useRef<HTMLDivElement>(null);
-  const baseSecs = useMemo(() => toAbsoluteSeconds(parseISOString(currentNow)), [currentNow]);
+
+  const baseSecs = useMemo(() => {
+    const cal = CalendarProvider.get();
+    const parsed = cal.tryParse(currentNow);
+    return parsed !== null ? cal.toEpochSeconds(parsed) : 0;
+  }, [currentNow]);
+
   const [pendingSecs, setPendingSecs] = useState(baseSecs);
   const [inputValue, setInputValue] = useState(currentNow);
   const [inputError, setInputError] = useState(false);
@@ -73,9 +73,10 @@ export function AdvanceTimePopover({
   }, [onClose]);
 
   function applyDelta(delta: number) {
+    const cal = CalendarProvider.get();
     const next = pendingSecs + delta;
     setPendingSecs(next);
-    setInputValue(toISOString(fromAbsoluteSeconds(next)));
+    setInputValue(cal.format(cal.fromEpochSeconds(next)));
     setInputError(false);
   }
 
@@ -88,12 +89,13 @@ export function AdvanceTimePopover({
       setInputError(false);
       return;
     }
-    // Fall back to absolute ISO date
-    try {
-      const d = parseISOString(value.trim());
-      setPendingSecs(toAbsoluteSeconds(d));
+    // Fall back to absolute date
+    const cal = CalendarProvider.get();
+    const parsed = cal.tryParse(value.trim());
+    if (parsed !== null) {
+      setPendingSecs(cal.toEpochSeconds(parsed));
       setInputError(false);
-    } catch {
+    } else {
       setInputError(true);
     }
   }
@@ -102,7 +104,8 @@ export function AdvanceTimePopover({
     if (inputError || saving) return;
     setSaving(true);
     try {
-      await onSave(toISOString(fromAbsoluteSeconds(pendingSecs)));
+      const cal = CalendarProvider.get();
+      await onSave(cal.format(cal.fromEpochSeconds(pendingSecs)));
       onClose();
     } catch {
       // parent error toast surfaces the failure; keep popover open
@@ -110,6 +113,17 @@ export function AdvanceTimePopover({
       setSaving(false);
     }
   }
+
+  // Build quick-delta buttons from the active calendar
+  const cal = CalendarProvider.get();
+  const spd = cal.secondsPerDay();
+  const quickDeltas: { label: string; delta: number }[] = [
+    { label: '+1 min', delta: 60 },
+    { label: '+10 min', delta: 600 },
+    { label: '+1 hour', delta: 3600 },
+    { label: '+1 day', delta: spd },
+    { label: '+1 week', delta: cal.weekLength() * spd },
+  ];
 
   const popoverWidth = 300;
   const left = Math.min(anchor.x, window.innerWidth - popoverWidth - 12);
@@ -123,9 +137,9 @@ export function AdvanceTimePopover({
   return createPortal(
     <div ref={popoverRef} className="advance-time-popover" style={style}>
       <div className="atp-title">Advance Time</div>
-      <div className="atp-current">{formatExpanded(fromAbsoluteSeconds(pendingSecs))}</div>
+      <div className="atp-current">{formatExpanded(cal.fromEpochSeconds(pendingSecs))}</div>
       <div className="atp-quick-row">
-        {QUICK_DELTAS.map(({ label, delta }) => (
+        {quickDeltas.map(({ label, delta }) => (
           <button key={label} onClick={() => applyDelta(delta)}>
             {label}
           </button>

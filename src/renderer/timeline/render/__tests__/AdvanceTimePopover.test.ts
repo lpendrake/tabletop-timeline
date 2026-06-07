@@ -1,62 +1,96 @@
-import { describe, it, expect } from 'vitest';
-import {
-  parseISOString,
-  toISOString,
-  toAbsoluteSeconds,
-  fromAbsoluteSeconds,
-} from '../../calendar/golarian';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { CalendarProvider } from '../../calendar/provider';
 import { formatExpanded } from '../../calendar/format';
 import { parseRelativeDelta } from '../AdvanceTimePopover';
 
-const BASE_ISO = '4726-05-04T12:00:00';
-const BASE_SECS = toAbsoluteSeconds(parseISOString(BASE_ISO));
+beforeEach(() => {
+  CalendarProvider._reset();
+});
+afterEach(() => {
+  CalendarProvider._reset();
+});
 
-function applyDelta(baseSeconds: number, delta: number): string {
-  return toISOString(fromAbsoluteSeconds(baseSeconds + delta));
+function calParse(iso: string) {
+  const cal = CalendarProvider.get();
+  const d = cal.tryParse(iso);
+  if (!d) throw new Error(`Cannot parse: ${iso}`);
+  return d;
 }
+
+function calSeconds(iso: string): number {
+  const cal = CalendarProvider.get();
+  return cal.toEpochSeconds(calParse(iso));
+}
+
+function calFromSeconds(secs: number) {
+  return CalendarProvider.get().fromEpochSeconds(secs);
+}
+
+function calFormat(secs: number): string {
+  const cal = CalendarProvider.get();
+  return cal.format(calFromSeconds(secs));
+}
+
+const BASE_ISO = '4726-05-04T12:00:00';
 
 describe('AdvanceTimePopover — quick delta buttons', () => {
   it('+1 min advances by 60 seconds', () => {
-    const result = applyDelta(BASE_SECS, 60);
-    const parsed = parseISOString(result);
-    expect(parsed.hour).toBe(12);
-    expect(parsed.minute).toBe(1);
+    const base = calSeconds(BASE_ISO);
+    const result = calFromSeconds(base + 60);
+    expect(result.hour).toBe(12);
+    expect(result.minute).toBe(1);
   });
 
   it('+10 min advances by 600 seconds', () => {
-    const result = applyDelta(BASE_SECS, 600);
-    expect(parseISOString(result).minute).toBe(10);
+    const base = calSeconds(BASE_ISO);
+    const result = calFromSeconds(base + 600);
+    expect(result.minute).toBe(10);
   });
 
   it('+1 hour advances by 3600 seconds', () => {
-    const result = applyDelta(BASE_SECS, 3600);
-    expect(parseISOString(result).hour).toBe(13);
+    const base = calSeconds(BASE_ISO);
+    const result = calFromSeconds(base + 3600);
+    expect(result.hour).toBe(13);
   });
 
   it('+1 day advances to the next calendar day', () => {
-    const result = applyDelta(BASE_SECS, 86400);
-    const parsed = parseISOString(result);
-    expect(parsed.day).toBe(5);
-    expect(parsed.month).toBe(5);
+    const cal = CalendarProvider.get();
+    const base = calSeconds(BASE_ISO);
+    const result = calFromSeconds(base + cal.secondsPerDay());
+    if (result.kind !== 'month') throw new Error('Expected month date');
+    expect(result.day).toBe(5);
+    expect(result.month).toBe(5);
   });
 
-  it('+1 week advances by 7 days', () => {
-    const result = applyDelta(BASE_SECS, 7 * 86400);
-    expect(parseISOString(result).day).toBe(11);
+  it('+1 week advances by weekLength * secondsPerDay', () => {
+    const cal = CalendarProvider.get();
+    const base = calSeconds(BASE_ISO);
+    const delta = cal.weekLength() * cal.secondsPerDay();
+    const result = calFromSeconds(base + delta);
+    if (result.kind !== 'month') throw new Error('Expected month date');
+    // Golarion: 7 days * 86400s = 604800s, so day 4+7=11
+    expect(result.day).toBe(11);
+    expect(result.month).toBe(5);
   });
 
   it('applying the same delta twice accumulates (each click adds more)', () => {
-    const after1 = toAbsoluteSeconds(parseISOString(applyDelta(BASE_SECS, 86400)));
-    const after2 = toAbsoluteSeconds(parseISOString(applyDelta(after1, 86400)));
-    expect(parseISOString(toISOString(fromAbsoluteSeconds(after2))).day).toBe(6);
+    const cal = CalendarProvider.get();
+    const base = calSeconds(BASE_ISO);
+    const spd = cal.secondsPerDay();
+    const after1 = base + spd;
+    const after2 = after1 + spd;
+    const result = calFromSeconds(after2);
+    if (result.kind !== 'month') throw new Error('Expected month date');
+    expect(result.day).toBe(6);
   });
 
   it('delta crossing a month boundary rolls over correctly', () => {
-    const endOfMonth = toAbsoluteSeconds(parseISOString('4726-05-31T12:00:00'));
-    const result = applyDelta(endOfMonth, 86400);
-    const parsed = parseISOString(result);
-    expect(parsed.day).toBe(1);
-    expect(parsed.month).toBe(6);
+    const cal = CalendarProvider.get();
+    const endOfMonth = calSeconds('4726-05-31T12:00:00');
+    const result = calFromSeconds(endOfMonth + cal.secondsPerDay());
+    if (result.kind !== 'month') throw new Error('Expected month date');
+    expect(result.day).toBe(1);
+    expect(result.month).toBe(6);
   });
 });
 
@@ -69,12 +103,14 @@ describe('parseRelativeDelta', () => {
     expect(parseRelativeDelta('+6h')).toBe(6 * 3600);
   });
 
-  it('parses +1d as 86400 seconds', () => {
-    expect(parseRelativeDelta('+1d')).toBe(86400);
+  it('parses +1d as secondsPerDay for the active calendar', () => {
+    const cal = CalendarProvider.get();
+    expect(parseRelativeDelta('+1d')).toBe(cal.secondsPerDay());
   });
 
-  it('parses +1w as 7 days', () => {
-    expect(parseRelativeDelta('+1w')).toBe(7 * 86400);
+  it('parses +1w as weekLength * secondsPerDay for the active calendar', () => {
+    const cal = CalendarProvider.get();
+    expect(parseRelativeDelta('+1w')).toBe(cal.weekLength() * cal.secondsPerDay());
   });
 
   it('parses +30m as 1800 seconds', () => {
@@ -82,8 +118,9 @@ describe('parseRelativeDelta', () => {
   });
 
   it('is case-insensitive for the unit', () => {
+    const cal = CalendarProvider.get();
     expect(parseRelativeDelta('+2H')).toBe(2 * 3600);
-    expect(parseRelativeDelta('+3D')).toBe(3 * 86400);
+    expect(parseRelativeDelta('+3D')).toBe(3 * cal.secondsPerDay());
   });
 
   it('tolerates whitespace inside the expression', () => {
@@ -105,40 +142,52 @@ describe('parseRelativeDelta', () => {
   });
 });
 
-describe('AdvanceTimePopover — direct ISO input parsing', () => {
+describe('AdvanceTimePopover — direct ISO input parsing via calendar', () => {
   it('parses a full ISO datetime string', () => {
-    const parsed = parseISOString('4726-06-15T09:30:00');
+    const parsed = calParse('4726-06-15T09:30:00');
     expect(parsed.year).toBe(4726);
     expect(parsed.hour).toBe(9);
     expect(parsed.minute).toBe(30);
   });
 
   it('parses a date-only string (time defaults to 00:00:00)', () => {
-    const parsed = parseISOString('4726-06-15');
+    const parsed = calParse('4726-06-15');
     expect(parsed.hour).toBe(0);
     expect(parsed.minute).toBe(0);
   });
 
-  it('throws on invalid input', () => {
-    expect(() => parseISOString('not-a-date')).toThrow();
+  it('returns null for invalid input', () => {
+    const cal = CalendarProvider.get();
+    expect(cal.tryParse('not-a-date')).toBeNull();
   });
 
-  it('round-trips: toISOString ∘ parseISOString is stable', () => {
-    const iso = toISOString(parseISOString(BASE_ISO));
-    expect(toISOString(parseISOString(iso))).toBe(iso);
+  it('round-trips: format ∘ parse is stable', () => {
+    const cal = CalendarProvider.get();
+    const iso = calFormat(calSeconds(BASE_ISO));
+    expect(iso).toBe(cal.format(cal.tryParse(iso)!));
   });
 });
 
 describe('AdvanceTimePopover — display formatting', () => {
   it('includes year, month name and time in expanded format', () => {
-    const formatted = formatExpanded(fromAbsoluteSeconds(BASE_SECS));
+    const formatted = formatExpanded(calFromSeconds(calSeconds(BASE_ISO)));
     expect(formatted).toContain('4726');
     expect(formatted).toContain('Desnus');
     expect(formatted).toContain('12:00');
   });
 
   it('omits time when hour is midnight', () => {
-    const midnight = toAbsoluteSeconds(parseISOString('4726-05-04'));
-    expect(formatExpanded(fromAbsoluteSeconds(midnight))).not.toContain(':');
+    const midnight = calSeconds('4726-05-04');
+    expect(formatExpanded(calFromSeconds(midnight))).not.toContain(':');
+  });
+});
+
+describe('parseRelativeDelta — +1w advances by weekLength * secondsPerDay', () => {
+  it('Golarion default: +1w = 7 * 86400 = 604800', () => {
+    const cal = CalendarProvider.get();
+    const delta = parseRelativeDelta('+1w');
+    expect(delta).toBe(cal.weekLength() * cal.secondsPerDay());
+    // Golarion has 7-day weeks and 86400s/day
+    expect(delta).toBe(7 * 86400);
   });
 });

@@ -1,7 +1,7 @@
 import type { EventListItem, Session } from '../data/types';
 import type { ViewState, ViewportSize } from '../math/zoom';
 import { secondsToX } from '../math/zoom';
-import { parseISOString, toAbsoluteSeconds, tryParseSeconds } from '../calendar/golarian';
+import { CalendarProvider } from '../calendar/provider';
 import { formatCompactWithTime } from '../calendar/format';
 
 export interface SessionBand {
@@ -52,6 +52,22 @@ export const MONTHS_SHORT = [
   'Dec',
 ];
 
+/** Resolve epoch seconds for a session boundary string, preferring the pre-computed field. */
+function sessionBoundarySeconds(precomputed: number | undefined, isoFallback: string): number {
+  if (typeof precomputed === 'number') return precomputed;
+  const cal = CalendarProvider.get();
+  const parsed = cal.tryParse(isoFallback);
+  return parsed !== null ? cal.toEpochSeconds(parsed) : 0;
+}
+
+/** Resolve epoch seconds for an event, preferring the pre-computed field. */
+function eventSeconds(ev: EventListItem): number | null {
+  if (typeof ev.epochSeconds === 'number') return ev.epochSeconds;
+  const cal = CalendarProvider.get();
+  const parsed = cal.tryParse(ev.date);
+  return parsed !== null ? cal.toEpochSeconds(parsed) : null;
+}
+
 export function computeSessionBandsFromSessions(
   sessions: Session[],
   events: EventListItem[],
@@ -59,12 +75,12 @@ export function computeSessionBandsFromSessions(
   return sessions
     .filter((s) => !!s.inGameStart)
     .map((s) => {
-      const startSeconds = toAbsoluteSeconds(parseISOString(s.inGameStart));
+      const startSeconds = sessionBoundarySeconds(s.inGameStartSeconds, s.inGameStart);
       const endSeconds = s.inGameEnd
-        ? toAbsoluteSeconds(parseISOString(s.inGameEnd))
+        ? sessionBoundarySeconds(s.inGameEndSeconds, s.inGameEnd)
         : startSeconds;
       const eventCount = events.filter((ev) => {
-        const secs = tryParseSeconds(ev.date);
+        const secs = eventSeconds(ev);
         return secs !== null && secs >= startSeconds && secs <= endSeconds;
       }).length;
       return { sessionId: s.id, startSeconds, endSeconds, eventCount, color: s.color };
@@ -95,9 +111,8 @@ export function sessionTagsForSeconds(seconds: number, sessions: Session[]): str
   return sessions
     .filter((s) => {
       if (!s.inGameStart) return false;
-      const start = tryParseSeconds(s.inGameStart);
-      if (start === null) return false;
-      const end = s.inGameEnd ? (tryParseSeconds(s.inGameEnd) ?? start) : start;
+      const start = sessionBoundarySeconds(s.inGameStartSeconds, s.inGameStart);
+      const end = s.inGameEnd ? sessionBoundarySeconds(s.inGameEndSeconds, s.inGameEnd) : start;
       return seconds >= start && seconds <= end;
     })
     .map((s) => `sesh:${computeSessionLabel(s, sessions)}`);
@@ -119,9 +134,14 @@ export function formatRealRange(realStart: string, realEnd: string): string {
 
 export function formatGameRange(inGameStart: string, inGameEnd: string): string {
   try {
-    const s = formatCompactWithTime(parseISOString(inGameStart));
+    const cal = CalendarProvider.get();
+    const startDate = cal.tryParse(inGameStart);
+    if (startDate === null) return inGameStart;
+    const s = formatCompactWithTime(startDate);
     if (inGameStart === inGameEnd) return `${s} (instant)`;
-    const e = formatCompactWithTime(parseISOString(inGameEnd));
+    const endDate = cal.tryParse(inGameEnd);
+    if (endDate === null) return inGameStart;
+    const e = formatCompactWithTime(endDate);
     return `${s} – ${e}`;
   } catch {
     return inGameStart;

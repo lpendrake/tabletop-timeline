@@ -1,8 +1,10 @@
+import { CalendarProvider } from '../calendar/provider';
+
 /**
  * Zoom/pan state for the timeline.
  *
  * Coordinate system:
- *  - Domain: absolute seconds since Golarian epoch (year 0, Abadius 1).
+ *  - Domain: absolute seconds since epoch (year 0, first day of year).
  *  - Range: pixel x within the viewport.
  *  - `centerSeconds` = the seconds-value rendered at viewport x = centerX.
  *  - `secondsPerPixel` = scale factor. Smaller = more zoomed in.
@@ -54,8 +56,8 @@ export function panByPixels(view: ViewState, deltaPixels: number): ViewState {
 /** Clamp scale so we can't zoom past sensible limits. */
 function clampScale(s: number): number {
   const MIN = 1;
-  const MAX = 30 * 86400;
-  return Math.max(MIN, Math.min(MAX, s));
+  const max = 30 * CalendarProvider.get().secondsPerDay();
+  return Math.max(MIN, Math.min(max, s));
 }
 
 export const SECONDS_PER_DAY = 86400;
