@@ -23,6 +23,8 @@ Before doing anything else, fetch both the **body** and the **labels** of the is
 
 **Truncated issue bodies:** If the body seems to cut off mid-sentence, the issue likely contains angle-bracket placeholders (e.g. `<title>`) that GitHub's HTML pipeline strips. The owner will fix these by replacing `<>` with `[]`. If the body still seems incomplete, ask rather than guessing.
 
+**Angle brackets when writing issue bodies:** GitHub's HTML pipeline treats bare `<...>` in issue/PR text as HTML tags and silently strips them. When you author or edit an issue body that needs to show a literal angle-bracket token (e.g. the `<title>` template marker), always wrap it in an inline code span or a fenced code block — code spans/blocks are preserved verbatim, prose is not.
+
 **Images in issues:** `github.com/user-attachments` URLs require a two-step fetch. Call `WebFetch` on the URL — it will return a 302 redirect to a signed S3 URL. Call `WebFetch` again on that S3 URL; the image is downloaded and the path is reported in the result. Then use `Read` on that path to view the image. Do not give up after the first redirect — the image is always retrievable this way.
 
 ### 2. Read the oversight mode from the labels
