@@ -1,5 +1,5 @@
 import type { Migration } from './migration.js';
-import { sampleMigration } from './sample-migration.js';
+import { sampleMigration } from './migrations/0001-sample-migration.js';
 
 /** All migrations, ascending by targetVersion. Append new migrations here. */
 export const MIGRATIONS: Migration[] = [sampleMigration].sort(

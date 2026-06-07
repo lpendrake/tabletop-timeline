@@ -1,4 +1,4 @@
-# `src/main/migrations/` — Campaign Migration Framework
+# `src/main/migration/` — Campaign Migration Framework
 
 Automatically upgrades campaigns from older versions of the data format to the current
 version whenever a campaign is opened. Each migration is a discrete, idempotent step
@@ -7,13 +7,14 @@ that the framework runs once, in order, before the entity index is built.
 ## Directory layout
 
 ```
-migrations/
+migration/
   migration.ts               # Migration interface (the contract)
   campaign-version.ts        # getCampaignVersion / setCampaignVersion helpers
-  sample-migration.ts        # No-op sample: documents the pattern; targetVersion 1
   registry.ts                # MIGRATIONS array + LATEST_VERSION constant
   build-migration-tasks.ts   # Core of the framework: produces NamedTask[]
   AGENTS.md                  # This file
+  migrations/
+    0001-sample-migration.ts # No-op sample: documents the pattern; targetVersion 1
   __tests__/
     campaign-version.test.ts
     build-migration-tasks.test.ts
@@ -65,7 +66,10 @@ interface Migration {
 
 ## How to add a new migration
 
-1. Create `src/main/migrations/<kebab-case-description>.ts` exporting a `Migration`.
+1. Create `src/main/migration/migrations/NNNN-<kebab-description>.ts` exporting a
+   `Migration`, where `NNNN` is the zero-padded 4-digit target version number (e.g.
+   `0002-my-migration.ts`). This prefix keeps files sort-friendly. Use
+   `0001-sample-migration.ts` as the template.
    - Choose the next integer for `targetVersion` (look at `LATEST_VERSION` in
      `registry.ts`).
    - Make `run` idempotent and throw on unrecoverable data.
@@ -80,8 +84,8 @@ interface Migration {
 
 - File names: kebab-case `.ts` (no React, no Electron APIs — pure Node.js file I/O).
 - Relative imports use `.js` extensions (NodeNext ESM).
-- Use `readJsonObject` / `writeJsonObject` from `../settings-json.js` for all
+- Use `readJsonObject` / `writeJsonObject` from `../settings/settings-json.js` for all
   `settings.json` access — never call `fs` directly for that file.
-- Do not modify files outside `src/main/migrations/` from within a migration; if
+- Do not modify files outside `src/main/migration/` from within a migration; if
   broader wiring is needed (e.g. stamping new campaigns), update the relevant IPC
   handler separately.

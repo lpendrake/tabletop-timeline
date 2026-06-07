@@ -14,9 +14,9 @@ import {
   getCampaignTheme,
   setCampaignTheme,
   getCampaignOverrides,
-} from './theme-settings.js';
-import { setCampaignVersion } from './migrations/campaign-version.js';
-import { LATEST_VERSION } from './migrations/registry.js';
+} from './settings/theme-settings.js';
+import { setCampaignVersion } from './migration/campaign-version.js';
+import { LATEST_VERSION } from './migration/registry.js';
 
 const { autoUpdater } = pkg;
 

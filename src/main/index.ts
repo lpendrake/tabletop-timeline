@@ -10,7 +10,7 @@ import { getCampaignPath, setCampaignPath } from './campaign-state.js';
 import { CampaignLoader } from './campaign-loader.js';
 import { buildEntityIndex } from './entity-index.js';
 import type { EntityIndexEntry } from './entity-index.js';
-import { buildMigrationTasks } from './migrations/build-migration-tasks.js';
+import { buildMigrationTasks } from './migration/build-migration-tasks.js';
 
 protocol.registerSchemesAsPrivileged([
   {

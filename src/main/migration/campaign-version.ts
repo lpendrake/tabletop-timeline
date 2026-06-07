@@ -1,5 +1,5 @@
 import * as path from 'node:path';
-import { readJsonObject, writeJsonObject } from '../settings-json.js';
+import { readJsonObject, writeJsonObject } from '../settings/settings-json.js';
 
 /**
  * Returns the `version` stored in `<campaignPath>/settings.json`.

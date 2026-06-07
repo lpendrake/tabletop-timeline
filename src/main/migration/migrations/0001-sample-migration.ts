@@ -1,4 +1,4 @@
-import type { Migration } from './migration.js';
+import type { Migration } from '../migration.js';
 
 export const sampleMigration: Migration = {
   name: 'Sample migration',

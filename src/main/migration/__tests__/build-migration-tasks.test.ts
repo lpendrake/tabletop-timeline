@@ -4,7 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { buildMigrationTasks } from '../build-migration-tasks.js';
 import { getCampaignVersion, setCampaignVersion } from '../campaign-version.js';
-import { sampleMigration } from '../sample-migration.js';
+import { sampleMigration } from '../migrations/0001-sample-migration.js';
 import type { Migration } from '../migration.js';
 
 const tmpDirs: string[] = [];
