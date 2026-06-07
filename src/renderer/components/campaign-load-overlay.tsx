@@ -8,7 +8,7 @@ interface CampaignLoadOverlayProps {
   result: 'idle' | 'loading' | 'success' | 'error';
   progress: { percentage: number; taskName: string };
   errorMessage: string | null;
-  fileCount: number;
+  messages: string[];
   onDismissNotification: () => void;
 }
 
@@ -16,7 +16,7 @@ export function CampaignLoadOverlay({
   result,
   progress,
   errorMessage,
-  fileCount,
+  messages,
   onDismissNotification,
 }: CampaignLoadOverlayProps) {
   const [phase, setPhase] = useState<Phase>('idle');
@@ -130,7 +130,13 @@ export function CampaignLoadOverlay({
             />
             <div className="campaign-load-notification-text">
               <span style={{ color: bs.text }}>Campaign loaded</span>
-              <span style={{ color: bs.textMuted }}>{fileCount} files indexed</span>
+              {messages.flatMap((msg, i) =>
+                msg.split('\n').map((line, j) => (
+                  <span key={`${i}-${j}`} style={{ color: bs.textMuted }}>
+                    {line}
+                  </span>
+                )),
+              )}
             </div>
             <button
               className="campaign-load-notification-dismiss"

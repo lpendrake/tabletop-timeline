@@ -24,7 +24,7 @@ const defaultProps = {
   result: 'idle' as const,
   progress: { percentage: 0, taskName: '' },
   errorMessage: null,
-  fileCount: 0,
+  messages: [],
   onDismissNotification: () => {},
 };
 
@@ -71,7 +71,9 @@ describe('CampaignLoadOverlay', () => {
     setup();
     act(() => root.render(<CampaignLoadOverlay {...defaultProps} result="loading" />));
     act(() =>
-      root.render(<CampaignLoadOverlay {...defaultProps} result="success" fileCount={42} />),
+      root.render(
+        <CampaignLoadOverlay {...defaultProps} result="success" messages={['42 files indexed']} />,
+      ),
     );
     // Advance past mask-fading delay (200ms) — in happy-dom from.width=0 so
     // the FLIP guard immediately sets phase to 'notification'
@@ -81,6 +83,39 @@ describe('CampaignLoadOverlay', () => {
     expect(container.textContent).toContain('Campaign loaded');
     expect(container.textContent).toContain('42 files indexed');
     expect(container.querySelector('.campaign-load-mask')).toBeNull();
+  });
+
+  it('renders all message lines including multi-line migration messages', async () => {
+    setup();
+    act(() => root.render(<CampaignLoadOverlay {...defaultProps} result="loading" />));
+    act(() =>
+      root.render(
+        <CampaignLoadOverlay
+          {...defaultProps}
+          result="success"
+          messages={['Ran migration 1: Sample migration\nresult: no changes', '42 files indexed']}
+        />,
+      ),
+    );
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(container.textContent).toContain('Campaign loaded');
+    expect(container.textContent).toContain('Ran migration 1: Sample migration');
+    expect(container.textContent).toContain('result: no changes');
+    expect(container.textContent).toContain('42 files indexed');
+  });
+
+  it('renders Campaign loaded without crashing when messages is empty', async () => {
+    setup();
+    act(() => root.render(<CampaignLoadOverlay {...defaultProps} result="loading" />));
+    act(() =>
+      root.render(<CampaignLoadOverlay {...defaultProps} result="success" messages={[]} />),
+    );
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(container.textContent).toContain('Campaign loaded');
   });
 
   it('mask is fading but box still shows loading content before morph', () => {

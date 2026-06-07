@@ -39,6 +39,7 @@ export default function App() {
     loadResult,
     loadError,
     pendingEntityIndex,
+    pendingLoadMessages,
     dismissLoadNotification,
     handleSetRootDir,
     handleCreateCampaign,
@@ -312,7 +313,7 @@ export default function App() {
         result={loadResult}
         progress={loadProgress}
         errorMessage={loadError}
-        fileCount={pendingEntityIndex?.length ?? 0}
+        messages={pendingLoadMessages}
         onDismissNotification={dismissLoadNotification}
       />
     </>
