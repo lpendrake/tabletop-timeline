@@ -1,6 +1,8 @@
 import type { WebContents } from 'electron';
 
-export type LoadingTask = (onProgress: (completed: number, total: number) => void) => Promise<void>;
+export type LoadingTask = (
+  onProgress: (completed: number, total: number) => void,
+) => Promise<string | void>;
 
 export interface NamedTask {
   name: string;
@@ -10,8 +12,9 @@ export interface NamedTask {
 export class CampaignLoader {
   constructor(private readonly tasks: NamedTask[]) {}
 
-  async run(webContents: WebContents): Promise<void> {
+  async run(webContents: WebContents): Promise<string[]> {
     const progress = this.tasks.map(() => ({ completed: 0, total: 0 }));
+    const summaries: string[] = [];
 
     const sendProgress = (taskName: string) => {
       const totalCompleted = progress.reduce((sum, p) => sum + p.completed, 0);
@@ -23,10 +26,13 @@ export class CampaignLoader {
     try {
       for (let i = 0; i < this.tasks.length; i++) {
         const { name, task } = this.tasks[i];
-        await task((completed, total) => {
+        const result = await task((completed, total) => {
           progress[i] = { completed, total };
           sendProgress(name);
         });
+        if (result) {
+          summaries.push(result);
+        }
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -35,5 +41,6 @@ export class CampaignLoader {
     }
 
     webContents.send('campaign:loadComplete');
+    return summaries;
   }
 }

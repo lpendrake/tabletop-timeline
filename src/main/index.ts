@@ -10,6 +10,7 @@ import { getCampaignPath, setCampaignPath } from './campaign-state.js';
 import { CampaignLoader } from './campaign-loader.js';
 import { buildEntityIndex } from './entity-index.js';
 import type { EntityIndexEntry } from './entity-index.js';
+import { buildMigrationTasks } from './migration/build-migration-tasks.js';
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -52,17 +53,19 @@ app.whenReady().then(() => {
 
     let entityIndex: EntityIndexEntry[] = [];
     const loader = new CampaignLoader([
+      ...buildMigrationTasks(resolvedPath),
       {
         name: 'Building entity index',
         task: async (onProgress) => {
           entityIndex = buildEntityIndex(resolvedPath, onProgress);
+          return `${entityIndex.length} files indexed`;
         },
       },
     ]);
 
     try {
-      await loader.run(event.sender);
-      return { success: true, entityIndex };
+      const messages = await loader.run(event.sender);
+      return { success: true, entityIndex, messages };
     } catch (err) {
       setCampaignPath(null);
       fileWatcher.stop();

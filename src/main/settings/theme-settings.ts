@@ -1,22 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-
-function readJsonObject(file: string): Record<string, unknown> {
-  try {
-    const raw = fs.readFileSync(file, 'utf-8');
-    const parsed = JSON.parse(raw);
-    if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
-    return {};
-  } catch {
-    return {};
-  }
-}
-
-function writeJsonObject(file: string, obj: Record<string, unknown>): void {
-  fs.writeFileSync(file, JSON.stringify(obj, null, 2), 'utf-8');
-}
+import { readJsonObject, writeJsonObject } from './settings-json.js';
 
 export function getWorkspaceDefaultTheme(rootDir: string): string | null {
   try {

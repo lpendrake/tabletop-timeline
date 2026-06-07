@@ -147,8 +147,46 @@ describe('CampaignLoader', () => {
       'end:third',
     ]);
   });
+
+  it('returns an array of non-empty summaries from tasks, in order', async () => {
+    const wc = makeWebContents();
+    const tasks: NamedTask[] = [
+      { name: 'a', task: async () => 'summary-a' },
+      { name: 'b', task: async () => 'summary-b' },
+      { name: 'c', task: async () => 'summary-c' },
+    ];
+
+    const summaries = await new CampaignLoader(tasks).run(wc as never);
+
+    expect(summaries).toEqual(['summary-a', 'summary-b', 'summary-c']);
+  });
+
+  it('excludes undefined and void returns from the summaries array', async () => {
+    const wc = makeWebContents();
+    const tasks: NamedTask[] = [
+      { name: 'with-summary', task: async () => 'has a result' },
+      { name: 'void-return', task: async () => {} },
+      { name: 'also-summary', task: async () => 'another result' },
+    ];
+
+    const summaries = await new CampaignLoader(tasks).run(wc as never);
+
+    expect(summaries).toEqual(['has a result', 'another result']);
+  });
+
+  it('returns an empty array when all tasks return void', async () => {
+    const wc = makeWebContents();
+    const tasks: NamedTask[] = [
+      { name: 'a', task: async () => {} },
+      { name: 'b', task: async () => {} },
+    ];
+
+    const summaries = await new CampaignLoader(tasks).run(wc as never);
+
+    expect(summaries).toEqual([]);
+  });
 });
 
-function loader(wc: ReturnType<typeof makeWebContents>, tasks: NamedTask[]): Promise<void> {
+function loader(wc: ReturnType<typeof makeWebContents>, tasks: NamedTask[]): Promise<string[]> {
   return new CampaignLoader(tasks).run(wc as never);
 }

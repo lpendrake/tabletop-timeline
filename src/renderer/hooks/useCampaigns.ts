@@ -11,6 +11,7 @@ export function useCampaigns() {
   const [loadResult, setLoadResult] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pendingEntityIndex, setPendingEntityIndex] = useState<EntityIndexEntry[] | null>(null);
+  const [pendingLoadMessages, setPendingLoadMessages] = useState<string[]>([]);
 
   const loadSettings = useCallback(async () => {
     const savedRootDir = await window.fsApi.getRootDir();
@@ -64,10 +65,12 @@ export function useCampaigns() {
     setLoadProgress({ percentage: 0, taskName: '' });
     setLoadError(null);
     setPendingEntityIndex(null);
+    setPendingLoadMessages([]);
 
     const result = await window.fsApi.openCampaign(campaign.path);
     if (result.success) {
       setPendingEntityIndex(result.entityIndex);
+      setPendingLoadMessages(result.messages);
       setActiveCampaign(campaign);
       setLoadResult('success');
     } else {
@@ -80,6 +83,7 @@ export function useCampaigns() {
     await window.fsApi.closeCampaign();
     setActiveCampaign(null);
     setPendingEntityIndex(null);
+    setPendingLoadMessages([]);
     setLoadResult('idle');
   };
 
@@ -96,6 +100,7 @@ export function useCampaigns() {
     loadResult,
     loadError,
     pendingEntityIndex,
+    pendingLoadMessages,
     dismissLoadNotification,
     handleSetRootDir,
     handleCreateCampaign,

@@ -34,7 +34,8 @@ declare global {
       openCampaign: (
         path: string,
       ) => Promise<
-        { success: true; entityIndex: EntityIndexEntry[] } | { success: false; error: string }
+        | { success: true; entityIndex: EntityIndexEntry[]; messages: string[] }
+        | { success: false; error: string }
       >;
       closeCampaign: () => Promise<void>;
 
