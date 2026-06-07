@@ -147,6 +147,7 @@ Do these via the GitHub MCP connector, in this order:
 2. **Post a comment** on the issue noting that the body was updated according to
    the approved changes, linking this session — e.g.:
    `The issue body was updated according to the approved changes in [this session](https://claude.ai/code/session_<current-session-id>).`
+3. **Remove the ai-review-requested label** from the ticket.
 
 ---
 
