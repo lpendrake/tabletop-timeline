@@ -366,10 +366,11 @@ describe('createSessionMode', () => {
     expect(onSave).toHaveBeenCalledTimes(1);
     const saved = (onSave.mock.calls[0] as [Session])[0];
     expect(saved.id).toBe(SESSION_A.id);
-    // Verify the saved session has an updated inGameStart or inGameEnd
-    expect(
-      saved.inGameStart !== SESSION_A.inGameStart || saved.inGameEnd !== SESSION_A.inGameEnd,
-    ).toBe(true);
+    // Verify the saved session has updated epoch-second timestamps
+    const cal = CalendarProvider.get();
+    const origStart = cal.toEpochSeconds(cal.tryParse(SESSION_A.inGameStart!)!);
+    const origEnd = cal.toEpochSeconds(cal.tryParse(SESSION_A.inGameEnd!)!);
+    expect(saved.inGameStartSeconds !== origStart || saved.inGameEndSeconds !== origEnd).toBe(true);
     ctrl.destroy();
   });
 

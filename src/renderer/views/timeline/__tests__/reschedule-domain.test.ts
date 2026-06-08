@@ -21,7 +21,7 @@ describe('buildRescheduleFrontmatter', () => {
     CalendarProvider._reset();
   });
 
-  it('dual-writes a consistent date and epochSeconds', () => {
+  it('stores only epochSeconds, not a date string', () => {
     const cal = CalendarProvider.get();
     // Pick a known Golarion date and compute its epochSeconds.
     const targetDate = '4726-06-10';
@@ -29,16 +29,12 @@ describe('buildRescheduleFrontmatter', () => {
     expect(parsed).not.toBeNull();
     const newSeconds = cal.toEpochSeconds(parsed!);
 
-    const fm = buildRescheduleFrontmatter(baseEvent, newSeconds, [], cal);
+    const fm = buildRescheduleFrontmatter(baseEvent, newSeconds, []);
 
-    // date field must be a string representation of the same instant
-    expect(fm.date).toBe(targetDate);
     // epochSeconds must be the exact value passed in
     expect(fm.epochSeconds).toBe(newSeconds);
-    // Round-tripping: converting the date back must give the same seconds
-    const reparsed = cal.tryParse(fm.date);
-    expect(reparsed).not.toBeNull();
-    expect(cal.toEpochSeconds(reparsed!)).toBe(fm.epochSeconds);
+    // date field must NOT be written
+    expect('date' in fm).toBe(false);
   });
 
   it('strips old session tags and does not add new ones when sessions list is empty', () => {
@@ -51,7 +47,7 @@ describe('buildRescheduleFrontmatter', () => {
     const parsed = cal.tryParse('4726-06-10')!;
     const newSeconds = cal.toEpochSeconds(parsed);
 
-    const fm = buildRescheduleFrontmatter(eventWithSeshTag, newSeconds, [], cal);
+    const fm = buildRescheduleFrontmatter(eventWithSeshTag, newSeconds, []);
 
     // session tag stripped, non-session tag kept
     expect(fm.tags).toEqual(['plot:dragon']);
@@ -67,7 +63,7 @@ describe('buildRescheduleFrontmatter', () => {
     const parsed = cal.tryParse('4726-06-10')!;
     const newSeconds = cal.toEpochSeconds(parsed);
 
-    const fm = buildRescheduleFrontmatter(coloredEvent, newSeconds, [], cal);
+    const fm = buildRescheduleFrontmatter(coloredEvent, newSeconds, []);
 
     expect(fm.color).toBe('red');
     expect(fm.status).toBe('planned');
@@ -78,7 +74,7 @@ describe('buildRescheduleFrontmatter', () => {
     const parsed = cal.tryParse('4726-06-10')!;
     const newSeconds = cal.toEpochSeconds(parsed);
 
-    const fm = buildRescheduleFrontmatter(baseEvent, newSeconds, [], cal);
+    const fm = buildRescheduleFrontmatter(baseEvent, newSeconds, []);
 
     expect(fm.tags).toBeUndefined();
   });
@@ -90,10 +86,10 @@ describe('buildRescheduleFrontmatter', () => {
     const parsed = cal.tryParse('4726-06-10')!;
     const newSeconds = cal.toEpochSeconds(parsed);
 
-    const fm = buildRescheduleFrontmatter(baseEvent, newSeconds, [], cal);
+    const fm = buildRescheduleFrontmatter(baseEvent, newSeconds, []);
 
     expect(fm.epochSeconds).toBe(newSeconds);
-    expect(fm.date).toBe('4726-06-10');
+    expect('date' in fm).toBe(false);
   });
 
   it('initialises the calendar from a specific id via initFromId', () => {
@@ -102,12 +98,11 @@ describe('buildRescheduleFrontmatter', () => {
     const parsed = cal.tryParse('4726-01-01')!;
     const newSeconds = cal.toEpochSeconds(parsed);
 
-    const fm = buildRescheduleFrontmatter(baseEvent, newSeconds, [], cal);
+    const fm = buildRescheduleFrontmatter(baseEvent, newSeconds, []);
 
-    expect(fm.date).toBe('4726-01-01');
     expect(fm.epochSeconds).toBe(newSeconds);
-    // Consistency check: round-trip
-    const reparsed = cal.tryParse(fm.date)!;
-    expect(cal.toEpochSeconds(reparsed)).toBe(fm.epochSeconds);
+    // epochSeconds must round-trip back to the original seconds via the calendar
+    expect(fm.epochSeconds).toBe(newSeconds);
+    expect('date' in fm).toBe(false);
   });
 });

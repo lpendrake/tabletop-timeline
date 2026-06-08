@@ -54,7 +54,7 @@ function parseEventFile(
   const event: Event = {
     filename,
     title: h1 ?? String(data.title ?? ''),
-    date: String(data.date ?? ''),
+    ...(data.date !== undefined ? { date: String(data.date) } : {}),
     ...(data.epochSeconds !== undefined ? { epochSeconds: Number(data.epochSeconds) } : {}),
     tags: Array.isArray(data.tags) ? data.tags : [],
     ...(data.color !== undefined ? { color: String(data.color) } : {}),
@@ -168,7 +168,7 @@ export function registerTimelineIpcHandlers() {
         return {
           filename,
           title: h1 ?? String(data.title ?? ''),
-          date: String(data.date ?? ''),
+          ...(data.date !== undefined ? { date: String(data.date) } : {}),
           ...(data.epochSeconds !== undefined ? { epochSeconds: Number(data.epochSeconds) } : {}),
           tags: Array.isArray(data.tags) ? data.tags : [],
           ...(data.id !== undefined ? { id: String(data.id) } : {}),

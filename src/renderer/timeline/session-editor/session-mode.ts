@@ -11,6 +11,20 @@ function inGameToSeconds(isoStr: string): number {
   return cal.toEpochSeconds(parsed);
 }
 
+/** Extract start epoch-seconds from a session, preferring the precomputed field. */
+function sessionStartSeconds(s: Session): number {
+  if (s.inGameStartSeconds != null) return s.inGameStartSeconds;
+  if (s.inGameStart) return inGameToSeconds(s.inGameStart);
+  throw new SyntaxError(`Session ${s.id} has no in-game start`);
+}
+
+/** Extract end epoch-seconds from a session, preferring the precomputed field. Falls back to start. */
+function sessionEndSeconds(s: Session): number {
+  if (s.inGameEndSeconds != null) return s.inGameEndSeconds;
+  if (s.inGameEnd) return inGameToSeconds(s.inGameEnd);
+  return sessionStartSeconds(s);
+}
+
 /** Convert epoch seconds to an in-game ISO string via the active calendar. */
 function secondsToInGame(secs: number): string {
   const cal = CalendarProvider.get();
@@ -63,10 +77,10 @@ export function clampCreationEnd(anchorSecs: number, rawSecs: number, sessions: 
   const movingRight = rawSecs > anchorSecs;
   let clamped = rawSecs;
   for (const s of sessions) {
-    if (!s.inGameStart) continue;
+    if (s.inGameStartSeconds == null && !s.inGameStart) continue;
     try {
-      const sStart = inGameToSeconds(s.inGameStart);
-      const sEnd = s.inGameEnd ? inGameToSeconds(s.inGameEnd) : sStart;
+      const sStart = sessionStartSeconds(s);
+      const sEnd = sessionEndSeconds(s);
       if (sStart === sEnd) continue;
       if (movingRight) {
         if (sStart >= anchorSecs && sStart < clamped) clamped = sStart;
@@ -94,10 +108,10 @@ export function clampWholeDragDelta(
   const movingRight = delta > 0;
   let clamped = delta;
   for (const s of sessions) {
-    if (s.id === excludeId || !s.inGameStart) continue;
+    if (s.id === excludeId || (s.inGameStartSeconds == null && !s.inGameStart)) continue;
     try {
-      const sStart = inGameToSeconds(s.inGameStart);
-      const sEnd = s.inGameEnd ? inGameToSeconds(s.inGameEnd) : sStart;
+      const sStart = sessionStartSeconds(s);
+      const sEnd = sessionEndSeconds(s);
       if (sStart === sEnd) continue;
       if (movingRight) {
         if (sStart >= originalEnd && sStart - originalEnd < clamped) {
@@ -171,10 +185,12 @@ export function createSessionMode(
     let best = rawSecs;
     let bestDist = Infinity;
     for (const s of deps.getSessions()) {
-      if (!s.inGameStart) continue;
-      const pts: Array<[number, 'start' | 'end']> = [[inGameToSeconds(s.inGameStart), 'start']];
-      if (s.inGameEnd && s.inGameEnd !== s.inGameStart) {
-        pts.push([inGameToSeconds(s.inGameEnd), 'end']);
+      if (s.inGameStartSeconds == null && !s.inGameStart) continue;
+      const startSecs = sessionStartSeconds(s);
+      const endSecs = sessionEndSeconds(s);
+      const pts: Array<[number, 'start' | 'end']> = [[startSecs, 'start']];
+      if (endSecs !== startSecs) {
+        pts.push([endSecs, 'end']);
       }
       for (const [secs, which] of pts) {
         if (s.id === excludeSessionId && which === excludeWhich) continue;
@@ -205,8 +221,8 @@ export function createSessionMode(
       const session = deps.getSessions().find((s) => s.id === sessionId);
       if (!session) return;
       e.stopPropagation();
-      const startSecs = inGameToSeconds(session.inGameStart);
-      const endSecs = session.inGameEnd ? inGameToSeconds(session.inGameEnd) : startSecs;
+      const startSecs = sessionStartSeconds(session);
+      const endSecs = sessionEndSeconds(session);
       const secs = which === 'start' ? startSecs : endSecs;
       const anchorSecs = which === 'start' ? endSecs : startSecs;
       drag = { sessionId, which, originalSecs: secs, currentSecs: secs, anchorSecs };
@@ -221,8 +237,8 @@ export function createSessionMode(
       if (session) {
         e.stopPropagation();
         const anchorSecs = xToSeconds(e.clientX - rect.left, deps.getView(), deps.getViewport());
-        const originalStart = inGameToSeconds(session.inGameStart);
-        const originalEnd = session.inGameEnd ? inGameToSeconds(session.inGameEnd) : originalStart;
+        const originalStart = sessionStartSeconds(session);
+        const originalEnd = sessionEndSeconds(session);
         wholeDrag = {
           sessionId,
           originalStart,
@@ -439,10 +455,12 @@ export function createSessionMode(
       const session = deps.getSessions().find((s) => s.id === sessionId);
       if (!session) return;
 
+      const newStart = originalStart + currentDelta;
+      const newEnd = originalEnd + currentDelta;
       const updated: Session = {
         ...session,
-        inGameStart: secondsToInGame(originalStart + currentDelta),
-        inGameEnd: secondsToInGame(originalEnd + currentDelta),
+        inGameStartSeconds: newStart,
+        inGameEndSeconds: newEnd,
       };
       try {
         await deps.onSaveSession(updated);
@@ -463,13 +481,13 @@ export function createSessionMode(
 
     const updated: Session = { ...session };
     if (which === 'start') {
-      updated.inGameStart = secondsToInGame(currentSecs);
-      const endSecs = inGameToSeconds(session.inGameEnd);
-      if (currentSecs > endSecs) updated.inGameEnd = updated.inGameStart;
+      updated.inGameStartSeconds = currentSecs;
+      const endSecs = sessionEndSeconds(session);
+      if (currentSecs > endSecs) updated.inGameEndSeconds = currentSecs;
     } else {
-      updated.inGameEnd = secondsToInGame(currentSecs);
-      const startSecs = inGameToSeconds(session.inGameStart);
-      if (currentSecs < startSecs) updated.inGameStart = updated.inGameEnd;
+      updated.inGameEndSeconds = currentSecs;
+      const startSecs = sessionStartSeconds(session);
+      if (currentSecs < startSecs) updated.inGameStartSeconds = currentSecs;
     }
 
     try {
@@ -524,10 +542,10 @@ export function createSessionMode(
     const railTop = axisY + 46; // center of pill: RAIL_OFFSET(34) + half RAIL_H(12)
 
     for (const session of deps.getSessions()) {
-      if (!session.inGameStart) continue;
+      if (session.inGameStartSeconds == null && !session.inGameStart) continue;
 
-      const startSecs = inGameToSeconds(session.inGameStart);
-      const endSecs = session.inGameEnd ? inGameToSeconds(session.inGameEnd) : startSecs;
+      const startSecs = sessionStartSeconds(session);
+      const endSecs = sessionEndSeconds(session);
 
       const startX = secondsToX(startSecs, view, size);
       const endX = secondsToX(endSecs, view, size);

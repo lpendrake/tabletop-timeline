@@ -32,6 +32,7 @@ describe('createEventHandler', () => {
     if (!result.ok) throw new Error('unreachable');
     expect(result.event.event.filename).toBe(FILENAME);
     expect(result.event.event.title).toBe('Battle of Sandpoint');
+    // Legacy files may carry a date string; if the frontmatter contained it, it is preserved.
     expect(result.event.event.date).toBe('4707-10-01');
     const writtenPath = path.join(dir, 'timeline', FILENAME);
     expect(fs.existsSync(writtenPath)).toBe(true);

@@ -304,20 +304,21 @@ describe('buildSavedSession', () => {
     expect(saved.id).toBe('keep-me');
   });
 
-  it('copies in-game dates and real dates from the buffer', () => {
+  it('copies real dates from the buffer', () => {
     const buf = makeBuffer();
     const saved = buildSavedSession(buf, [], true);
-    expect(saved.inGameStart).toBe(buf.inGameStart);
-    expect(saved.inGameEnd).toBe(buf.inGameEnd);
     expect(saved.realStart).toBe(buf.realStart);
     expect(saved.realEnd).toBe(buf.realEnd);
   });
 
-  it('sets real_date and in_game_start convenience fields', () => {
-    const buf = makeBuffer({ realStart: '2024-03-20T09:00:00', inGameStart: '4726-05-04T09:00' });
+  it('does not write legacy inGameStart/inGameEnd string fields', () => {
+    const buf = makeBuffer();
     const saved = buildSavedSession(buf, [], true);
-    expect(saved.real_date).toBe('2024-03-20');
-    expect(saved.in_game_start).toBe(buf.inGameStart);
+    // In-game dates are stored only as epochSeconds, not as strings.
+    expect(saved.inGameStart).toBeUndefined();
+    expect(saved.inGameEnd).toBeUndefined();
+    expect(saved.real_date).toBeUndefined();
+    expect(saved.in_game_start).toBeUndefined();
   });
 
   it('sets inGameStartSeconds and inGameEndSeconds from parsed dates', () => {

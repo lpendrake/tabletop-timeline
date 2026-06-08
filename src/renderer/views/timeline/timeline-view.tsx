@@ -167,10 +167,12 @@ export function TimelineView({
         const cal = CalendarProvider.get();
         if (ev.epochSeconds != null) {
           secs = ev.epochSeconds;
-        } else {
+        } else if (ev.date) {
           const parsed = cal.tryParse(ev.date);
           if (!parsed) return false;
           secs = cal.toEpochSeconds(parsed);
+        } else {
+          return false;
         }
       } catch {
         return false;
@@ -183,7 +185,7 @@ export function TimelineView({
         filename,
         {
           title: full.title,
-          date: full.date,
+          ...(full.epochSeconds != null ? { epochSeconds: full.epochSeconds } : {}),
           ...(updatedTags.length > 0 ? { tags: updatedTags } : {}),
           ...(full.color ? { color: full.color } : {}),
           ...(full.status ? { status: full.status } : {}),
@@ -274,10 +276,10 @@ export function TimelineView({
       try {
         const { event, lastModified } = await timelinePort.getEvent(campaignPath, filename);
         const cal = CalendarProvider.get();
-        const frontmatter = buildRescheduleFrontmatter(event, newSeconds, sessionsRef.current, cal);
+        const frontmatter = buildRescheduleFrontmatter(event, newSeconds, sessionsRef.current);
         const desiredFilename = deriveFilename({
           title: event.title,
-          date: frontmatter.date,
+          date: cal.format(cal.fromEpochSeconds(newSeconds)),
           body: event.body,
           tagsText: '',
           color: '',
@@ -320,7 +322,7 @@ export function TimelineView({
         filename,
         {
           title: event.title,
-          date: event.date,
+          ...(event.epochSeconds != null ? { epochSeconds: event.epochSeconds } : {}),
           ...(newTags.length > 0 ? { tags: newTags } : {}),
           ...(event.color ? { color: event.color } : {}),
           ...(event.status ? { status: event.status } : {}),
@@ -383,10 +385,8 @@ export function TimelineView({
     onSetNow: async (seconds) => {
       const current = gameStateRef.current;
       if (!current) return;
-      const cal = CalendarProvider.get();
       const next: State = {
         ...current,
-        in_game_now: cal.format(cal.fromEpochSeconds(seconds)),
         in_game_now_seconds: seconds,
       };
       await timelinePort.putState(campaignPath, next);
@@ -481,7 +481,12 @@ export function TimelineView({
     async (newNow: string) => {
       const current = gameStateRef.current;
       if (!current) return;
-      const next: State = { ...current, in_game_now: newNow };
+      const cal = CalendarProvider.get();
+      const parsed = cal.tryParse(newNow);
+      const next: State = {
+        ...current,
+        ...(parsed != null ? { in_game_now_seconds: cal.toEpochSeconds(parsed) } : {}),
+      };
       try {
         await timelinePort.putState(campaignPath, next);
         setLoadedData((d) => ({ ...d, gameState: next }));
@@ -517,11 +522,13 @@ export function TimelineView({
     let seconds: number;
     if (ev.epochSeconds != null) {
       seconds = ev.epochSeconds;
-    } else {
+    } else if (ev.date) {
       const cal = CalendarProvider.get();
       const parsed = cal.tryParse(ev.date);
       if (!parsed) return;
       seconds = cal.toEpochSeconds(parsed);
+    } else {
+      return;
     }
     setViewState((v) => ({ ...v, centerSeconds: seconds }));
     onJumpHandled?.();
@@ -570,15 +577,24 @@ export function TimelineView({
     },
   });
 
-  const inGameNow = loadedData.gameState?.in_game_now || null;
   const inGameNowSeconds = (() => {
     if (loadedData.gameState?.in_game_now_seconds != null) {
       return loadedData.gameState.in_game_now_seconds;
     }
-    if (!inGameNow) return Infinity;
+    // Fallback for older campaigns that only have the string form.
+    const legacyStr = loadedData.gameState?.in_game_now;
+    if (!legacyStr) return Infinity;
     const cal = CalendarProvider.get();
-    const parsed = cal.tryParse(inGameNow);
+    const parsed = cal.tryParse(legacyStr);
     return parsed ? cal.toEpochSeconds(parsed) : Infinity;
+  })();
+  // Derive the formatted "now" string from seconds for display purposes.
+  const inGameNow = (() => {
+    if (inGameNowSeconds !== Infinity) {
+      const cal = CalendarProvider.get();
+      return cal.format(cal.fromEpochSeconds(inGameNowSeconds));
+    }
+    return loadedData.gameState?.in_game_now || null;
   })();
 
   const anyModalOpen = !!(

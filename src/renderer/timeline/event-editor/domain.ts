@@ -55,7 +55,7 @@ export function bufferFromEvent(ev: Event): EditorBuffer {
   const dateText =
     ev.epochSeconds != null
       ? cal.format(cal.fromEpochSeconds(ev.epochSeconds))
-      : normalizeDateText(ev.date);
+      : normalizeDateText(ev.date ?? '');
   return {
     title: ev.title,
     date: dateText,
@@ -114,7 +114,6 @@ export function bufferToFrontmatter(buf: EditorBuffer): EventFrontmatter {
   const allTags = [...syncedTags, ...buf.systemTags];
   const fm: EventFrontmatter = {
     title: effectiveTitle(buf),
-    date: buf.date.trim(),
   };
   const parsed = cal.tryParse(buf.date.trim());
   if (parsed) fm.epochSeconds = cal.toEpochSeconds(parsed);

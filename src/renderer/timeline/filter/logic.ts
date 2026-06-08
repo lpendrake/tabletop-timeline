@@ -44,10 +44,11 @@ function matchesDateFilter(event: EventListItem, filter: DateFilter, sessions: S
 
   if (filter.field === 'in-game') {
     const cal = CalendarProvider.get();
+    const parsedFallback =
+      event.epochSeconds === undefined && event.date ? cal.tryParse(event.date) : null;
+    if (event.epochSeconds === undefined && !parsedFallback) return false;
     const sec =
-      event.epochSeconds !== undefined
-        ? event.epochSeconds
-        : cal.toEpochSeconds(cal.tryParse(event.date)!);
+      event.epochSeconds !== undefined ? event.epochSeconds : cal.toEpochSeconds(parsedFallback!);
     const fromParsed = filter.from ? cal.tryParse(filter.from) : null;
     const toParsed = filter.to ? cal.tryParse(filter.to) : null;
     const fromSec = fromParsed ? cal.toEpochSeconds(fromParsed) : null;

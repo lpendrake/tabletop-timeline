@@ -3,10 +3,10 @@ import { CalendarProvider } from '../calendar/provider';
 import { sessionTagsForSeconds } from '../render/session-bands';
 import { isSessionTag } from '../../../shared/entity-tags';
 
-function eventSeconds(e: { epochSeconds?: number; date: string }): number {
+function eventSeconds(e: { epochSeconds?: number; date?: string }): number {
   if (typeof e.epochSeconds === 'number') return e.epochSeconds;
   const cal = CalendarProvider.get();
-  const d = cal.tryParse(e.date);
+  const d = e.date ? cal.tryParse(e.date) : null;
   if (!d) throw new Error(`unparseable event date: ${e.date}`);
   return cal.toEpochSeconds(d);
 }

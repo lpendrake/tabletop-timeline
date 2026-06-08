@@ -352,11 +352,11 @@ export function SearchOverlay({
                 if (ev.epochSeconds != null) {
                   calDate = cal.fromEpochSeconds(ev.epochSeconds);
                 } else {
-                  calDate = cal.tryParse(ev.date);
+                  calDate = ev.date ? cal.tryParse(ev.date) : null;
                 }
-                dateStr = calDate ? formatCompact(calDate) : ev.date;
+                dateStr = calDate ? formatCompact(calDate) : (ev.date ?? '');
               } catch {
-                dateStr = ev.date;
+                dateStr = ev.date ?? '';
               }
               return (
                 <li

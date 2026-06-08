@@ -244,10 +244,14 @@ describe('bufferToFrontmatter', () => {
     expect(fm.color).toBe('#a83030');
   });
 
-  it('trims title and date', () => {
+  it('trims title and sets epochSeconds from trimmed date', () => {
+    const cal = CalendarProvider.get();
     const fm = bufferToFrontmatter(buf({ title: '  My Event  ', date: '  4726-05-04  ' }));
     expect(fm.title).toBe('My Event');
-    expect(fm.date).toBe('4726-05-04');
+    // date is not written to frontmatter; epochSeconds encodes the date instead
+    expect('date' in fm).toBe(false);
+    const parsed = cal.tryParse('4726-05-04')!;
+    expect(fm.epochSeconds).toBe(cal.toEpochSeconds(parsed));
   });
 
   it('sets frontmatter title from body H1 when present', () => {

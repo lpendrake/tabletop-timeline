@@ -97,10 +97,18 @@ export function validateSessionBuffer(
 }
 
 export function bufferFromSession(s: Session): SessionBuffer {
+  const cal = CalendarProvider.get();
+  // Reconstruct the in-game date strings from seconds when the legacy string fields are absent.
+  const inGameStart =
+    s.inGameStart ??
+    (s.inGameStartSeconds != null ? cal.format(cal.fromEpochSeconds(s.inGameStartSeconds)) : '');
+  const inGameEnd =
+    s.inGameEnd ??
+    (s.inGameEndSeconds != null ? cal.format(cal.fromEpochSeconds(s.inGameEndSeconds)) : '');
   return {
     id: s.id,
-    inGameStart: s.inGameStart,
-    inGameEnd: s.inGameEnd,
+    inGameStart,
+    inGameEnd,
     realStart: s.realStart,
     realEnd: s.realEnd,
     color: s.color,
@@ -135,14 +143,10 @@ export function buildSavedSession(
   }
   const session: Session = {
     id,
-    inGameStart: buf.inGameStart,
-    inGameEnd: buf.inGameEnd,
     realStart: buf.realStart,
     realEnd: buf.realEnd,
     color: buf.color,
     notes: buf.notes,
-    real_date: buf.realStart.slice(0, 10),
-    in_game_start: buf.inGameStart,
   };
   const startParsed = cal.tryParse(buf.inGameStart);
   if (startParsed) session.inGameStartSeconds = cal.toEpochSeconds(startParsed);

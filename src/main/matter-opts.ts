@@ -3,8 +3,8 @@ import yaml from 'js-yaml';
 // Prevent js-yaml from auto-casting YAML date fields to JS Date objects.
 // CORE_SCHEMA covers only null/bool/int/float — no !!timestamp type.
 // Without this, Date.UTC(year, ...) maps years 0-99 to 1900-1999, so a
-// Golarian year like 0005 would silently arrive as 1905.
-// parseISOString in golarian.ts also accepts the .sssZ suffix as a secondary
+// Golarion year like 0005 would silently arrive as 1905.
+// The calendar's tryParse also accepts the .sssZ suffix as a secondary
 // guard, but the source of truth is keeping strings as strings here.
 //
 // PARSE uses CORE_SCHEMA to prevent JS Date creation on read.

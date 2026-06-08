@@ -65,10 +65,23 @@ export function layoutCards(
 ): LaidOutCard[] {
   const cal = CalendarProvider.get();
   return events.flatMap((ev) => {
-    const parsedDate = cal.tryParse(ev.date);
+    // Prefer epochSeconds; fall back to parsing the legacy date string.
+    if (ev.epochSeconds != null) {
+      const parsedDate = cal.fromEpochSeconds(ev.epochSeconds);
+      const seconds = ev.epochSeconds;
+      return [
+        {
+          event: ev,
+          parsedDate,
+          seconds,
+          x: secondsToX(seconds, view, size),
+          isFuture: seconds > inGameNowSeconds,
+        },
+      ];
+    }
+    const parsedDate = ev.date ? cal.tryParse(ev.date) : null;
     if (!parsedDate) return [];
-    const seconds =
-      typeof ev.epochSeconds === 'number' ? ev.epochSeconds : cal.toEpochSeconds(parsedDate);
+    const seconds = cal.toEpochSeconds(parsedDate);
     return [
       {
         event: ev,
