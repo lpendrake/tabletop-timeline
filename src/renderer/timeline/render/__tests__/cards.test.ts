@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import {
   layoutCards,
   assignRows,
@@ -10,27 +10,48 @@ import {
 import type { EventListItem } from '../../data/types';
 import type { WeekdayColors } from '../../../theme';
 import { type ViewState, type ViewportSize, secondsToX } from '../../math/zoom';
-import { toAbsoluteSeconds, parseISOString } from '../../calendar/golarian';
+import { CalendarProvider } from '../../calendar/provider';
+
+// ---- Setup ----
+
+// Ensure CalendarProvider is initialised to Golarion (default) before each test.
+beforeEach(() => {
+  CalendarProvider._reset();
+});
+
+const cal = () => CalendarProvider.get();
+
+function parseISO(s: string) {
+  const d = cal().tryParse(s);
+  if (!d) throw new Error(`Cannot parse: ${s}`);
+  return d;
+}
+
+function toSecs(s: string): number {
+  return cal().toEpochSeconds(parseISO(s));
+}
 
 // ---- Fixtures ----
 
 const SIZE: ViewportSize = { width: 1200, height: 600 };
 
-// Reference date: 4726-05-04 (Wednesday)
+// Reference date: 4726-05-04 (Wednesday in Golarion → weekday index 2)
 const REF_DATE = '4726-05-04';
-const REF_SECS = toAbsoluteSeconds(parseISOString(REF_DATE));
+const REF_SECS = toSecs(REF_DATE);
 
 const VIEW: ViewState = { centerSeconds: REF_SECS, secondsPerPixel: 432 };
 
-const MOCK_WEEKDAYS: WeekdayColors = {
-  monday: '#c9a860',
-  tuesday: '#7a9a4a',
-  wednesday: '#e07b39',
-  thursday: '#5a8fbf',
-  friday: '#9b7bc0',
-  saturday: '#c06060',
-  sunday: '#4a9a7a',
-};
+// Array-shaped weekday colours: index 0 = monday, …, index 6 = sunday
+// (matches Golarion week order: mon=0, tue=1, wed=2, thu=3, fri=4, sat=5, sun=6)
+const MOCK_WEEKDAYS: WeekdayColors = [
+  '#c9a860', // 0 — monday
+  '#7a9a4a', // 1 — tuesday
+  '#e07b39', // 2 — wednesday
+  '#5a8fbf', // 3 — thursday
+  '#9b7bc0', // 4 — friday
+  '#c06060', // 5 — saturday
+  '#4a9a7a', // 6 — sunday
+];
 
 function ev(
   filename: string,
@@ -65,8 +86,8 @@ const FIXTURE_EVENTS: EventListItem[] = [
   ev('a20.md', '4726-05-10T12:00:00', 'Payout for closing the portal'),
 ];
 
-// "Now" is start of Mon 9, so events from a16 onward are future
-const NOW_SECS = toAbsoluteSeconds(parseISOString('4726-05-09'));
+// "Now" is start of Mon 9 (4726-05-09), so events from a16 onward are future
+const NOW_SECS = toSecs('4726-05-09');
 
 // ---- layoutCards ----
 
@@ -80,39 +101,72 @@ describe('layoutCards', () => {
     expect(card.x).toBeCloseTo(SIZE.width / 2, 5);
   });
 
-  it('card.seconds matches toAbsoluteSeconds of the event date', () => {
+  it('card.seconds matches toEpochSeconds of the event date', () => {
     const [card] = layoutCards([ev('a.md', REF_DATE, 'T')], VIEW, SIZE, REF_SECS);
     expect(card.seconds).toBe(REF_SECS);
   });
 
   it('card.x matches secondsToX for the same date', () => {
     const date = '4726-05-06';
-    const secs = toAbsoluteSeconds(parseISOString(date));
+    const secs = toSecs(date);
     const [card] = layoutCards([ev('a.md', date, 'T')], VIEW, SIZE, REF_SECS);
     expect(card.x).toBeCloseTo(secondsToX(secs, VIEW, SIZE), 5);
   });
 
+  it('prefers epochSeconds over parsing ev.date when both are present', () => {
+    const dateSecs = toSecs('4726-05-06');
+    const epochSeconds = toSecs('4726-05-10'); // different from the date string
+    const [card] = layoutCards(
+      [ev('a.md', '4726-05-06', 'T', { epochSeconds })],
+      VIEW,
+      SIZE,
+      REF_SECS,
+    );
+    expect(card.seconds).toBe(epochSeconds);
+    expect(card.seconds).not.toBe(dateSecs);
+  });
+
+  it('falls back to parsing ev.date when epochSeconds is absent', () => {
+    const dateSecs = toSecs('4726-05-06');
+    const [card] = layoutCards([ev('a.md', '4726-05-06', 'T')], VIEW, SIZE, REF_SECS);
+    expect(card.seconds).toBe(dateSecs);
+  });
+
   it('marks events after inGameNowSeconds as future', () => {
     const futureDate = '4726-05-09T06:00:00';
-    const nowSecs = toAbsoluteSeconds(parseISOString('4726-05-09'));
+    const nowSecs = toSecs('4726-05-09');
     const [card] = layoutCards([ev('a.md', futureDate, 'Future')], VIEW, SIZE, nowSecs);
     expect(card.isFuture).toBe(true);
   });
 
   it('marks events at or before inGameNowSeconds as past', () => {
     const pastDate = '4726-05-04T12:00:00';
-    const nowSecs = toAbsoluteSeconds(parseISOString('4726-05-09'));
+    const nowSecs = toSecs('4726-05-09');
     const [card] = layoutCards([ev('a.md', pastDate, 'Past')], VIEW, SIZE, nowSecs);
     expect(card.isFuture).toBe(false);
   });
 
   it('places future events to the right of past events', () => {
     const events = [ev('past.md', '4726-05-04', 'Past'), ev('future.md', '4726-05-09', 'Future')];
-    const nowSecs = toAbsoluteSeconds(parseISOString('4726-05-06'));
+    const nowSecs = toSecs('4726-05-06');
     const cards = layoutCards(events, VIEW, SIZE, nowSecs);
     const past = cards.find((c) => c.event.filename === 'past.md')!;
     const future = cards.find((c) => c.event.filename === 'future.md')!;
     expect(future.x).toBeGreaterThan(past.x);
+  });
+
+  it('future/now split respects epochSeconds when provided', () => {
+    // Supply epochSeconds that is past-relative to nowSecs, even though the
+    // date string would parse to the future.
+    const nowSecs = toSecs('4726-05-09');
+    const pastEpoch = toSecs('4726-05-04'); // in the past
+    const [card] = layoutCards(
+      [ev('a.md', '4726-05-10', 'T', { epochSeconds: pastEpoch })],
+      VIEW,
+      SIZE,
+      nowSecs,
+    );
+    expect(card.isFuture).toBe(false);
   });
 });
 
@@ -206,33 +260,67 @@ describe('assignRows', () => {
 // ---- weekdayColor ----
 
 describe('weekdayColor', () => {
-  it('returns monday color for a Monday date', () => {
-    // 4726-05-02 is a Monday (4726-05-04 is Wednesday, 2 days earlier)
-    expect(weekdayColor(parseISOString('4726-05-02'), MOCK_WEEKDAYS)).toBe(MOCK_WEEKDAYS.monday);
+  // In Golarion: epoch day 0 is 1 AR, 1st of Abadius (month 1, day 1).
+  // epochWeekdayIndex for Golarion: Monday = 0.
+  // 4726-05-02 → Monday  → index 0
+  // 4726-05-03 → Tuesday → index 1
+  // 4726-05-04 → Wednesday → index 2  (the anchor date)
+  // 4726-05-05 → Thursday → index 3
+  // 4726-05-06 → Friday  → index 4
+  // 4726-05-07 → Saturday → index 5
+  // 4726-05-08 → Sunday  → index 6
+
+  it('returns index-0 (monday) colour for a Monday date (4726-05-02)', () => {
+    expect(weekdayColor(parseISO('4726-05-02'), MOCK_WEEKDAYS)).toBe(MOCK_WEEKDAYS[0]);
   });
 
-  it('returns wednesday color for 4726-05-04 (the anchor Wednesday)', () => {
-    expect(weekdayColor(parseISOString('4726-05-04'), MOCK_WEEKDAYS)).toBe(MOCK_WEEKDAYS.wednesday);
+  it('returns index-2 (wednesday) colour for the anchor Wednesday (4726-05-04)', () => {
+    expect(weekdayColor(parseISO('4726-05-04'), MOCK_WEEKDAYS)).toBe(MOCK_WEEKDAYS[2]);
   });
 
-  it('returns thursday color for 4726-05-05', () => {
-    expect(weekdayColor(parseISOString('4726-05-05'), MOCK_WEEKDAYS)).toBe(MOCK_WEEKDAYS.thursday);
+  it('returns index-3 (thursday) colour for 4726-05-05', () => {
+    expect(weekdayColor(parseISO('4726-05-05'), MOCK_WEEKDAYS)).toBe(MOCK_WEEKDAYS[3]);
   });
 
-  it('returns friday color for 4726-05-06', () => {
-    expect(weekdayColor(parseISOString('4726-05-06'), MOCK_WEEKDAYS)).toBe(MOCK_WEEKDAYS.friday);
+  it('returns index-4 (friday) colour for 4726-05-06', () => {
+    expect(weekdayColor(parseISO('4726-05-06'), MOCK_WEEKDAYS)).toBe(MOCK_WEEKDAYS[4]);
   });
 
-  it('returns saturday color for 4726-05-07', () => {
-    expect(weekdayColor(parseISOString('4726-05-07'), MOCK_WEEKDAYS)).toBe(MOCK_WEEKDAYS.saturday);
+  it('returns index-5 (saturday) colour for 4726-05-07', () => {
+    expect(weekdayColor(parseISO('4726-05-07'), MOCK_WEEKDAYS)).toBe(MOCK_WEEKDAYS[5]);
   });
 
-  it('returns sunday color for 4726-05-08', () => {
-    expect(weekdayColor(parseISOString('4726-05-08'), MOCK_WEEKDAYS)).toBe(MOCK_WEEKDAYS.sunday);
+  it('returns index-6 (sunday) colour for 4726-05-08', () => {
+    expect(weekdayColor(parseISO('4726-05-08'), MOCK_WEEKDAYS)).toBe(MOCK_WEEKDAYS[6]);
   });
 
-  it('returns tuesday color for 4726-05-03', () => {
-    expect(weekdayColor(parseISOString('4726-05-03'), MOCK_WEEKDAYS)).toBe(MOCK_WEEKDAYS.tuesday);
+  it('returns index-1 (tuesday) colour for 4726-05-03', () => {
+    expect(weekdayColor(parseISO('4726-05-03'), MOCK_WEEKDAYS)).toBe(MOCK_WEEKDAYS[1]);
+  });
+
+  it('accepts a legacy plain date object (no kind field) for backward compatibility', () => {
+    // axis.tsx passes GolarianDate (no `kind` field) — must still work
+    const legacyDate = { year: 4726, month: 5, day: 4, hour: 0, minute: 0, second: 0 };
+    expect(weekdayColor(legacyDate, MOCK_WEEKDAYS)).toBe(MOCK_WEEKDAYS[2]); // wednesday
+  });
+
+  it('falls back to index 0 when the weekdays array is shorter than the index', () => {
+    const shortColors: WeekdayColors = ['#aaaaaa']; // only 1 entry
+    // Any date with weekday index > 0 should fall back to index 0
+    const result = weekdayColor(parseISO('4726-05-03'), shortColors); // tuesday → index 1
+    expect(result).toBe('#aaaaaa');
+  });
+
+  it('returns the same colour for two dates exactly 7 days apart (same weekday)', () => {
+    const a = weekdayColor(parseISO('4726-05-04'), MOCK_WEEKDAYS);
+    const b = weekdayColor(parseISO('4726-05-11'), MOCK_WEEKDAYS);
+    expect(a).toBe(b);
+  });
+
+  it('returns different colours for consecutive days', () => {
+    const a = weekdayColor(parseISO('4726-05-04'), MOCK_WEEKDAYS);
+    const b = weekdayColor(parseISO('4726-05-05'), MOCK_WEEKDAYS);
+    expect(a).not.toBe(b);
   });
 });
 

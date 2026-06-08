@@ -1,5 +1,5 @@
 import type { EventListItem, Session } from '../data/types';
-import { parseISOString, toAbsoluteSeconds } from '../calendar/golarian';
+import { CalendarProvider } from '../calendar/provider';
 import { computeSessionLabel } from '../render/session-bands';
 import type { DateField, TagFilter, DateFilter, Filter, FilterState } from './types';
 import { resolveEntityTagLabel, isSessionTag } from '../../../shared/entity-tags';
@@ -43,9 +43,16 @@ function matchesDateFilter(event: EventListItem, filter: DateFilter, sessions: S
   if (!filter.from && !filter.to) return true;
 
   if (filter.field === 'in-game') {
-    const sec = toAbsoluteSeconds(parseISOString(event.date));
-    const fromSec = filter.from ? toAbsoluteSeconds(parseISOString(filter.from)) : null;
-    const toSec = filter.to ? toAbsoluteSeconds(parseISOString(filter.to)) + 86400 : null;
+    const cal = CalendarProvider.get();
+    const parsedFallback =
+      event.epochSeconds === undefined && event.date ? cal.tryParse(event.date) : null;
+    if (event.epochSeconds === undefined && !parsedFallback) return false;
+    const sec =
+      event.epochSeconds !== undefined ? event.epochSeconds : cal.toEpochSeconds(parsedFallback!);
+    const fromParsed = filter.from ? cal.tryParse(filter.from) : null;
+    const toParsed = filter.to ? cal.tryParse(filter.to) : null;
+    const fromSec = fromParsed ? cal.toEpochSeconds(fromParsed) : null;
+    const toSec = toParsed ? cal.toEpochSeconds(toParsed) + cal.secondsPerDay() : null;
     if (fromSec !== null && sec < fromSec) return false;
     if (toSec !== null && sec >= toSec) return false;
     return true;

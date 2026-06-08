@@ -15,6 +15,8 @@ import {
   savePinnedFilters,
   saveSessionFilters,
 } from '../persistence';
+import { CalendarProvider } from '../../calendar/provider';
+import { createCalendar, golarionSpec } from '../../../../shared/calendar';
 
 // ---- Helpers ----
 
@@ -128,9 +130,39 @@ describe('applyFilters', () => {
   });
 
   describe('date filter — in-game', () => {
-    // date '4726-01-15' is after '4726-01-01'
-    const evEarly = makeEvent({ date: '4726-01-01', filename: 'early.md' });
-    const evLate = makeEvent({ date: '4726-06-15', filename: 'late.md' });
+    let cal: ReturnType<typeof createCalendar>;
+
+    beforeEach(() => {
+      CalendarProvider._reset();
+      CalendarProvider.init(createCalendar(golarionSpec));
+      cal = CalendarProvider.get();
+    });
+
+    afterEach(() => {
+      CalendarProvider._reset();
+    });
+
+    // epochSeconds for Golarion dates (24 * 60 * 60 = 86400 seconds per day)
+    const evEarlyEpoch = cal_epochSeconds('4726-01-01');
+    const evLateEpoch = cal_epochSeconds('4726-06-15');
+
+    function cal_epochSeconds(dateStr: string): number {
+      const c = createCalendar(golarionSpec);
+      const parsed = c.tryParse(dateStr);
+      if (!parsed) throw new Error(`Cannot parse date: ${dateStr}`);
+      return c.toEpochSeconds(parsed);
+    }
+
+    const evEarly = makeEvent({
+      date: '4726-01-01',
+      filename: 'early.md',
+      epochSeconds: evEarlyEpoch,
+    });
+    const evLate = makeEvent({
+      date: '4726-06-15',
+      filename: 'late.md',
+      epochSeconds: evLateEpoch,
+    });
 
     it('null bounds match all', () => {
       const state = { filters: [makeDateFilter({ field: 'in-game' })] };
@@ -144,12 +176,56 @@ describe('applyFilters', () => {
       expect(applyFilters([evEarly, evLate], state)).toEqual([evLate]);
     });
 
-    it('to bound is inclusive for whole day', () => {
+    it('to bound is inclusive for whole day (uses secondsPerDay())', () => {
       const state = {
         filters: [makeDateFilter({ field: 'in-game', from: null, to: '4726-01-01' })],
       };
-      // evEarly date is exactly '4726-01-01'; to +86400s means that whole day is included
+      // evEarly's epochSeconds is exactly the start of 4726-01-01;
+      // to + secondsPerDay() (86400 for Golarion) means the whole day is included
       expect(applyFilters([evEarly, evLate], state)).toEqual([evEarly]);
+    });
+
+    it('event at last second of to-day is still included', () => {
+      const lastSecondOfDay = evEarlyEpoch + cal.secondsPerDay() - 1;
+      const evLastSec = makeEvent({
+        date: '4726-01-01',
+        filename: 'last-sec.md',
+        epochSeconds: lastSecondOfDay,
+      });
+      const state = {
+        filters: [makeDateFilter({ field: 'in-game', from: null, to: '4726-01-01' })],
+      };
+      expect(applyFilters([evLastSec], state)).toEqual([evLastSec]);
+    });
+
+    it('event exactly at to + secondsPerDay() is excluded', () => {
+      const nextDayStart = evEarlyEpoch + cal.secondsPerDay();
+      const evNextDay = makeEvent({
+        date: '4726-01-02',
+        filename: 'next-day.md',
+        epochSeconds: nextDayStart,
+      });
+      const state = {
+        filters: [makeDateFilter({ field: 'in-game', from: null, to: '4726-01-01' })],
+      };
+      expect(applyFilters([evNextDay], state)).toEqual([]);
+    });
+
+    it('falls back to cal.tryParse(date) when epochSeconds is absent', () => {
+      const evNoEpoch = makeEvent({ date: '4726-01-01', filename: 'no-epoch.md' });
+      // epochSeconds is not set — logic must derive it from e.date
+      const state = {
+        filters: [makeDateFilter({ field: 'in-game', from: null, to: '4726-01-01' })],
+      };
+      expect(applyFilters([evNoEpoch], state)).toEqual([evNoEpoch]);
+    });
+
+    it('fallback: event with only date excluded when outside range', () => {
+      const evNoEpoch = makeEvent({ date: '4726-06-15', filename: 'no-epoch-late.md' });
+      const state = {
+        filters: [makeDateFilter({ field: 'in-game', from: null, to: '4726-01-01' })],
+      };
+      expect(applyFilters([evNoEpoch], state)).toEqual([]);
     });
   });
 

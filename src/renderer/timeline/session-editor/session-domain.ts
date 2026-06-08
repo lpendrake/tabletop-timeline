@@ -1,4 +1,4 @@
-import { parseISOString, toAbsoluteSeconds, tryParseDate } from '../calendar/golarian';
+import { CalendarProvider } from '../calendar/provider';
 import type { Session } from '../data/types';
 import { ThemeProvider } from '../../theme';
 
@@ -46,15 +46,29 @@ export function fromDatetimeLocal(val: string): string {
   return val.length === 16 ? val + ':00' : val;
 }
 
+function sessionToSeconds(s: Session, which: 'start' | 'end'): number {
+  const cal = CalendarProvider.get();
+  if (which === 'start') {
+    if (s.inGameStartSeconds != null) return s.inGameStartSeconds;
+    const parsed = cal.tryParse(s.inGameStart);
+    return parsed ? cal.toEpochSeconds(parsed) : 0;
+  } else {
+    if (s.inGameEndSeconds != null) return s.inGameEndSeconds;
+    const parsed = cal.tryParse(s.inGameEnd);
+    return parsed ? cal.toEpochSeconds(parsed) : 0;
+  }
+}
+
 export function validateSessionBuffer(
   buf: SessionBuffer,
   existingSessions: Session[],
   isNew: boolean,
 ): string | null {
-  if (!buf.inGameStart || !tryParseDate(buf.inGameStart)) {
+  const cal = CalendarProvider.get();
+  if (!buf.inGameStart || !cal.tryParse(buf.inGameStart)) {
     return 'Invalid in-game start date.';
   }
-  if (!buf.inGameEnd || !tryParseDate(buf.inGameEnd)) {
+  if (!buf.inGameEnd || !cal.tryParse(buf.inGameEnd)) {
     return 'Invalid in-game end date.';
   }
   const realDay = buf.realStart.slice(0, 10);
@@ -63,30 +77,38 @@ export function validateSessionBuffer(
     (s) => s.id !== editingId && s.realStart.slice(0, 10) === realDay,
   );
   if (sameDaySessions.length > 0) {
-    try {
-      const newStart = toAbsoluteSeconds(parseISOString(buf.inGameStart));
-      const newEnd = toAbsoluteSeconds(parseISOString(buf.inGameEnd));
+    const startParsed = cal.tryParse(buf.inGameStart);
+    const endParsed = cal.tryParse(buf.inGameEnd);
+    if (startParsed && endParsed) {
+      const newStart = cal.toEpochSeconds(startParsed);
+      const newEnd = cal.toEpochSeconds(endParsed);
       for (const s of sameDaySessions) {
-        const existStart = toAbsoluteSeconds(parseISOString(s.inGameStart));
-        const existEnd = toAbsoluteSeconds(parseISOString(s.inGameEnd));
+        const existStart = sessionToSeconds(s, 'start');
+        const existEnd = sessionToSeconds(s, 'end');
         if (existStart === existEnd) continue;
         const overlaps = newStart < existEnd && existStart < newEnd;
         if (overlaps) {
           return 'In-game time overlaps another session on the same real-world day.';
         }
       }
-    } catch {
-      /* parse errors caught above */
     }
   }
   return null;
 }
 
 export function bufferFromSession(s: Session): SessionBuffer {
+  const cal = CalendarProvider.get();
+  // Reconstruct the in-game date strings from seconds when the legacy string fields are absent.
+  const inGameStart =
+    s.inGameStart ??
+    (s.inGameStartSeconds != null ? cal.format(cal.fromEpochSeconds(s.inGameStartSeconds)) : '');
+  const inGameEnd =
+    s.inGameEnd ??
+    (s.inGameEndSeconds != null ? cal.format(cal.fromEpochSeconds(s.inGameEndSeconds)) : '');
   return {
     id: s.id,
-    inGameStart: s.inGameStart,
-    inGameEnd: s.inGameEnd,
+    inGameStart,
+    inGameEnd,
     realStart: s.realStart,
     realEnd: s.realEnd,
     color: s.color,
@@ -112,21 +134,23 @@ export function buildSavedSession(
   existingSessions: Session[],
   isNew: boolean,
 ): Session {
+  const cal = CalendarProvider.get();
   let id = buf.id;
   if (isNew) {
     do {
       id = randomSessionId();
     } while (existingSessions.some((s) => s.id === id));
   }
-  return {
+  const session: Session = {
     id,
-    inGameStart: buf.inGameStart,
-    inGameEnd: buf.inGameEnd,
     realStart: buf.realStart,
     realEnd: buf.realEnd,
     color: buf.color,
     notes: buf.notes,
-    real_date: buf.realStart.slice(0, 10),
-    in_game_start: buf.inGameStart,
   };
+  const startParsed = cal.tryParse(buf.inGameStart);
+  if (startParsed) session.inGameStartSeconds = cal.toEpochSeconds(startParsed);
+  const endParsed = cal.tryParse(buf.inGameEnd);
+  if (endParsed) session.inGameEndSeconds = cal.toEpochSeconds(endParsed);
+  return session;
 }

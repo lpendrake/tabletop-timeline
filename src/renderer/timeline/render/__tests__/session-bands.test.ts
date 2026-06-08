@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   computeSessionBandsFromSessions,
   computeSessionLabel,
@@ -10,15 +10,37 @@ import {
   RAIL_OFFSET,
 } from '../session-bands';
 import type { EventListItem, Session } from '../../data/types';
-import { toAbsoluteSeconds, parseISOString } from '../../calendar/golarian';
+import { CalendarProvider } from '../../calendar/provider';
 import { type ViewState, type ViewportSize, secondsToX } from '../../math/zoom';
+
+beforeEach(() => {
+  CalendarProvider._reset();
+});
+afterEach(() => {
+  CalendarProvider._reset();
+});
 
 // ---- Fixtures ----
 
 const SIZE: ViewportSize = { width: 1200, height: 600 };
 const REF_DATE = '4726-05-04';
-const REF_SECS = toAbsoluteSeconds(parseISOString(REF_DATE));
-const VIEW: ViewState = { centerSeconds: REF_SECS, secondsPerPixel: 432 }; // ~200px/day
+
+function refSeconds(): number {
+  const cal = CalendarProvider.get();
+  const d = cal.tryParse(REF_DATE)!;
+  return cal.toEpochSeconds(d);
+}
+
+function dateSeconds(iso: string): number {
+  const cal = CalendarProvider.get();
+  const d = cal.tryParse(iso);
+  if (!d) throw new Error(`Cannot parse: ${iso}`);
+  return cal.toEpochSeconds(d);
+}
+
+function makeView(): ViewState {
+  return { centerSeconds: refSeconds(), secondsPerPixel: 432 }; // ~200px/day
+}
 
 function makeSession(overrides: Partial<Session> & { id: string }): Session {
   return {
@@ -58,8 +80,8 @@ describe('computeSessionBandsFromSessions', () => {
     const s = makeSession({ id: 's1', inGameStart: '4726-05-04', inGameEnd: '4726-05-06' });
     const [band] = computeSessionBandsFromSessions([s], []);
     expect(band.sessionId).toBe('s1');
-    expect(band.startSeconds).toBe(toAbsoluteSeconds(parseISOString('4726-05-04')));
-    expect(band.endSeconds).toBe(toAbsoluteSeconds(parseISOString('4726-05-06')));
+    expect(band.startSeconds).toBe(dateSeconds('4726-05-04'));
+    expect(band.endSeconds).toBe(dateSeconds('4726-05-06'));
   });
 
   it('sets endSeconds equal to startSeconds when inGameEnd is absent', () => {
@@ -102,6 +124,36 @@ describe('computeSessionBandsFromSessions', () => {
     const s = makeSession({ id: 's1', color: '#ff0000' });
     const [band] = computeSessionBandsFromSessions([s], []);
     expect(band.color).toBe('#ff0000');
+  });
+
+  it('prefers inGameStartSeconds over parsing inGameStart when available', () => {
+    // inGameStartSeconds points to a different date than inGameStart ISO
+    const cal = CalendarProvider.get();
+    const altDate = cal.tryParse('4726-06-01')!;
+    const altSecs = cal.toEpochSeconds(altDate);
+    const s = makeSession({
+      id: 's1',
+      inGameStart: '4726-05-04',
+      inGameStartSeconds: altSecs,
+      inGameEnd: '4726-06-01',
+    });
+    const [band] = computeSessionBandsFromSessions([s], []);
+    // startSeconds should be the precomputed altSecs, not the parsed ISO seconds
+    expect(band.startSeconds).toBe(altSecs);
+  });
+
+  it('counts events with epochSeconds field falling within session', () => {
+    const s = makeSession({ id: 's1', inGameStart: '4726-05-04', inGameEnd: '4726-05-06' });
+    const insideSecs = dateSeconds('4726-05-05T10:00:00');
+    const outsideSecs = dateSeconds('4726-05-07T10:00:00');
+    const events = [
+      // event with epochSeconds inside the session
+      makeEvent('some-other-date.md', { epochSeconds: insideSecs }),
+      // event with epochSeconds outside the session
+      makeEvent('another-date.md', { epochSeconds: outsideSecs }),
+    ];
+    const [band] = computeSessionBandsFromSessions([s], events);
+    expect(band.eventCount).toBe(1);
   });
 });
 
@@ -168,22 +220,24 @@ describe('computeSessionLabel', () => {
 
 describe('computeSessionPills', () => {
   it('returns empty for no bands', () => {
-    expect(computeSessionPills([], [], VIEW, SIZE)).toEqual([]);
+    expect(computeSessionPills([], [], makeView(), SIZE)).toEqual([]);
   });
 
   it('returns empty for zero-width viewport', () => {
     const s = makeSession({ id: 's1' });
     const bands = computeSessionBandsFromSessions([s], []);
-    expect(computeSessionPills(bands, [s], VIEW, { width: 0, height: 600 })).toEqual([]);
+    expect(computeSessionPills(bands, [s], makeView(), { width: 0, height: 600 })).toEqual([]);
   });
 
   it('returns empty for zero-height viewport', () => {
     const s = makeSession({ id: 's1' });
     const bands = computeSessionBandsFromSessions([s], []);
-    expect(computeSessionPills(bands, [s], VIEW, { width: 1200, height: 0 })).toEqual([]);
+    expect(computeSessionPills(bands, [s], makeView(), { width: 1200, height: 0 })).toEqual([]);
   });
 
   it('positions pill left edge at secondsToX of session start when unclamped', () => {
+    const VIEW = makeView();
+    const REF_SECS = refSeconds();
     const s = makeSession({
       id: 's1',
       inGameStart: REF_DATE,
@@ -199,14 +253,14 @@ describe('computeSessionPills', () => {
   it('gives instant sessions a minimum pill width of 12px', () => {
     const s = makeSession({ id: 's1', inGameStart: REF_DATE, inGameEnd: REF_DATE });
     const bands = computeSessionBandsFromSessions([s], []);
-    const [pill] = computeSessionPills(bands, [s], VIEW, SIZE);
+    const [pill] = computeSessionPills(bands, [s], makeView(), SIZE);
     expect(pill.width).toBeGreaterThanOrEqual(12);
   });
 
   it('clamps a pill whose left edge is off-screen left to -4px', () => {
-    // Session starts 200px left of viewport but ends 50px into it:
-    // startX ≈ -200, endX ≈ +50  →  clampedLeft = -4, clampedRight = 50, width = 54
-    const offsetSecs = 200 * VIEW.secondsPerPixel; // 200px worth of seconds
+    const VIEW = makeView();
+    const REF_SECS = refSeconds();
+    const offsetSecs = 200 * VIEW.secondsPerPixel;
     const sessionStart = REF_SECS - (SIZE.width / 2 + 200) * VIEW.secondsPerPixel;
     const sessionEnd = sessionStart + offsetSecs;
     const bands = [
@@ -219,9 +273,16 @@ describe('computeSessionPills', () => {
   });
 
   it('skips pills entirely off-screen to the left', () => {
-    const farLeft = toAbsoluteSeconds(parseISOString('4725-05-04'));
+    const VIEW = makeView();
+    const farLeft = dateSeconds('4725-05-04');
+    const cal = CalendarProvider.get();
     const bands = [
-      { sessionId: 's1', startSeconds: farLeft, endSeconds: farLeft + 86400, eventCount: 0 },
+      {
+        sessionId: 's1',
+        startSeconds: farLeft,
+        endSeconds: farLeft + cal.secondsPerDay(),
+        eventCount: 0,
+      },
     ];
     const s = makeSession({
       id: 's1',
@@ -233,9 +294,16 @@ describe('computeSessionPills', () => {
   });
 
   it('skips pills entirely off-screen to the right', () => {
-    const farRight = toAbsoluteSeconds(parseISOString('4727-05-04'));
+    const VIEW = makeView();
+    const farRight = dateSeconds('4727-05-04');
+    const cal = CalendarProvider.get();
     const bands = [
-      { sessionId: 's1', startSeconds: farRight, endSeconds: farRight + 86400, eventCount: 0 },
+      {
+        sessionId: 's1',
+        startSeconds: farRight,
+        endSeconds: farRight + cal.secondsPerDay(),
+        eventCount: 0,
+      },
     ];
     const s = makeSession({
       id: 's1',
@@ -249,7 +317,7 @@ describe('computeSessionPills', () => {
   it('sets pill top to axisY + RAIL_OFFSET', () => {
     const s = makeSession({ id: 's1', inGameStart: REF_DATE, inGameEnd: '4726-05-06' });
     const bands = computeSessionBandsFromSessions([s], []);
-    const [pill] = computeSessionPills(bands, [s], VIEW, SIZE);
+    const [pill] = computeSessionPills(bands, [s], makeView(), SIZE);
     const axisY = Math.floor(SIZE.height * 0.8);
     expect(pill.top).toBe(axisY + RAIL_OFFSET);
   });
@@ -257,12 +325,13 @@ describe('computeSessionPills', () => {
   it('sets pill height to RAIL_H', () => {
     const s = makeSession({ id: 's1', inGameStart: REF_DATE, inGameEnd: '4726-05-06' });
     const bands = computeSessionBandsFromSessions([s], []);
-    const [pill] = computeSessionPills(bands, [s], VIEW, SIZE);
+    const [pill] = computeSessionPills(bands, [s], makeView(), SIZE);
     expect(pill.height).toBe(RAIL_H);
   });
 
   it('omits label when pill width is <= 60px', () => {
-    // Session spans 2 hours (7200 sec) at VIEW (432 sec/px) → 16.7px wide — renders but too narrow for label
+    const VIEW = makeView();
+    const REF_SECS = refSeconds();
     const twoHoursSecs = 7200;
     const start = REF_SECS;
     const end = REF_SECS + twoHoursSecs;
@@ -274,7 +343,12 @@ describe('computeSessionPills', () => {
   });
 
   it('shows label when pill is wide enough (> 60px)', () => {
-    const wideView: ViewState = { centerSeconds: REF_SECS, secondsPerPixel: 86400 / 200 };
+    const cal = CalendarProvider.get();
+    const REF_SECS = refSeconds();
+    const wideView: ViewState = {
+      centerSeconds: REF_SECS,
+      secondsPerPixel: cal.secondsPerDay() / 200,
+    };
     const s = makeSession({
       id: 's1',
       inGameStart: REF_DATE,
@@ -291,7 +365,7 @@ describe('computeSessionPills', () => {
     const s1 = makeSession({ id: 's1', inGameStart: REF_DATE, inGameEnd: '4726-05-06' });
     const s2 = makeSession({ id: 's2', inGameStart: '4726-05-06', inGameEnd: '4726-05-08' });
     const bands = computeSessionBandsFromSessions([s1, s2], []);
-    const pills = computeSessionPills(bands, [s1, s2], VIEW, SIZE);
+    const pills = computeSessionPills(bands, [s1, s2], makeView(), SIZE);
     const p1 = pills.find((p) => p.sessionId === 's1')!;
     const p2 = pills.find((p) => p.sessionId === 's2')!;
     expect(p1.rightFlat).toBe(true);
@@ -301,7 +375,7 @@ describe('computeSessionPills', () => {
   it('sets leftFlat=false and rightFlat=false for a standalone session', () => {
     const s = makeSession({ id: 's1', inGameStart: REF_DATE, inGameEnd: '4726-05-06' });
     const bands = computeSessionBandsFromSessions([s], []);
-    const [pill] = computeSessionPills(bands, [s], VIEW, SIZE);
+    const [pill] = computeSessionPills(bands, [s], makeView(), SIZE);
     expect(pill.leftFlat).toBe(false);
     expect(pill.rightFlat).toBe(false);
   });
@@ -310,7 +384,7 @@ describe('computeSessionPills', () => {
     const s1 = makeSession({ id: 's1', inGameStart: REF_DATE, inGameEnd: '4726-05-05' });
     const s2 = makeSession({ id: 's2', inGameStart: '4726-05-06', inGameEnd: '4726-05-08' });
     const bands = computeSessionBandsFromSessions([s1, s2], []);
-    const pills = computeSessionPills(bands, [s1, s2], VIEW, SIZE);
+    const pills = computeSessionPills(bands, [s1, s2], makeView(), SIZE);
     expect(pills.find((p) => p.sessionId === 's1')!.rightFlat).toBe(false);
     expect(pills.find((p) => p.sessionId === 's2')!.leftFlat).toBe(false);
   });
@@ -324,7 +398,7 @@ describe('computeSessionPills', () => {
     });
     const bands = computeSessionBandsFromSessions([s], []);
     bands[0].color = '#000000'; // mutate band color — should not win
-    const [pill] = computeSessionPills(bands, [s], VIEW, SIZE);
+    const [pill] = computeSessionPills(bands, [s], makeView(), SIZE);
     expect(pill.color).toBe('#deadbe');
   });
 });
@@ -338,7 +412,6 @@ describe('computeTooltipPosition', () => {
   });
 
   it('clamps left so tooltip does not overflow viewport right edge', () => {
-    // pill at x=1150, viewport=1200: 1150+360 > 1200-8, so left = 1200-360-8 = 832
     const pos = computeTooltipPosition({ left: 1150, top: 400 }, 1200, 600);
     expect(pos.left).toBe(1200 - 360 - 8);
   });
@@ -349,7 +422,6 @@ describe('computeTooltipPosition', () => {
   });
 
   it('places tooltip bottom edge 6px above pill top', () => {
-    // bottom = viewportHeight - pillRect.top + 6 → bottom edge at pillTop - 6
     const pos = computeTooltipPosition({ left: 100, top: 400 }, 1200, 600);
     expect(pos.bottom).toBe(600 - 400 + 6);
   });
@@ -359,7 +431,6 @@ describe('computeTooltipPosition', () => {
 
 describe('formatRealRange', () => {
   it('formats a real-world date range with day, month, year and times', () => {
-    // 2024-01-15 is a Monday
     const result = formatRealRange('2024-01-15T19:00:00', '2024-01-15T23:00:00');
     expect(result).toContain('Jan');
     expect(result).toContain('15');
@@ -389,7 +460,7 @@ describe('formatRealRange', () => {
 // ---- formatGameRange ----
 
 describe('formatGameRange', () => {
-  it('formats a game-time range as two compact Golarian dates', () => {
+  it('formats a game-time range as two compact calendar dates', () => {
     const result = formatGameRange('4726-05-04', '4726-05-06');
     expect(result).toContain('Desnus');
     expect(result).toContain(' – ');

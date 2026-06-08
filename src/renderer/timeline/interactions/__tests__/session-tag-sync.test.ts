@@ -1,18 +1,34 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   seshTagsMatch,
   mergeSeshTags,
   computeEventsNeedingSeshTagUpdate,
 } from '../session-tag-sync';
 import type { EventListItem, Session } from '../../data/types';
+import { CalendarProvider } from '../../calendar/provider';
+import { createCalendar, golarionSpec } from '../../../../shared/calendar';
 
-function makeEvent(filename: string, date: string, tags?: string[]): EventListItem {
+beforeEach(() => {
+  CalendarProvider.init(createCalendar(golarionSpec));
+});
+
+afterEach(() => {
+  CalendarProvider._reset();
+});
+
+function makeEvent(
+  filename: string,
+  date: string,
+  tags?: string[],
+  epochSeconds?: number,
+): EventListItem {
   return {
     filename,
     date,
     title: 'T',
     mtime: '2024-01-01T00:00:00',
     ...(tags !== undefined ? { tags } : {}),
+    ...(epochSeconds !== undefined ? { epochSeconds } : {}),
   };
 }
 
@@ -146,5 +162,22 @@ describe('computeEventsNeedingSeshTagUpdate', () => {
     computeEventsNeedingSeshTagUpdate(events, sessions);
     expect(events[0].tags).toEqual(['sesh:old']);
     expect(sessions).toHaveLength(1);
+  });
+
+  it('uses epochSeconds directly when present (no date parsing needed)', () => {
+    const cal = CalendarProvider.get();
+    const d = cal.tryParse('4726-05-04T15:00:00');
+    if (!d) throw new Error('parse failed');
+    const secs = cal.toEpochSeconds(d);
+
+    // Event has epochSeconds set — should be recognised as inside the session
+    const event = makeEvent('a.md', '4726-05-04T15:00:00', undefined, secs);
+    expect(computeEventsNeedingSeshTagUpdate([event], [makeSession()])).toContain('a.md');
+  });
+
+  it('falls back to date parsing when epochSeconds is absent', () => {
+    // Event without epochSeconds — must fall back to parsing date
+    const event = makeEvent('a.md', '4726-05-04T15:00:00'); // no epochSeconds
+    expect(computeEventsNeedingSeshTagUpdate([event], [makeSession()])).toContain('a.md');
   });
 });

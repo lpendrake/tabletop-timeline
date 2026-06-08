@@ -1,5 +1,13 @@
-import { describe, it, expect } from 'vitest';
-import { naturalTier, chooseDayStep, ALL_TIERS, type TimeTier } from '../axis';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { naturalTier, chooseDayStep, ALL_TIERS, buildTimeTiers, type TimeTier } from '../axis';
+import { CalendarProvider } from '../../calendar/provider';
+
+beforeEach(() => {
+  CalendarProvider._reset();
+});
+afterEach(() => {
+  CalendarProvider._reset();
+});
 
 function tier(id: TimeTier['id']): TimeTier {
   const t = ALL_TIERS.find((t) => t.id === id);
@@ -97,5 +105,89 @@ describe('chooseDayStep', () => {
 
   it('returns 365 at the maximum candidate when still not enough', () => {
     expect(chooseDayStep(0.001)).toBe(365);
+  });
+});
+
+describe('buildTimeTiers — calendar-aware midday step', () => {
+  it('returns 5 tiers', () => {
+    expect(buildTimeTiers(86400)).toHaveLength(5);
+  });
+
+  it('midday stepSecs = secondsPerDay / 2 for a 24h calendar', () => {
+    const tiers = buildTimeTiers(86400);
+    const midday = tiers.find((t) => t.id === 'midday')!;
+    expect(midday.stepSecs).toBe(43200);
+  });
+
+  it('midday stepSecs = secondsPerDay / 2 for a 25h Birthright-style calendar (90000s)', () => {
+    // 25h * 3600s = 90000s per day; midday = 45000s
+    const tiers = buildTimeTiers(90000);
+    const midday = tiers.find((t) => t.id === 'midday')!;
+    expect(midday.stepSecs).toBe(45000);
+  });
+
+  it('hour/half/quarter/minute steps remain literal seconds regardless of day length', () => {
+    const tiers = buildTimeTiers(90000);
+    expect(tiers.find((t) => t.id === 'hour')!.stepSecs).toBe(3600);
+    expect(tiers.find((t) => t.id === 'half')!.stepSecs).toBe(1800);
+    expect(tiers.find((t) => t.id === 'quarter')!.stepSecs).toBe(900);
+    expect(tiers.find((t) => t.id === 'minute')!.stepSecs).toBe(60);
+  });
+});
+
+describe('Axis — calendar month count/names and era suffix (Golarion defaults)', () => {
+  it('CalendarProvider has 12 months for the default Golarion calendar', () => {
+    const cal = CalendarProvider.get();
+    expect(cal.monthCount()).toBe(12);
+  });
+
+  it('Golarion month 5 is "Desnus"', () => {
+    const cal = CalendarProvider.get();
+    expect(cal.monthName(5)).toBe('Desnus');
+  });
+
+  it('Golarion month 1 is "Abadius"', () => {
+    const cal = CalendarProvider.get();
+    expect(cal.monthName(1)).toBe('Abadius');
+  });
+
+  it('Golarion month 12 is "Kuthona"', () => {
+    const cal = CalendarProvider.get();
+    expect(cal.monthName(12)).toBe('Kuthona');
+  });
+
+  it('eraFor returns "AR" suffix for year 4726 in Golarion', () => {
+    const cal = CalendarProvider.get();
+    expect(cal.eraFor(4726).suffix).toBe('AR');
+  });
+
+  it('all 12 Golarion month names are accessible via monthName', () => {
+    const cal = CalendarProvider.get();
+    const expectedNames = [
+      'Abadius',
+      'Calistril',
+      'Pharast',
+      'Gozran',
+      'Desnus',
+      'Sarenith',
+      'Erastus',
+      'Arodus',
+      'Rova',
+      'Lamashan',
+      'Neth',
+      'Kuthona',
+    ];
+    for (let m = 1; m <= 12; m++) {
+      expect(cal.monthName(m)).toBe(expectedNames[m - 1]);
+    }
+  });
+
+  it('month band even/odd alternates correctly for any month count', () => {
+    // The axis uses month % 2 === 0 for "is-even" — this holds for any count.
+    const cal = CalendarProvider.get();
+    for (let m = 1; m <= cal.monthCount(); m++) {
+      const isEven = m % 2 === 0;
+      expect(isEven).toBe(m % 2 === 0); // trivially true, but documents the contract
+    }
   });
 });

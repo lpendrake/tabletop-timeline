@@ -1,5 +1,13 @@
 import { EventListItem } from '../data/types';
-import { parseISOString, toAbsoluteSeconds } from '../calendar/golarian';
+import { CalendarProvider } from '../calendar/provider';
+
+function eventSeconds(e: { epochSeconds?: number; date?: string }): number {
+  if (typeof e.epochSeconds === 'number') return e.epochSeconds;
+  const cal = CalendarProvider.get();
+  const d = e.date ? cal.tryParse(e.date) : null;
+  if (!d) throw new Error(`unparseable event date: ${e.date}`);
+  return cal.toEpochSeconds(d);
+}
 
 export interface AdjacentEvent {
   filename: string;
@@ -13,7 +21,7 @@ interface SortedEvent {
 
 function toSortedEvents(events: EventListItem[]): SortedEvent[] {
   return events
-    .map((e) => ({ filename: e.filename, seconds: toAbsoluteSeconds(parseISOString(e.date)) }))
+    .map((e) => ({ filename: e.filename, seconds: eventSeconds(e) }))
     .sort((a, b) => {
       if (a.seconds !== b.seconds) return a.seconds - b.seconds;
       return a.filename < b.filename ? -1 : a.filename > b.filename ? 1 : 0;

@@ -136,4 +136,15 @@ contextBridge.exposeInMainWorld('fsApi', {
     ipcRenderer.invoke('themeSettings:setCampaign', campaignPath, themeId),
   getCampaignThemeOverrides: (campaignPaths: string[]) =>
     ipcRenderer.invoke('themeSettings:getCampaignOverrides', campaignPaths),
+
+  // Calendar Settings
+  getCampaignCalendarId: () => ipcRenderer.invoke('calendar:getCampaignId'),
+  setCampaignCalendarId: (calendarId: string | null) =>
+    ipcRenderer.invoke('calendar:setCampaignId', calendarId),
+  listCustomCalendars: (rootDir: string) => ipcRenderer.invoke('calendar:listCustom', rootDir),
+  saveCustomCalendar: (rootDir: string, spec: unknown) =>
+    ipcRenderer.invoke('calendar:saveCustom', rootDir, spec),
+  deleteCustomCalendar: (rootDir: string, id: string) =>
+    ipcRenderer.invoke('calendar:deleteCustom', rootDir, id),
+  listSystemCalendars: () => ipcRenderer.invoke('calendar:listSystem'),
 });

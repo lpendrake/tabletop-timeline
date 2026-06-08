@@ -25,8 +25,9 @@ A campaign is a directory inside a user-chosen root folder. The app scans the ro
       map.png                     # asset files live alongside notes
     timeline/                     # event markdown files (flat — no subdirectories scanned)
       0001-01-15-battle-of-dawn.md
-      state.json                  # { in_game_now, campaign_start } — ISO date strings
+      state.json                  # { in_game_now_seconds, campaign_start_seconds } — epoch-seconds
     sessions.json                 # session records (top-level, optional)
+    settings.json                 # campaign settings: { calendar, version, ... } (optional)
     tags.json                     # tag registry { [tagName]: { color, description } } (optional)
     relationships/                # created on campaign init, not yet used by the app
 ```
@@ -81,7 +82,7 @@ Body markdown. May contain wiki links: [[c3d4]] or [[Iron Circle|c3d4]].
 ```yaml
 ---
 title: Battle of Dawn
-date: "0001-01-15T07:00:00"      # Golarian ISO-like date string (quoted to prevent YAML date parsing)
+epochSeconds: 148975200          # integer seconds since the campaign calendar's epoch (sole in-game date value)
 tags:
   - combat                        # custom tags (free strings)
   - id:a1b2                       # entity tags — auto-synced from wiki links in the body
@@ -98,15 +99,17 @@ Must contain a h1 title as it drives the title field of the file, which in turn 
 Wiki links here drive the `id:XXXX` entity tags automatically.
 ```
 
-Event filenames follow this pattern: `<event-date>-<title-slug>.md` where the slug is lowercased, apostrophes stripped, and non-alphanumeric runs replaced with `-`, capped at 60 chars. Example: `0001-01-15-battle-of-dawn.md`.
+`epochSeconds` is an integer count of seconds since the active calendar's epoch (Golarion epoch = 0000-01-01 midnight). Older files may also carry a legacy `date` string; the app reads it as a fallback but no longer writes it.
+
+Event filenames follow `YYYY-DDD[Thhmmss]-<slug>.md` where `YYYY` is the zero-padded year, `DDD` is the zero-padded day-of-year from the active calendar, and the optional `T` segment encodes non-midnight times without colons. The slug is lowercased, apostrophes stripped, and non-alphanumeric runs replaced with `-`, capped at 60 chars. Example: `4726-124-battle-of-dawn.md`.
 
 ## `timeline/state.json`
 
 ```json
-{ "in_game_now": "0001-01-15T07:00:00", "campaign_start": "0001-01-01T00:00:00" }
+{ "in_game_now_seconds": 148975200, "campaign_start_seconds": 0 }
 ```
 
-Both fields are Golarian ISO date strings (or empty strings when unset).
+`in_game_now_seconds` and `campaign_start_seconds` are integer epoch-seconds (same epoch as event `epochSeconds`). Older files may carry the legacy `in_game_now` / `campaign_start` string fields; the app reads them as a fallback.
 
 ## `sessions.json`
 
@@ -116,14 +119,26 @@ Top-level array of session records:
 [
   {
     "id": "s1",
-    "inGameStart": "0001-01-01T00:00:00",
-    "inGameEnd": "0001-01-15T07:00:00",
+    "inGameStartSeconds": 0,
+    "inGameEndSeconds": 148975200,
     "realStart": "2024-03-01T18:00:00",
     "realEnd": "2024-03-01T22:00:00",
     "color": "#8b5cf6"
   }
 ]
 ```
+
+`inGameStartSeconds` / `inGameEndSeconds` are the sole stored in-game values (epoch-seconds). `realStart` / `realEnd` remain ISO strings (real-world time, unchanged). Older files may carry legacy `inGameStart` / `inGameEnd` string fields.
+
+## `settings.json` (campaign-level)
+
+Each campaign folder may contain a `settings.json` sidecar:
+
+```json
+{ "calendar": "glrn" }
+```
+
+The `calendar` key is a 4-character calendar ID referencing the active calendar for the campaign. Defaults to Golarion (`"glrn"`) when absent. Custom calendar specs are stored workspace-wide in a single calendars.json file at the root workspace folder (shared by all campaigns); system calendars (Golarion, Gregorian) are built in.
 
 ## Tags on events
 

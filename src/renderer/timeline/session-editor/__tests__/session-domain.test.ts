@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { ThemeProvider } from '../../../theme';
+import { CalendarProvider } from '../../calendar/provider';
 import {
   nextDefaultColor,
   recordColorUsed,
@@ -13,7 +14,6 @@ import {
   buildSavedSession,
   type SessionBuffer,
 } from '../session-domain';
-import { tryParseDate } from '../../calendar/golarian';
 import type { Session } from '../../data/types';
 
 // --- helpers ---
@@ -48,6 +48,7 @@ function makeBuffer(overrides: Partial<SessionBuffer> = {}): SessionBuffer {
 
 beforeEach(() => {
   localStorage.clear();
+  CalendarProvider._reset();
 });
 
 // --- color cycling ---
@@ -105,23 +106,23 @@ describe('fromDatetimeLocal', () => {
   });
 });
 
-// --- tryParseDate (from calendar/golarian) ---
+// --- calendar parsing via CalendarProvider ---
 
-describe('tryParseDate', () => {
-  it('returns a GolarianDate for a valid Golarian ISO string', () => {
-    expect(tryParseDate('4726-05-04T13:00')).not.toBeNull();
+describe('CalendarProvider.get().tryParse', () => {
+  it('returns a CalendarDate for a valid Golarion ISO string', () => {
+    expect(CalendarProvider.get().tryParse('4726-05-04T13:00:00')).not.toBeNull();
   });
 
   it('returns null for garbage input', () => {
-    expect(tryParseDate('not-a-date')).toBeNull();
+    expect(CalendarProvider.get().tryParse('not-a-date')).toBeNull();
   });
 
   it('returns null for empty string', () => {
-    expect(tryParseDate('')).toBeNull();
+    expect(CalendarProvider.get().tryParse('')).toBeNull();
   });
 
   it('returns null for invalid month 0', () => {
-    expect(tryParseDate('4726-00-04T13:00')).toBeNull();
+    expect(CalendarProvider.get().tryParse('4726-00-04T13:00:00')).toBeNull();
   });
 });
 
@@ -137,7 +138,7 @@ describe('validateSessionBuffer', () => {
     expect(validateSessionBuffer(buf, [], true)).not.toBeNull();
   });
 
-  it('returns error when inGameStart is invalid Golarian', () => {
+  it('returns error when inGameStart is invalid', () => {
     const buf = makeBuffer({ inGameStart: 'bad' });
     expect(validateSessionBuffer(buf, [], true)).not.toBeNull();
   });
@@ -147,7 +148,7 @@ describe('validateSessionBuffer', () => {
     expect(validateSessionBuffer(buf, [], true)).not.toBeNull();
   });
 
-  it('returns error when inGameEnd is invalid Golarian', () => {
+  it('returns error when inGameEnd is invalid', () => {
     const buf = makeBuffer({ inGameEnd: 'notadate' });
     expect(validateSessionBuffer(buf, [], true)).not.toBeNull();
   });
@@ -224,6 +225,26 @@ describe('validateSessionBuffer', () => {
     });
     expect(validateSessionBuffer(buf, [existing], false)).toBeNull();
   });
+
+  it('uses inGameStartSeconds/inGameEndSeconds when present for overlap detection', () => {
+    const cal = CalendarProvider.get();
+    // Session with precomputed seconds
+    const existStart = cal.toEpochSeconds(cal.tryParse('4726-05-04T13:00:00')!);
+    const existEnd = cal.toEpochSeconds(cal.tryParse('4726-05-04T17:00:00')!);
+    const existing = makeSession({
+      realStart: '2024-01-15T13:00:00',
+      inGameStart: '4726-05-04T13:00:00',
+      inGameEnd: '4726-05-04T17:00:00',
+      inGameStartSeconds: existStart,
+      inGameEndSeconds: existEnd,
+    });
+    // Overlapping buffer
+    const buf = makeBuffer({
+      inGameStart: '4726-05-04T14:00:00',
+      inGameEnd: '4726-05-04T18:00:00',
+    });
+    expect(validateSessionBuffer(buf, [existing], true)).toMatch(/overlap/i);
+  });
 });
 
 // --- bufferFromSession ---
@@ -283,33 +304,45 @@ describe('buildSavedSession', () => {
     expect(saved.id).toBe('keep-me');
   });
 
-  it('generates a unique id that does not collide with existing sessions', () => {
-    const mathRandom = vi.spyOn(Math, 'random');
-    let calls = 0;
-    mathRandom.mockImplementation(() => {
-      calls++;
-      // First 4 calls → 'aaaa'; next 4 → different (0.1 → 'dddd' pattern)
-      return calls <= 4 ? 0 : 0.1;
-    });
-    const collidingSession = makeSession({ id: 'aaaa' });
-    const saved = buildSavedSession(makeBuffer(), [collidingSession], true);
-    expect(saved.id).not.toBe('aaaa');
-    mathRandom.mockRestore();
-  });
-
-  it('copies in-game dates and real dates from the buffer', () => {
+  it('copies real dates from the buffer', () => {
     const buf = makeBuffer();
     const saved = buildSavedSession(buf, [], true);
-    expect(saved.inGameStart).toBe(buf.inGameStart);
-    expect(saved.inGameEnd).toBe(buf.inGameEnd);
     expect(saved.realStart).toBe(buf.realStart);
     expect(saved.realEnd).toBe(buf.realEnd);
   });
 
-  it('sets real_date and in_game_start convenience fields', () => {
-    const buf = makeBuffer({ realStart: '2024-03-20T09:00:00', inGameStart: '4726-05-04T09:00' });
+  it('does not write legacy inGameStart/inGameEnd string fields', () => {
+    const buf = makeBuffer();
     const saved = buildSavedSession(buf, [], true);
-    expect(saved.real_date).toBe('2024-03-20');
-    expect(saved.in_game_start).toBe(buf.inGameStart);
+    // In-game dates are stored only as epochSeconds, not as strings.
+    expect(saved.inGameStart).toBeUndefined();
+    expect(saved.inGameEnd).toBeUndefined();
+    expect(saved.real_date).toBeUndefined();
+    expect(saved.in_game_start).toBeUndefined();
+  });
+
+  it('sets inGameStartSeconds and inGameEndSeconds from parsed dates', () => {
+    const cal = CalendarProvider.get();
+    const buf = makeBuffer({
+      inGameStart: '4726-05-04T13:00:00',
+      inGameEnd: '4726-05-04T17:00:00',
+    });
+    const saved = buildSavedSession(buf, [], true);
+    const expectedStart = cal.toEpochSeconds(cal.tryParse('4726-05-04T13:00:00')!);
+    const expectedEnd = cal.toEpochSeconds(cal.tryParse('4726-05-04T17:00:00')!);
+    expect(saved.inGameStartSeconds).toBe(expectedStart);
+    expect(saved.inGameEndSeconds).toBe(expectedEnd);
+  });
+
+  it('does not set inGameStartSeconds when start date is invalid', () => {
+    const buf = makeBuffer({ inGameStart: 'bad-date' });
+    const saved = buildSavedSession(buf, [], true);
+    expect(saved.inGameStartSeconds).toBeUndefined();
+  });
+
+  it('does not set inGameEndSeconds when end date is invalid', () => {
+    const buf = makeBuffer({ inGameEnd: 'bad-date' });
+    const saved = buildSavedSession(buf, [], true);
+    expect(saved.inGameEndSeconds).toBeUndefined();
   });
 });

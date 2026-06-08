@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   xToSeconds,
   secondsToX,
@@ -8,6 +8,14 @@ import {
   DEFAULT_SECONDS_PER_PIXEL,
 } from '../zoom';
 import type { ViewState, ViewportSize } from '../zoom';
+import { CalendarProvider } from '../../calendar/provider';
+
+beforeEach(() => {
+  CalendarProvider._reset();
+});
+afterEach(() => {
+  CalendarProvider._reset();
+});
 
 const VIEW: ViewState = { centerSeconds: 1_000_000, secondsPerPixel: 100 };
 const SIZE: ViewportSize = { width: 1000, height: 600 };
@@ -95,7 +103,16 @@ describe('zoomAbout', () => {
     expect(result.secondsPerPixel).toBe(1);
   });
 
-  it('clamps secondsPerPixel at maximum (30 days/px) when zooming out too far', () => {
+  it('clamps secondsPerPixel at maximum (30 * cal.secondsPerDay()) when zooming out too far', () => {
+    const cal = CalendarProvider.get();
+    const maxSpd = 30 * cal.secondsPerDay();
+    const nearMax: ViewState = { centerSeconds: 0, secondsPerPixel: maxSpd - 1 };
+    const result = zoomAbout(nearMax, SIZE, 500, 100);
+    expect(result.secondsPerPixel).toBe(maxSpd);
+  });
+
+  it('for Golarion default, max clamp is 30 * 86400', () => {
+    // Golarion has 86400s/day — the clamp should match the pre-existing constant.
     const nearMax: ViewState = { centerSeconds: 0, secondsPerPixel: 30 * 86400 - 1 };
     const result = zoomAbout(nearMax, SIZE, 500, 100);
     expect(result.secondsPerPixel).toBe(30 * 86400);
@@ -103,7 +120,7 @@ describe('zoomAbout', () => {
 });
 
 describe('constants', () => {
-  it('SECONDS_PER_DAY is 86400', () => {
+  it('SECONDS_PER_DAY is 86400 (kept for backward compatibility)', () => {
     expect(SECONDS_PER_DAY).toBe(86400);
   });
 

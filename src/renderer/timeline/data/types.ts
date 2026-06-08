@@ -1,6 +1,7 @@
 export interface EventFrontmatter {
   title: string;
-  date: string;
+  date?: string;
+  epochSeconds?: number;
   tags?: string[];
   color?: string;
   status?: 'happened' | 'planned';
@@ -21,8 +22,10 @@ export interface EventListItem extends EventFrontmatter {
 }
 
 export interface State {
-  in_game_now: string;
-  campaign_start: string;
+  in_game_now?: string;
+  campaign_start?: string;
+  in_game_now_seconds?: number;
+  campaign_start_seconds?: number;
 }
 
 export interface TagInfo {
@@ -34,8 +37,10 @@ export type TagsRegistry = Record<string, TagInfo>;
 
 export interface Session {
   id: string;
-  inGameStart: string;
-  inGameEnd: string;
+  inGameStart?: string;
+  inGameEnd?: string;
+  inGameStartSeconds?: number;
+  inGameEndSeconds?: number;
   realStart: string;
   realEnd: string;
   color: string;

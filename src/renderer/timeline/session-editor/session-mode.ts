@@ -1,12 +1,35 @@
 import { xToSeconds, secondsToX, type ViewState, type ViewportSize } from '../math/zoom';
-import {
-  parseISOString,
-  toAbsoluteSeconds,
-  fromAbsoluteSeconds,
-  toISOString,
-} from '../calendar/golarian';
+import { CalendarProvider } from '../calendar/provider';
 import { formatAxisDay, formatAxisHour } from '../calendar/format';
 import type { Session } from '../data/types';
+
+/** Convert an in-game ISO string to epoch seconds via the active calendar. Prefers seconds field when available. */
+function inGameToSeconds(isoStr: string): number {
+  const cal = CalendarProvider.get();
+  const parsed = cal.tryParse(isoStr);
+  if (!parsed) throw new SyntaxError(`Cannot parse in-game date: "${isoStr}"`);
+  return cal.toEpochSeconds(parsed);
+}
+
+/** Extract start epoch-seconds from a session, preferring the precomputed field. */
+function sessionStartSeconds(s: Session): number {
+  if (s.inGameStartSeconds != null) return s.inGameStartSeconds;
+  if (s.inGameStart) return inGameToSeconds(s.inGameStart);
+  throw new SyntaxError(`Session ${s.id} has no in-game start`);
+}
+
+/** Extract end epoch-seconds from a session, preferring the precomputed field. Falls back to start. */
+function sessionEndSeconds(s: Session): number {
+  if (s.inGameEndSeconds != null) return s.inGameEndSeconds;
+  if (s.inGameEnd) return inGameToSeconds(s.inGameEnd);
+  return sessionStartSeconds(s);
+}
+
+/** Convert epoch seconds to an in-game ISO string via the active calendar. */
+function secondsToInGame(secs: number): string {
+  const cal = CalendarProvider.get();
+  return cal.format(cal.fromEpochSeconds(secs));
+}
 
 const SNAP_SECS = 900;
 const HANDLE_R = 7;
@@ -54,10 +77,10 @@ export function clampCreationEnd(anchorSecs: number, rawSecs: number, sessions: 
   const movingRight = rawSecs > anchorSecs;
   let clamped = rawSecs;
   for (const s of sessions) {
-    if (!s.inGameStart) continue;
+    if (s.inGameStartSeconds == null && !s.inGameStart) continue;
     try {
-      const sStart = toAbsoluteSeconds(parseISOString(s.inGameStart));
-      const sEnd = s.inGameEnd ? toAbsoluteSeconds(parseISOString(s.inGameEnd)) : sStart;
+      const sStart = sessionStartSeconds(s);
+      const sEnd = sessionEndSeconds(s);
       if (sStart === sEnd) continue;
       if (movingRight) {
         if (sStart >= anchorSecs && sStart < clamped) clamped = sStart;
@@ -85,10 +108,10 @@ export function clampWholeDragDelta(
   const movingRight = delta > 0;
   let clamped = delta;
   for (const s of sessions) {
-    if (s.id === excludeId || !s.inGameStart) continue;
+    if (s.id === excludeId || (s.inGameStartSeconds == null && !s.inGameStart)) continue;
     try {
-      const sStart = toAbsoluteSeconds(parseISOString(s.inGameStart));
-      const sEnd = s.inGameEnd ? toAbsoluteSeconds(parseISOString(s.inGameEnd)) : sStart;
+      const sStart = sessionStartSeconds(s);
+      const sEnd = sessionEndSeconds(s);
       if (sStart === sEnd) continue;
       if (movingRight) {
         if (sStart >= originalEnd && sStart - originalEnd < clamped) {
@@ -162,12 +185,12 @@ export function createSessionMode(
     let best = rawSecs;
     let bestDist = Infinity;
     for (const s of deps.getSessions()) {
-      if (!s.inGameStart) continue;
-      const pts: Array<[number, 'start' | 'end']> = [
-        [toAbsoluteSeconds(parseISOString(s.inGameStart)), 'start'],
-      ];
-      if (s.inGameEnd && s.inGameEnd !== s.inGameStart) {
-        pts.push([toAbsoluteSeconds(parseISOString(s.inGameEnd)), 'end']);
+      if (s.inGameStartSeconds == null && !s.inGameStart) continue;
+      const startSecs = sessionStartSeconds(s);
+      const endSecs = sessionEndSeconds(s);
+      const pts: Array<[number, 'start' | 'end']> = [[startSecs, 'start']];
+      if (endSecs !== startSecs) {
+        pts.push([endSecs, 'end']);
       }
       for (const [secs, which] of pts) {
         if (s.id === excludeSessionId && which === excludeWhich) continue;
@@ -198,10 +221,8 @@ export function createSessionMode(
       const session = deps.getSessions().find((s) => s.id === sessionId);
       if (!session) return;
       e.stopPropagation();
-      const startSecs = toAbsoluteSeconds(parseISOString(session.inGameStart));
-      const endSecs = session.inGameEnd
-        ? toAbsoluteSeconds(parseISOString(session.inGameEnd))
-        : startSecs;
+      const startSecs = sessionStartSeconds(session);
+      const endSecs = sessionEndSeconds(session);
       const secs = which === 'start' ? startSecs : endSecs;
       const anchorSecs = which === 'start' ? endSecs : startSecs;
       drag = { sessionId, which, originalSecs: secs, currentSecs: secs, anchorSecs };
@@ -216,10 +237,8 @@ export function createSessionMode(
       if (session) {
         e.stopPropagation();
         const anchorSecs = xToSeconds(e.clientX - rect.left, deps.getView(), deps.getViewport());
-        const originalStart = toAbsoluteSeconds(parseISOString(session.inGameStart));
-        const originalEnd = session.inGameEnd
-          ? toAbsoluteSeconds(parseISOString(session.inGameEnd))
-          : originalStart;
+        const originalStart = sessionStartSeconds(session);
+        const originalEnd = sessionEndSeconds(session);
         wholeDrag = {
           sessionId,
           originalStart,
@@ -249,10 +268,7 @@ export function createSessionMode(
       const finalStart = Math.min(pendingClickSecs, pendingCurrentSecs);
       const finalEnd = Math.max(pendingClickSecs, pendingCurrentSecs);
       clearPendingCreation();
-      deps.onCreateSessionPrefill(
-        toISOString(fromAbsoluteSeconds(finalStart)),
-        toISOString(fromAbsoluteSeconds(finalEnd)),
-      );
+      deps.onCreateSessionPrefill(secondsToInGame(finalStart), secondsToInGame(finalEnd));
       return;
     }
     if (pendingClickSecs !== null) return;
@@ -336,7 +352,7 @@ export function createSessionMode(
         wholeDrag.ghostEl.style.width = `${pillW}px`;
       }
 
-      const date = fromAbsoluteSeconds(newStart);
+      const date = CalendarProvider.get().fromEpochSeconds(newStart);
       dragLabel.textContent = formatAxisDay(date) + ' ' + formatAxisHour(date);
       dragLabel.style.left = `${startX}px`;
       dragLabel.style.top = `${axisY + 8}px`;
@@ -408,7 +424,7 @@ export function createSessionMode(
       if (guideEl) guideEl.style.left = `${finalX}px`;
     }
 
-    const date = fromAbsoluteSeconds(finalSecs);
+    const date = CalendarProvider.get().fromEpochSeconds(finalSecs);
     dragLabel.textContent = formatAxisDay(date) + ' ' + formatAxisHour(date);
     dragLabel.style.left = `${finalX}px`;
     dragLabel.style.top = `${axisY + 8}px`;
@@ -423,10 +439,7 @@ export function createSessionMode(
         const finalStart = Math.min(pendingClickSecs, pendingCurrentSecs);
         const finalEnd = Math.max(pendingClickSecs, pendingCurrentSecs);
         clearPendingCreation();
-        deps.onCreateSessionPrefill(
-          toISOString(fromAbsoluteSeconds(finalStart)),
-          toISOString(fromAbsoluteSeconds(finalEnd)),
-        );
+        deps.onCreateSessionPrefill(secondsToInGame(finalStart), secondsToInGame(finalEnd));
       }
       // click without drag: anchor stays, wait for second click
       return;
@@ -442,10 +455,12 @@ export function createSessionMode(
       const session = deps.getSessions().find((s) => s.id === sessionId);
       if (!session) return;
 
+      const newStart = originalStart + currentDelta;
+      const newEnd = originalEnd + currentDelta;
       const updated: Session = {
         ...session,
-        inGameStart: toISOString(fromAbsoluteSeconds(originalStart + currentDelta)),
-        inGameEnd: toISOString(fromAbsoluteSeconds(originalEnd + currentDelta)),
+        inGameStartSeconds: newStart,
+        inGameEndSeconds: newEnd,
       };
       try {
         await deps.onSaveSession(updated);
@@ -466,13 +481,13 @@ export function createSessionMode(
 
     const updated: Session = { ...session };
     if (which === 'start') {
-      updated.inGameStart = toISOString(fromAbsoluteSeconds(currentSecs));
-      const endSecs = toAbsoluteSeconds(parseISOString(session.inGameEnd));
-      if (currentSecs > endSecs) updated.inGameEnd = updated.inGameStart;
+      updated.inGameStartSeconds = currentSecs;
+      const endSecs = sessionEndSeconds(session);
+      if (currentSecs > endSecs) updated.inGameEndSeconds = currentSecs;
     } else {
-      updated.inGameEnd = toISOString(fromAbsoluteSeconds(currentSecs));
-      const startSecs = toAbsoluteSeconds(parseISOString(session.inGameStart));
-      if (currentSecs < startSecs) updated.inGameStart = updated.inGameEnd;
+      updated.inGameEndSeconds = currentSecs;
+      const startSecs = sessionStartSeconds(session);
+      if (currentSecs < startSecs) updated.inGameStartSeconds = currentSecs;
     }
 
     try {
@@ -527,12 +542,10 @@ export function createSessionMode(
     const railTop = axisY + 46; // center of pill: RAIL_OFFSET(34) + half RAIL_H(12)
 
     for (const session of deps.getSessions()) {
-      if (!session.inGameStart) continue;
+      if (session.inGameStartSeconds == null && !session.inGameStart) continue;
 
-      const startSecs = toAbsoluteSeconds(parseISOString(session.inGameStart));
-      const endSecs = session.inGameEnd
-        ? toAbsoluteSeconds(parseISOString(session.inGameEnd))
-        : startSecs;
+      const startSecs = sessionStartSeconds(session);
+      const endSecs = sessionEndSeconds(session);
 
       const startX = secondsToX(startSecs, view, size);
       const endX = secondsToX(endSecs, view, size);
