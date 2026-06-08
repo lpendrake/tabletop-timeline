@@ -117,6 +117,13 @@ Once drafting starts, `new-body.md` — not a chat message — is the single
 evolving source of truth for the body. Comparing it against `original-body.md`
 shows exactly what changed.
 
+**Angle brackets break GitHub bodies.** GitHub truncates an issue body at the
+first literal opening angle bracket — and code fences do **not** protect it (a
+`# <title>` inside a ```` ```md ```` block still cuts the body off there). So
+while drafting `new-body.md`, never write a raw angle-bracket token (e.g. a
+`<title>` template marker): use the square-bracket form `[title]` and add a
+one-line note that the real on-disk/code token is the angle-bracket form.
+
 ### 5. Approval gate — define, review, freeze
 
 This gate exists so the user can trust that **what they approve is exactly what
@@ -148,6 +155,10 @@ Do these via the GitHub MCP connector, in this order:
    the approved changes, linking this session — e.g.:
    `The issue body was updated according to the approved changes in [this session](https://claude.ai/code/session_<current-session-id>).`
 3. **Remove the ai-review-requested label** from the ticket.
+4. **Re-fetch the body and confirm it isn't truncated.** GitHub silently cuts
+   the body at the first literal opening angle bracket (even inside code fences),
+   so verify the last section you wrote is actually present. If it's cut, the
+   draft still contains a raw angle bracket — fix it (see phase 4) and re-set.
 
 ---
 
