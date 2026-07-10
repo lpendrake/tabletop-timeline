@@ -30,17 +30,23 @@ interface ParsedWikiLink {
 
 The scanner is a simple index-based loop — no regex — finding `[[` then the nearest `]]`, splitting on the first `|` inside the body. All positions are offset by `lineStart` so callers can work in doc coordinates directly.
 
-## Decoration lifecycle
+## Decoration lifecycle — split rendering
+
+Every wiki link is rendered as **two pieces shown side by side, always**, regardless of cursor position or selection:
+
+- The **raw source** (`[[id]]` or `[[label|id]]`) stays real, editable, cursor-navigable document text. It is never swapped out — `buildDecorations` only wraps it in a `Decoration.mark({ class: 'cm-wiki-link-raw' })` (muted styling), which does not remove or replace any text.
+- The **rendered display name** is shown immediately after it as a `Decoration.widget` (`WikiLinkWidget`), added as a **zero-length inserted** decoration at `link.to` (`builder.add(link.to, link.to, Decoration.widget({ widget, side: 1 }))`). Because an inserted widget occupies no document position, the cursor can never land inside it and it is inherently atomic — selection/arrow-key navigation treats it as a single unit without any special-casing. **`Decoration.replace` is not used for wiki links.**
 
 `wikiLinks(config)` returns an `Extension` bundle. The core is a `StateField<DecorationSet>` that calls `buildDecorations(state, config)` whenever:
 
 - the document changes (`transaction.docChanged`)
-- the selection changes (`transaction.selection`) — needed to toggle raw vs. widget rendering for the cursor-is-inside case
 - a `setKnownIds` or `setEntityLabels` effect arrives
+
+Selection changes do **not** trigger a rebuild — rendering no longer depends on cursor position, which is what eliminates the reflow/"jump" that used to happen when the raw source and rendered name (different widths) swapped in and out on every click.
 
 ### Widget rendering — `WikiLinkWidget`
 
-For every link whose range does **not** overlap the current selection, `buildDecorations` inserts a `Decoration.replace` wrapping a `WikiLinkWidget`. The widget renders a `<span>` with:
+For every link, `buildDecorations` adds a `WikiLinkWidget` immediately after the raw mark. The widget renders a `<span>` with:
 
 - `class="cm-note-link"` (or `cm-note-link cm-note-link-broken` for a missing entity)
 - `data-note-id="{id}"` — used by peek and click handlers
@@ -49,7 +55,7 @@ For every link whose range does **not** overlap the current selection, `buildDec
   2. Lookup in `entityLabelMapField` by id
   3. Raw id as fallback
 
-When the cursor is inside the link range, the range gets a `Decoration.mark({ class: 'cm-wiki-link-raw' })` instead, exposing the raw source so the user can edit it. In `readOnly` mode the selection check is skipped and links always render as widgets.
+A **plain left-click** (no modifier required) on the `.cm-note-link` span navigates to the entity via `config.onOpen(id)` — see "Keyboard bindings" below. A click on the raw text (not `.cm-note-link`) is not intercepted and places the cursor normally, since the raw text is ordinary document content.
 
 ## StateFields
 
@@ -95,7 +101,7 @@ Flow:
 - **Backspace** at the closing `]]` of a label-free `[[id]]` link: moves cursor to just after `[[` instead of deleting, preventing accidental destruction of the whole token.
 - **Ctrl-Enter** (or Cmd-Enter): opens the link under the cursor via `config.onOpen(id)`.
 
-**Cmd/Ctrl-click** on a rendered `.cm-note-link` span also calls `config.onOpen(id)`.
+**A plain left-click** on a rendered `.cm-note-link` span calls `config.onOpen(id)` (no Cmd/Ctrl modifier needed — see "Decoration lifecycle" above). `makeWikiLinkPointerGuard` passes `{ anyLeftClick: true }` to `makePointerGuard('.cm-note-link', …)` so the pointerdown on the widget is swallowed in the capture phase (preventing CM6 from attempting to place a cursor there) before the click handler runs. This is a wiki-link-specific option on the shared `makePointerGuard` helper — other call sites (e.g. `markdown-link-click.ts`'s `.cm-md-link` guard) keep the default Cmd/Ctrl-only gating.
 
 ## Peek integration
 
@@ -123,4 +129,5 @@ The notes editor wires this up via `makePeekWikiLinksConfig()` in `editor-bindin
 - **`knownIds` empty ≠ all links valid.** Pass `undefined` (causes `wikiLinks.knownIds` to not dispatch `setKnownIds`) while the index is loading, not an empty `Set`. An empty `Set` suppresses broken-link highlighting entirely.
 - **Do not read entity labels from within the extension itself.** Labels flow in via `setEntityLabels` — the extension never imports from notes or the entity index directly.
 - **The completion always inserts `[[id]]`, not `[[label|id]]`.** Label resolution happens at render time via the StateField, so storing the label in the doc is unnecessary.
-- **Decoration rebuilds on selection change.** The raw-vs-widget switch needs selection tracking. This is intentional; don't remove the `transaction.selection` check from the StateField update guard.
+- **Decorations do not rebuild on selection change.** Rendering is split (raw text + widget always both shown), so there is nothing selection-dependent left to toggle. Don't reintroduce a `transaction.selection` check into the StateField update guard — it would just cause unnecessary rebuilds.
+- **Never use `Decoration.replace` for a wiki link's `[[…]]` range.** That was the old atomic-swap approach and is what caused the reflow "jump" this design replaced. The raw range only ever gets a `Decoration.mark`; the rendered name is a separate zero-length `Decoration.widget` inserted at `link.to`.
