@@ -93,6 +93,33 @@
   color: var(--theme-text-secondary);
 }
 
+/* Six-hour marks */
+.axis-time-sixHour .axis-time-mark {
+  height: 10px;
+  margin-top: -5px;
+  background: var(--theme-border-strong);
+  opacity: 0.8;
+}
+.axis-time-sixHour .axis-time-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--theme-text-secondary);
+  opacity: 0.9;
+}
+
+/* Three-hour marks */
+.axis-time-threeHour .axis-time-mark {
+  height: 9px;
+  margin-top: -4px;
+  background: var(--theme-border-strong);
+  opacity: 0.7;
+}
+.axis-time-threeHour .axis-time-label {
+  font-size: 10px;
+  color: var(--theme-text-secondary);
+  opacity: 0.85;
+}
+
 /* Hours */
 .axis-time-hour .axis-time-mark {
   height: 8px;

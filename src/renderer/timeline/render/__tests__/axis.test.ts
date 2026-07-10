@@ -20,8 +20,20 @@ describe('naturalTier', () => {
     expect(naturalTier(43200, ALL_TIERS)).toBe(tier('midday'));
   });
 
-  it('identifies an hour mark that is not midday (09:00 = 32400s)', () => {
-    expect(naturalTier(32400, ALL_TIERS)).toBe(tier('hour'));
+  it('identifies a six-hour mark that is not midday (06:00 = 21600s)', () => {
+    expect(naturalTier(21600, ALL_TIERS)?.id).toBe('sixHour');
+  });
+
+  it('identifies a three-hour mark that is not on a six-hour boundary (03:00 = 10800s)', () => {
+    expect(naturalTier(10800, ALL_TIERS)?.id).toBe('threeHour');
+  });
+
+  it('sixHour wins over threeHour when both divide 21600', () => {
+    expect(naturalTier(21600, ALL_TIERS)?.id).toBe('sixHour');
+  });
+
+  it('identifies an hour mark that is not on a three-hour boundary (01:00 = 3600s)', () => {
+    expect(naturalTier(3600, ALL_TIERS)).toBe(tier('hour'));
   });
 
   it('identifies 2am (7200s) as an hour, not midday', () => {
@@ -109,8 +121,20 @@ describe('chooseDayStep', () => {
 });
 
 describe('buildTimeTiers — calendar-aware midday step', () => {
-  it('returns 5 tiers', () => {
-    expect(buildTimeTiers(86400)).toHaveLength(5);
+  it('returns 7 tiers', () => {
+    expect(buildTimeTiers(86400)).toHaveLength(7);
+  });
+
+  it('sixHour/threeHour steps derive from secondsPerDay for a 24h calendar', () => {
+    const tiers = buildTimeTiers(86400);
+    expect(tiers.find((t) => t.id === 'sixHour')!.stepSecs).toBe(21600);
+    expect(tiers.find((t) => t.id === 'threeHour')!.stepSecs).toBe(10800);
+  });
+
+  it('sixHour/threeHour steps scale for a 25h Birthright-style calendar (90000s)', () => {
+    const tiers = buildTimeTiers(90000);
+    expect(tiers.find((t) => t.id === 'sixHour')!.stepSecs).toBe(22500);
+    expect(tiers.find((t) => t.id === 'threeHour')!.stepSecs).toBe(11250);
   });
 
   it('midday stepSecs = secondsPerDay / 2 for a 24h calendar', () => {

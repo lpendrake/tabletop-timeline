@@ -8,7 +8,7 @@ import type { WeekdayColors } from '../../theme';
 import { weekdayColor } from './cards';
 
 export interface TimeTier {
-  readonly id: 'midday' | 'hour' | 'half' | 'quarter' | 'minute';
+  readonly id: 'midday' | 'sixHour' | 'threeHour' | 'hour' | 'half' | 'quarter' | 'minute';
   /** Seconds between ticks of this tier. */
   readonly stepSecs: number;
   /** Minimum pixels-per-day to render the tick mark. */
@@ -27,7 +27,21 @@ export interface TimeTier {
 export function buildTimeTiers(secondsPerDay: number): readonly TimeTier[] {
   return [
     { id: 'midday', stepSecs: secondsPerDay / 2, markMinPPD: 80, markHeight: 12, labelMinPPD: 120 },
-    { id: 'hour', stepSecs: 3600, markMinPPD: 800, markHeight: 8, labelMinPPD: 1500 },
+    {
+      id: 'sixHour',
+      stepSecs: secondsPerDay / 4,
+      markMinPPD: 160,
+      markHeight: 10,
+      labelMinPPD: 160,
+    },
+    {
+      id: 'threeHour',
+      stepSecs: secondsPerDay / 8,
+      markMinPPD: 320,
+      markHeight: 9,
+      labelMinPPD: 320,
+    },
+    { id: 'hour', stepSecs: 3600, markMinPPD: 800, markHeight: 8, labelMinPPD: 800 },
     { id: 'half', stepSecs: 1800, markMinPPD: 1600, markHeight: 5, labelMinPPD: 3000 },
     { id: 'quarter', stepSecs: 900, markMinPPD: 3200, markHeight: 3, labelMinPPD: 6000 },
     { id: 'minute', stepSecs: 60, markMinPPD: 40000, markHeight: 2, labelMinPPD: 100000 },
