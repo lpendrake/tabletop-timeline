@@ -122,6 +122,7 @@
 }
 
 .cm-note-link {
+  margin-left: 0.35em;
   color: var(--theme-accent-gold);
   text-decoration: underline;
   text-underline-offset: 4px;

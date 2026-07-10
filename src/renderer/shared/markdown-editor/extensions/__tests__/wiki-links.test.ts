@@ -2,7 +2,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import {
   parseTrigger,
   findWikiLinksInLine,
@@ -10,6 +9,7 @@ import {
   buildDecorations,
   buildWikiLinkInsert,
   setEntityLabels,
+  setKnownIds,
   type WikiLinksConfig,
   type WikiLinkSuggestion,
 } from '../wiki-links';
@@ -73,9 +73,9 @@ describe('findWikiLinksInLine', () => {
 });
 
 describe('cursor-in-link range check (inclusive bounds)', () => {
-  // Verifies the logic used by Ctrl+Enter and the isSelected decoration check.
+  // Verifies the logic used by Ctrl+Enter to find the link under the cursor.
   // The key invariant: cursor AT link.from or link.to must be considered "inside"
-  // the link so that Decoration.replace (atomic) boundary positions trigger navigation.
+  // the link so navigation triggers at either boundary of the raw text.
   it('cursor at link.from is inside the range', () => {
     const [link] = findWikiLinksInLine('[[Bob|abc1]]', 0);
     // from=0, to=12
@@ -107,9 +107,8 @@ describe('cursor-in-link range check (inclusive bounds)', () => {
 // ---------------------------------------------------------------------------
 
 function makeView(config: WikiLinksConfig): { view: EditorView; container: HTMLDivElement } {
-  // Put the link at position 4 so the default cursor (pos 0) is outside the link
-  // range [4, 22], preventing the "isSelected → mark" branch from firing and ensuring
-  // the Decoration.replace widget (which renders .cm-note-link) is used instead.
+  // The rendered .cm-note-link widget is always present alongside the raw text,
+  // regardless of cursor position (split rendering).
   const state = EditorState.create({
     doc: 'See [[Test Note|abc1]]',
     extensions: [wikiLinks(config)],
@@ -227,39 +226,134 @@ describe('buildWikiLinkInsert', () => {
   });
 });
 
-describe('readonly mode decorations', () => {
-  function makeState(doc: string, cursorPos: number, readOnly: boolean) {
-    const extensions = [
-      markdown({ base: markdownLanguage }),
-      ...(readOnly ? [EditorState.readOnly.of(true)] : []),
-    ];
-    return EditorState.create({ doc, extensions, selection: { anchor: cursorPos } });
+describe('split rendering: raw text and rendered name shown together', () => {
+  function summarizeDecorations(state: EditorState) {
+    const decos = buildDecorations(state, {});
+    const items: Array<{ from: number; to: number; kind: string }> = [];
+    decos.between(0, state.doc.length, (from, to, deco) => {
+      const spec = deco.spec as Record<string, unknown>;
+      items.push({ from, to, kind: spec['class'] === 'cm-wiki-link-raw' ? 'raw' : 'widget' });
+    });
+    return items;
   }
 
-  it('in normal (editable) mode, a wiki-link whose range overlaps the selection shows as raw text', () => {
-    // cursor at pos 2 — inside [[Bob|abc1]], from=0 to=12
-    const state = makeState('[[Bob|abc1]]', 2, false);
-    const decos = buildDecorations(state, {});
-    let hasRawMark = false;
-    decos.between(0, state.doc.length, (_from, _to, deco) => {
-      if ((deco.spec as Record<string, unknown>)['class'] === 'cm-wiki-link-raw') hasRawMark = true;
-    });
-    expect(hasRawMark).toBe(true);
+  it('bare [[id]] produces a raw mark over the full range and a widget at its end', () => {
+    const state = EditorState.create({ doc: '[[abc1]]' });
+    const items = summarizeDecorations(state);
+    expect(items).toContainEqual({ from: 0, to: 8, kind: 'raw' });
+    expect(items).toContainEqual({ from: 8, to: 8, kind: 'widget' });
   });
 
-  it('in readonly mode, the same overlapping selection always renders as a widget', () => {
-    const state = makeState('[[Bob|abc1]]', 2, true);
-    expect(state.readOnly).toBe(true);
-    const decos = buildDecorations(state, {});
-    let hasRawMark = false;
-    let hasWidget = false;
-    decos.between(0, state.doc.length, (_from, _to, deco) => {
-      const spec = deco.spec as Record<string, unknown>;
-      if (spec['class'] === 'cm-wiki-link-raw') hasRawMark = true;
-      if (spec['widget'] !== undefined) hasWidget = true;
+  it('labeled [[Label|id]] produces a raw mark over the full range and a widget at its end', () => {
+    const state = EditorState.create({ doc: '[[Captain Renard|rn42]]' });
+    const items = summarizeDecorations(state);
+    expect(items).toContainEqual({ from: 0, to: 23, kind: 'raw' });
+    expect(items).toContainEqual({ from: 23, to: 23, kind: 'widget' });
+  });
+
+  it('produces the same decoration set whether the cursor is inside or outside the link range', () => {
+    // from=0, to=12 for [[Bob|abc1]] — pos 2 is inside, pos 12 is at the end/outside.
+    const insideState = EditorState.create({ doc: '[[Bob|abc1]]', selection: { anchor: 2 } });
+    const outsideState = EditorState.create({
+      doc: '[[Bob|abc1]] elsewhere',
+      selection: { anchor: 20 },
     });
-    expect(hasRawMark).toBe(false);
-    expect(hasWidget).toBe(true);
+    expect(summarizeDecorations(insideState)).toEqual([
+      { from: 0, to: 12, kind: 'raw' },
+      { from: 12, to: 12, kind: 'widget' },
+    ]);
+    // Same doc prefix, decoration shape for the link itself is unaffected by selection.
+    expect(summarizeDecorations(outsideState).slice(0, 2)).toEqual([
+      { from: 0, to: 12, kind: 'raw' },
+      { from: 12, to: 12, kind: 'widget' },
+    ]);
+  });
+});
+
+describe('split rendering (DOM): raw text and rendered widget both present', () => {
+  const views: EditorView[] = [];
+  afterEach(() => {
+    views.forEach((v) => v.destroy());
+    views.length = 0;
+    document.body.innerHTML = '';
+  });
+
+  function makeViewWithDoc(
+    doc: string,
+    config: WikiLinksConfig = {},
+  ): { view: EditorView; container: HTMLDivElement } {
+    const state = EditorState.create({ doc, extensions: [wikiLinks(config)] });
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const view = new EditorView({ state, parent: container });
+    return { view, container };
+  }
+
+  it('bare [[id]] shows raw text AND the rendered widget at once', () => {
+    const { view, container } = makeViewWithDoc('[[abc1]]');
+    views.push(view);
+    const raw = container.querySelector<HTMLElement>('.cm-wiki-link-raw');
+    const widget = container.querySelector<HTMLElement>('.cm-note-link');
+    expect(raw?.textContent).toBe('[[abc1]]');
+    expect(widget).not.toBeNull();
+    expect(widget?.dataset.noteId).toBe('abc1');
+  });
+
+  it('labeled [[Label|id]] shows raw text AND the label as the widget text', () => {
+    const { view, container } = makeViewWithDoc('[[Captain Renard|rn42]]');
+    views.push(view);
+    const raw = container.querySelector<HTMLElement>('.cm-wiki-link-raw');
+    const widget = container.querySelector<HTMLElement>('.cm-note-link');
+    expect(raw?.textContent).toBe('[[Captain Renard|rn42]]');
+    expect(widget?.textContent).toBe('Captain Renard');
+  });
+
+  it('an id absent from a non-empty knownIds set marks the widget as broken', () => {
+    const { view, container } = makeViewWithDoc('[[zzz9]]');
+    views.push(view);
+    view.dispatch({ effects: setKnownIds.of(new Set(['abc1', 'def2'])) });
+    const widget = container.querySelector<HTMLElement>('.cm-note-link');
+    expect(widget?.classList.contains('cm-note-link-broken')).toBe(true);
+  });
+});
+
+describe('plain click navigates the rendered name; raw text stays editable', () => {
+  const views: EditorView[] = [];
+  afterEach(() => {
+    views.forEach((v) => v.destroy());
+    views.length = 0;
+    document.body.innerHTML = '';
+  });
+
+  function makeViewWithDoc(
+    doc: string,
+    config: WikiLinksConfig,
+  ): { view: EditorView; container: HTMLDivElement } {
+    const state = EditorState.create({ doc, extensions: [wikiLinks(config)] });
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const view = new EditorView({ state, parent: container });
+    return { view, container };
+  }
+
+  it('a plain left-click on the rendered .cm-note-link widget calls onOpen(id)', () => {
+    const onOpen = vi.fn();
+    const { view, container } = makeViewWithDoc('See [[Test Note|abc1]]', { onOpen });
+    views.push(view);
+    const widget = container.querySelector<HTMLElement>('.cm-note-link');
+    expect(widget).not.toBeNull();
+    widget!.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 }));
+    expect(onOpen).toHaveBeenCalledWith('abc1');
+  });
+
+  it('a plain click on the raw [[…]] text does not call onOpen', () => {
+    const onOpen = vi.fn();
+    const { view, container } = makeViewWithDoc('See [[Test Note|abc1]]', { onOpen });
+    views.push(view);
+    const raw = container.querySelector<HTMLElement>('.cm-wiki-link-raw');
+    expect(raw).not.toBeNull();
+    raw!.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 }));
+    expect(onOpen).not.toHaveBeenCalled();
   });
 });
 
@@ -283,12 +377,14 @@ describe('entity label resolution', () => {
     return { view, container };
   }
 
-  it('resolves [[id]] to entity label when no local label is present', () => {
+  it('resolves [[id]] to entity label when no local label is present, leaving the raw id untouched', () => {
     const { view, container } = makeViewWithDoc('See [[abc1]]');
     views.push(view);
     view.dispatch({ effects: setEntityLabels.of(new Map([['abc1', 'Alice the Wizard']])) });
     const link = container.querySelector<HTMLElement>('.cm-note-link');
     expect(link?.textContent).toBe('Alice the Wizard');
+    const raw = container.querySelector<HTMLElement>('.cm-wiki-link-raw');
+    expect(raw?.textContent).toBe('[[abc1]]');
   });
 
   it('local label takes precedence over entity label', () => {

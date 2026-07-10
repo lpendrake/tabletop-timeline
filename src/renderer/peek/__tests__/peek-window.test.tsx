@@ -359,39 +359,84 @@ describe('pin behavior', () => {
 // ─── Positioning ──────────────────────────────────────────────────────────────
 
 describe('positioning', () => {
-  it('places window below anchor with 12px gutter', () => {
+  it('opens to the RIGHT when the right side has more room', () => {
+    // innerWidth defaults to 1024 in happy-dom; anchor sits near the left edge
+    // so spaceRight (874) is far larger than spaceLeft (50).
     setup();
+    const anchorRect = makeAnchorRect({ left: 50, right: 150, top: 100, bottom: 120 });
     act(() =>
       root.render(
         <PeekWindow
           path="notes/foo.md"
-          anchorRect={makeAnchorRect({ left: 100, bottom: 120 })}
+          anchorRect={anchorRect}
           stackDepth={0}
           fetcher={makeNeverFetcher()}
         />,
       ),
     );
     const win = document.body.querySelector('.peek-window') as HTMLDivElement;
-    expect(parseInt(win.style.left)).toBe(100);
-    expect(parseInt(win.style.top)).toBe(132); // 120 + 12
+    expect(parseInt(win.style.left)).toBe(anchorRect.right); // flush against the link, no gap
+    expect(parseInt(win.style.top)).toBe(Math.max(12, anchorRect.top));
   });
 
-  it('clamps left when anchor is near right edge of viewport', () => {
+  it('opens to the LEFT when the left side has more room', () => {
+    // Anchor sits near the right edge of a 1024px-wide viewport, so
+    // spaceLeft (900) is far larger than spaceRight (24).
+    setup();
+    const anchorRect = makeAnchorRect({ left: 900, right: 1000, top: 200, bottom: 220 });
+    act(() =>
+      root.render(
+        <PeekWindow
+          path="notes/foo.md"
+          anchorRect={anchorRect}
+          stackDepth={0}
+          fetcher={makeNeverFetcher()}
+        />,
+      ),
+    );
+    const win = document.body.querySelector('.peek-window') as HTMLDivElement;
+    expect(parseInt(win.style.left)).toBe(anchorRect.left - 480); // flush against the link, no gap
+  });
+
+  it('never opens below the link', () => {
+    setup();
+    const anchorRect = makeAnchorRect({ left: 400, right: 500, top: 300, bottom: 320 });
+    act(() =>
+      root.render(
+        <PeekWindow
+          path="notes/foo.md"
+          anchorRect={anchorRect}
+          stackDepth={0}
+          fetcher={makeNeverFetcher()}
+        />,
+      ),
+    );
+    const win = document.body.querySelector('.peek-window') as HTMLDivElement;
+    expect(parseInt(win.style.top)).not.toBe(anchorRect.bottom + 12);
+    expect(parseInt(win.style.top)).toBe(Math.max(12, anchorRect.top));
+  });
+
+  it('clamps within the viewport', () => {
     const originalWidth = window.innerWidth;
     Object.defineProperty(window, 'innerWidth', { value: 600, configurable: true });
     setup();
+    // spaceRight (450) > spaceLeft (50) so it opens right, but a flush right
+    // placement (left: 150) would overflow a 600px-wide viewport and must clamp.
     act(() =>
       root.render(
         <PeekWindow
           path="notes/foo.md"
-          anchorRect={makeAnchorRect({ left: 500, bottom: 120 })}
+          anchorRect={makeAnchorRect({ left: 50, right: 150, top: 120, bottom: 140 })}
           stackDepth={0}
           fetcher={makeNeverFetcher()}
         />,
       ),
     );
     const win = document.body.querySelector('.peek-window') as HTMLDivElement;
-    expect(parseInt(win.style.left)).toBe(108); // 600 - 480 - 12
+    const left = parseInt(win.style.left);
+    expect(left).toBe(108); // 600 - 480 - 12
+    expect(left).toBeGreaterThanOrEqual(12);
+    expect(left + 480).toBeLessThanOrEqual(600 - 12);
     Object.defineProperty(window, 'innerWidth', { value: originalWidth, configurable: true });
   });
 });
@@ -428,8 +473,11 @@ describe('drag', () => {
     act(() => document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true })));
 
     const win = document.body.querySelector('.peek-window') as HTMLDivElement;
-    expect(parseInt(win.style.left)).toBe(150); // 100 + 50
-    expect(parseInt(win.style.top)).toBe(162); // 132 + 30
+    // Default anchorRect (left:100, right:200, top:100) has more room on the
+    // right (824px) than the left (100px), so it opens flush right at left:200,
+    // top-aligned at top:100.
+    expect(parseInt(win.style.left)).toBe(250); // 200 + 50
+    expect(parseInt(win.style.top)).toBe(130); // 100 + 30
   });
 
   it('does not drag when window is not pinned', () => {
@@ -456,8 +504,8 @@ describe('drag', () => {
     );
 
     const win = document.body.querySelector('.peek-window') as HTMLDivElement;
-    expect(parseInt(win.style.left)).toBe(100);
-    expect(parseInt(win.style.top)).toBe(132);
+    expect(parseInt(win.style.left)).toBe(200);
+    expect(parseInt(win.style.top)).toBe(100);
   });
 
   it('does not drag when mousedown is on the close button', async () => {
@@ -490,7 +538,7 @@ describe('drag', () => {
     );
 
     const win = document.body.querySelector('.peek-window') as HTMLDivElement;
-    expect(parseInt(win.style.left)).toBe(100);
+    expect(parseInt(win.style.left)).toBe(200);
   });
 });
 

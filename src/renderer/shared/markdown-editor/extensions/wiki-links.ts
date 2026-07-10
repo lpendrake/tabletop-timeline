@@ -123,7 +123,6 @@ export function wikiLinks(config: WikiLinksConfig = {}): Extension {
     update(value, transaction) {
       if (
         transaction.docChanged ||
-        transaction.selection ||
         transaction.effects.some((e) => e.is(setKnownIds) || e.is(setEntityLabels))
       ) {
         return buildDecorations(transaction.state, config);
@@ -259,7 +258,6 @@ function makeWikiLinkClickHandler(config: WikiLinksConfig): Extension {
     click(event) {
       if (!config.onOpen) return false;
       if (event.button !== 0) return false;
-      if (!(event.metaKey || event.ctrlKey)) return false;
 
       const target = event.target as HTMLElement;
       const link = target.closest<HTMLElement>('.cm-note-link');
@@ -276,7 +274,7 @@ function makeWikiLinkClickHandler(config: WikiLinksConfig): Extension {
 
 function makeWikiLinkPointerGuard(config: WikiLinksConfig): Extension {
   return [
-    makePointerGuard('.cm-note-link'),
+    makePointerGuard('.cm-note-link', { anyLeftClick: true }),
     ViewPlugin.fromClass(
       class {
         private readonly onMouseOver = (event: MouseEvent) => {
@@ -321,32 +319,27 @@ export function buildDecorations(state: EditorState, _config: WikiLinksConfig): 
     const links = findWikiLinksInLine(line.text, line.from);
 
     for (const link of links) {
-      // Inclusive bounds: cursor AT link.from or link.to counts as "inside" the link.
-      // This matters because Decoration.replace (used below) is atomic — the cursor
-      // can only land at the two boundary positions, never strictly inside.
-      const isSelected =
-        !state.readOnly &&
-        state.selection.ranges.some((r) => r.from <= link.to && r.to >= link.from);
       const broken = hasIndex && !knownIds.has(link.id);
 
-      if (isSelected) {
-        builder.add(link.from, link.to, Decoration.mark({ class: 'cm-wiki-link-raw' }));
-      } else {
-        // Replace the entire [[…]] range with the label widget so the cursor
-        // cannot stray inside the hidden syntax (which was the root cause of
-        // Ctrl+Enter failing — cursor would land at link.to + 1 and miss the check).
-        builder.add(
-          link.from,
-          link.to,
-          Decoration.replace({
-            widget: new WikiLinkWidget(
-              link.id,
-              link.label || entityLabelMap.get(link.id) || link.id,
-              broken,
-            ),
-          }),
-        );
-      }
+      // Split rendering: the raw [[…]] source stays real, editable, cursor-navigable
+      // document text (muted via a mark) — it is never swapped out. The rendered
+      // display name is shown alongside it as a zero-length *inserted* widget at
+      // link.to. An inserted widget occupies no document position, so the cursor
+      // can never land inside it and it is inherently atomic — no selection-based
+      // toggling is needed or performed here.
+      builder.add(link.from, link.to, Decoration.mark({ class: 'cm-wiki-link-raw' }));
+      builder.add(
+        link.to,
+        link.to,
+        Decoration.widget({
+          widget: new WikiLinkWidget(
+            link.id,
+            link.label || entityLabelMap.get(link.id) || link.id,
+            broken,
+          ),
+          side: 1,
+        }),
+      );
     }
   }
 
