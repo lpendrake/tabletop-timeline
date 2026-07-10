@@ -60,10 +60,12 @@ export function makeResolveSrc(baseDir: string): (src: string) => string {
 }
 
 function computeInitialPosition(anchorRect: DOMRect): { left: number; top: number } {
-  let left = anchorRect.left;
-  const top = anchorRect.bottom + G;
-  if (left + W > window.innerWidth - G) left = window.innerWidth - W - G;
-  if (left < G) left = G;
+  const spaceRight = window.innerWidth - anchorRect.right;
+  const spaceLeft = anchorRect.left;
+  let left = spaceRight >= spaceLeft ? anchorRect.right : anchorRect.left - W;
+  left = Math.min(left, window.innerWidth - W - G);
+  left = Math.max(G, left);
+  const top = Math.max(G, anchorRect.top);
   return { left, top };
 }
 
