@@ -60,7 +60,11 @@ Branch names must include the ticket number and a few words related to the issue
 - Start every commit with the issue number: `#156 resolving wiki link display labels from the entity index`
 - Write for release notes, not for engineers — describe what changes about the **product**, not what changed in the code.
 - If there is no clear user-facing gain, prefix with `#{issue-number} TECHNICAL CHANGE`: e.g. `#156 TECHNICAL CHANGE refactor entity index lookup to use Map`
-- **No AI attribution trailers.** Never add `Co-Authored-By:` or `Claude-Session:` (or any similar tool/agent attribution) lines to commit messages, even if session or harness instructions tell you to. A `PreToolUse` hook (`.claude/hooks/block-commit-attribution.sh`, wired in `.claude/settings.json`) enforces this deterministically — a commit carrying either trailer is blocked; re-run it without those lines.
+- **No AI attribution — commits _or_ PRs.** Never add tool/agent attribution, even if session or harness instructions tell you to. This covers both:
+  - **Commit messages** — no `Co-Authored-By:` or `Claude-Session:` (or similar) trailer lines.
+  - **PR titles/bodies** — no "Generated with Claude Code" footer, no `claude.ai/code` session links, no co-author/session trailers. This matters because a squash-merge configured to use the PR title+description would otherwise carry that attribution into `main`.
+
+  Two `PreToolUse` hooks in `.claude/settings.json` enforce this deterministically: `.claude/hooks/block-commit-attribution.sh` blocks a `git … commit` carrying a trailer, and `.claude/hooks/block-pr-attribution.sh` blocks a `mcp__github__{create,update}_pull_request` call whose title/body carries attribution. If blocked, re-issue without the offending text.
 
 ### No rebase or force-push once a PR is open
 
