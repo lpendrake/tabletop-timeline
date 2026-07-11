@@ -1,4 +1,5 @@
-import { useContextMenuBehavior } from '../../shared/context-menu';
+import { ContextMenu } from '../../shared/context-menu';
+import type { ContextMenuItem } from '../../shared/context-menu';
 import '../../shared/context-menu/context-menu.css';
 
 export type ContextMenuTarget =
@@ -39,100 +40,61 @@ export function NoteContextMenu({
   onOpenInExplorer,
   onCopyLink,
 }: Props) {
-  const { menuRef, pos } = useContextMenuBehavior(target.x, target.y, onClose);
-
   const path = target.kind !== 'topfolder' ? target.path : undefined;
   const parentDir = target.kind === 'dir' ? target.path : undefined;
 
-  return (
-    <div
-      ref={menuRef}
-      className="context-menu"
-      style={{ left: pos.x, top: pos.y }}
-      onContextMenu={(e) => e.preventDefault()}
-    >
-      {target.kind !== 'file' && (
-        <>
-          <button
-            className="context-menu-item"
-            onClick={() => {
-              onNewFile(target.folder, parentDir);
-              onClose();
-            }}
-          >
-            New Note
-          </button>
-          <button
-            className="context-menu-item"
-            onClick={() => {
-              onNewFolder(target.folder, parentDir);
-              onClose();
-            }}
-          >
-            New Folder
-          </button>
-          <div className="context-menu-sep" />
-        </>
-      )}
-      <button
-        className="context-menu-item"
-        onClick={() => {
-          onRename(target.folder, path ?? '');
-          onClose();
-        }}
-      >
-        Rename
-      </button>
-      <button
-        className="context-menu-item is-danger"
-        onClick={() => {
-          onDelete(target.folder, path, target.kind);
-          onClose();
-        }}
-      >
-        {target.kind === 'topfolder' ? 'Delete Folder' : 'Delete'}
-      </button>
-      {target.kind === 'file' && (
-        <>
-          <div className="context-menu-sep" />
-          <button
-            className="context-menu-item"
-            onClick={() => {
-              onEditTagLabel?.(target.folder, target.path);
-              onClose();
-            }}
-          >
-            Edit Tag Label
-          </button>
-          <button
-            className="context-menu-item"
-            onClick={() => {
-              onEditLinkLabel?.(target.folder, target.path);
-              onClose();
-            }}
-          >
-            Edit Link Label
-          </button>
-          <button
-            className="context-menu-item"
-            onClick={() => {
-              onOpenInExplorer(target.folder, target.path);
-              onClose();
-            }}
-          >
-            Open in file explorer
-          </button>
-          <button
-            className="context-menu-item"
-            onClick={() => {
-              onCopyLink(target);
-              onClose();
-            }}
-          >
-            Copy Link
-          </button>
-        </>
-      )}
-    </div>
-  );
+  const items: ContextMenuItem[] = [];
+
+  if (target.kind !== 'file') {
+    items.push(
+      { kind: 'action', label: 'New Note', onSelect: () => onNewFile(target.folder, parentDir) },
+      {
+        kind: 'action',
+        label: 'New Folder',
+        onSelect: () => onNewFolder(target.folder, parentDir),
+      },
+      { kind: 'separator' },
+    );
+  }
+
+  items.push({
+    kind: 'action',
+    label: 'Rename',
+    onSelect: () => onRename(target.folder, path ?? ''),
+  });
+
+  items.push({
+    kind: 'action',
+    label: target.kind === 'topfolder' ? 'Delete Folder' : 'Delete',
+    onSelect: () => onDelete(target.folder, path, target.kind),
+    variant: 'danger',
+  });
+
+  if (target.kind === 'file') {
+    items.push(
+      { kind: 'separator' },
+      {
+        kind: 'action',
+        label: 'Edit Tag Label',
+        onSelect: () => onEditTagLabel?.(target.folder, target.path),
+      },
+      {
+        kind: 'action',
+        label: 'Edit Link Label',
+        onSelect: () => onEditLinkLabel?.(target.folder, target.path),
+      },
+      {
+        kind: 'action',
+        label: 'Open in file explorer',
+        onSelect: () => onOpenInExplorer(target.folder, target.path),
+      },
+      {
+        kind: 'action',
+        label: 'Copy Link',
+        onSelect: () => onCopyLink(target),
+      },
+    );
+  }
+
+  return <ContextMenu items={items} x={target.x} y={target.y} onClose={onClose} />;
 }
