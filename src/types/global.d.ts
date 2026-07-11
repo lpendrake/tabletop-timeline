@@ -123,6 +123,10 @@ declare global {
       setCampaignTheme: (campaignPath: string, themeId: string | null) => Promise<void>;
       getCampaignThemeOverrides: (campaignPaths: string[]) => Promise<Record<string, string>>;
 
+      // Default View Settings
+      getCampaignDefaultView: (campaignPath: string) => Promise<string | null>;
+      setCampaignDefaultView: (campaignPath: string, view: string | null) => Promise<void>;
+
       // Calendar Settings
       getCampaignCalendarId: () => Promise<string | null>;
       setCampaignCalendarId: (calendarId: string | null) => Promise<void>;

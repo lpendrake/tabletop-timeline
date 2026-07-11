@@ -15,6 +15,10 @@ import {
   setCampaignTheme,
   getCampaignOverrides,
 } from './settings/theme-settings.js';
+import {
+  getCampaignDefaultView,
+  setCampaignDefaultView,
+} from './settings/default-view-settings.js';
 import { setCampaignVersion } from './migration/campaign-version.js';
 import { LATEST_VERSION } from './migration/registry.js';
 
@@ -92,6 +96,16 @@ export function registerIpcHandlers() {
 
   ipcMain.handle('themeSettings:getCampaignOverrides', (_event, campaignPaths: string[]) =>
     getCampaignOverrides(campaignPaths),
+  );
+
+  // Default View Settings
+  ipcMain.handle('defaultViewSettings:getCampaign', (_event, campaignPath: string) =>
+    getCampaignDefaultView(campaignPath),
+  );
+  ipcMain.handle(
+    'defaultViewSettings:setCampaign',
+    (_event, campaignPath: string, view: string | null) =>
+      setCampaignDefaultView(campaignPath, view),
   );
 
   // Campaign Management
