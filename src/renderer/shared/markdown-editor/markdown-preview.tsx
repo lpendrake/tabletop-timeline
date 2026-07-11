@@ -21,6 +21,11 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
   baseDir,
 }) => (
   <div className={className} data-base-dir={baseDir}>
-    <MarkdownEditor content={content} readOnly images={images} wikiLinks={wikiLinks} />
+    <MarkdownEditor
+      content={content}
+      readOnly
+      images={images}
+      wikiLinks={wikiLinks ? { ...wikiLinks, readOnly: true } : wikiLinks}
+    />
   </div>
 );

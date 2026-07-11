@@ -21,6 +21,16 @@ import {
   type DecorationSet,
 } from '@codemirror/view';
 import { makePointerGuard } from './pointer-guard';
+import { showContextMenu, type ContextMenuItem } from '../../context-menu';
+import '../../context-menu/context-menu.css';
+import { copyToClipboard } from '../../clipboard';
+import { entityIndex } from '../../entity-index';
+import {
+  overrideLocalLabelChange,
+  resetLocalLabelChange,
+  resolveDisplayLabel,
+  hasGlobalOverride,
+} from './wiki-link-context-menu';
 
 export type WikiLinkStatus = 'resolved' | 'loading' | 'missing' | 'unresolved';
 
@@ -39,6 +49,10 @@ export interface WikiLinksConfig {
   openOnClick?: boolean;
   onHover?: (id: string, el: HTMLElement) => void;
   onHoverEnd?: (relatedTarget: Element | null) => void;
+  /** Opens the global label-override editor for an entity id. Omit to hide the "Globally" menu item. */
+  onEditLinkLabel?: (id: string) => void;
+  /** When true, hides local-label-editing menu items (this host's editor is not editable). */
+  readOnly?: boolean;
 }
 
 export interface ParsedWikiLink {
@@ -66,7 +80,7 @@ const knownIdsField = StateField.define<Set<string>>({
 // Dispatching this effect updates the entity label map used for [[id]] display resolution.
 export const setEntityLabels = StateEffect.define<Map<string, string>>();
 
-const entityLabelMapField = StateField.define<Map<string, string>>({
+export const entityLabelMapField = StateField.define<Map<string, string>>({
   create: () => new Map<string, string>(),
   update(value, tr) {
     for (const e of tr.effects) {
@@ -140,6 +154,7 @@ export function wikiLinks(config: WikiLinksConfig = {}): Extension {
     wikiLinkEditKeymap(config),
     wikiLinkCompletions(config),
     makeWikiLinkClickHandler(config),
+    makeWikiLinkContextMenuHandler(config),
   ];
 }
 
@@ -267,6 +282,107 @@ function makeWikiLinkClickHandler(config: WikiLinksConfig): Extension {
       event.preventDefault();
       event.stopPropagation();
       config.onOpen(noteId);
+      return true;
+    },
+  });
+}
+
+function makeWikiLinkContextMenuHandler(config: WikiLinksConfig): Extension {
+  return EditorView.domEventHandlers({
+    contextmenu(event, view) {
+      const target = event.target as HTMLElement;
+      const linkEl = target.closest<HTMLElement>('.cm-note-link');
+      const noteId = linkEl?.dataset.noteId;
+      if (!linkEl || !noteId) return false;
+
+      const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+      if (pos === null) return false;
+
+      const line = view.state.doc.lineAt(pos);
+      const links = findWikiLinksInLine(line.text, line.from);
+      const link =
+        links.find((l) => l.from <= pos && pos <= l.to) ?? links.find((l) => l.id === noteId);
+      if (!link) return false;
+
+      event.preventDefault();
+
+      const entityLabelMap = view.state.field(entityLabelMapField);
+      const items: ContextMenuItem[] = [];
+
+      const overrideItems: ContextMenuItem[] = [];
+      if (config.onEditLinkLabel) {
+        overrideItems.push({
+          kind: 'action',
+          label: 'Globally',
+          onSelect: () => config.onEditLinkLabel!(link.id),
+        });
+      }
+      if (!config.readOnly) {
+        overrideItems.push({
+          kind: 'action',
+          label: 'Locally',
+          onSelect: () => {
+            const change = overrideLocalLabelChange(
+              link,
+              resolveDisplayLabel(link, entityLabelMap),
+            );
+            view.dispatch({ changes: change });
+            view.focus();
+          },
+        });
+      }
+      if (config.onEditLinkLabel) {
+        overrideItems.push({
+          kind: 'action',
+          label: 'Reset global override',
+          disabled: !hasGlobalOverride(link.id, entityLabelMap),
+          onSelect: () => {
+            void entityIndex.updateLabelOverride(link.id, 'linkLabel', null);
+          },
+        });
+      }
+      if (!config.readOnly) {
+        overrideItems.push({
+          kind: 'action',
+          label: 'Reset local override',
+          disabled: link.labelFrom === null,
+          onSelect: () => {
+            const change = resetLocalLabelChange(link);
+            if (!change) return;
+            view.dispatch({ changes: change });
+            view.focus();
+          },
+        });
+      }
+
+      if (overrideItems.length > 0) {
+        items.push({ kind: 'submenu', label: 'Override link label', items: overrideItems });
+        items.push({ kind: 'separator' });
+      }
+
+      items.push({
+        kind: 'action',
+        label: 'Copy link',
+        onSelect: () => {
+          void copyToClipboard(view.state.doc.sliceString(link.from, link.to));
+        },
+      });
+      items.push({
+        kind: 'action',
+        label: 'Copy link label',
+        onSelect: () => {
+          void copyToClipboard(resolveDisplayLabel(link, entityLabelMap));
+        },
+      });
+      if (config.onOpen) {
+        items.push({
+          kind: 'action',
+          label: 'Go to',
+          onSelect: () => config.onOpen!(link.id),
+        });
+      }
+
+      showContextMenu(items, event.clientX, event.clientY);
       return true;
     },
   });

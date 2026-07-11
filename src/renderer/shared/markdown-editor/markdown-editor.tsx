@@ -54,6 +54,10 @@ export interface WikiLinksHostConfig {
   entityLabels?: Map<string, string>;
   onHover?: (id: string, el: HTMLElement) => void;
   onHoverEnd?: (relatedTarget: Element | null) => void;
+  /** Opens the global label-override editor for an entity id. Omit to hide the "Globally" menu item. */
+  onEditLinkLabel?: (id: string) => void;
+  /** Hides local-label-editing context-menu items even when the editor itself is editable. */
+  readOnly?: boolean;
 }
 
 export interface MarkdownEditorProps {
@@ -143,6 +147,10 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         onOpen: (id) => wikiLinksRef.current?.onOpen(id),
         onHover: (id, el) => wikiLinksRef.current?.onHover?.(id, el),
         onHoverEnd: (rt) => wikiLinksRef.current?.onHoverEnd?.(rt),
+        onEditLinkLabel: wikiLinksRef.current?.onEditLinkLabel
+          ? (id: string) => wikiLinksRef.current?.onEditLinkLabel?.(id)
+          : undefined,
+        readOnly: readOnlyRef.current || Boolean(wikiLinksRef.current?.readOnly),
       }),
       markdownLinkClick({
         onOpenExternal: (u) => mdLinksRef.current?.onOpenExternal?.(u),
