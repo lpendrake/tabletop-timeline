@@ -14,6 +14,7 @@ export interface ContextMenuHandle {
  */
 export function showContextMenu(items: ContextMenuItem[], x: number, y: number): ContextMenuHandle {
   const host = document.createElement('div');
+  host.style.zIndex = '1500';
   document.body.appendChild(host);
   const root = createRoot(host);
 

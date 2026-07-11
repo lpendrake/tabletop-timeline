@@ -1,6 +1,7 @@
 import { Fragment, useLayoutEffect, useRef, useState } from 'react';
 import { useContextMenuBehavior } from './use-context-menu-behavior';
 import { computeSubmenuPosition } from './submenu-position';
+import type { SubmenuSide } from './submenu-position';
 import type { ContextMenuItem, ContextMenuVariant } from './types';
 
 export interface ContextMenuProps {
@@ -22,7 +23,7 @@ export function ContextMenu({ items, x, y, onClose }: ContextMenuProps) {
       style={{ left: pos.x, top: pos.y }}
       onContextMenu={(e) => e.preventDefault()}
     >
-      <ContextMenuItemList items={items} onCloseAll={onClose} />
+      <ContextMenuItemList items={items} onCloseAll={onClose} preferLeft={false} />
     </div>
   );
 }
@@ -42,20 +43,36 @@ function itemClassName(
 function ContextMenuItemList({
   items,
   onCloseAll,
+  preferLeft,
 }: {
   items: ContextMenuItem[];
   onCloseAll: () => void;
+  /**
+   * Whether submenus at this level should prefer opening to the left. Set by
+   * the ancestor submenu's resolved open side, so a chain of nested
+   * submenus keeps opening the same direction once one of them has flipped
+   * left near the right screen edge.
+   */
+  preferLeft: boolean;
 }) {
   return (
     <Fragment>
       {items.map((item, index) => (
-        <ContextMenuRow key={index} item={item} onCloseAll={onCloseAll} />
+        <ContextMenuRow key={index} item={item} onCloseAll={onCloseAll} preferLeft={preferLeft} />
       ))}
     </Fragment>
   );
 }
 
-function ContextMenuRow({ item, onCloseAll }: { item: ContextMenuItem; onCloseAll: () => void }) {
+function ContextMenuRow({
+  item,
+  onCloseAll,
+  preferLeft,
+}: {
+  item: ContextMenuItem;
+  onCloseAll: () => void;
+  preferLeft: boolean;
+}) {
   switch (item.kind) {
     case 'separator':
       return <div className="context-menu-sep" role="separator" />;
@@ -64,7 +81,7 @@ function ContextMenuRow({ item, onCloseAll }: { item: ContextMenuItem; onCloseAl
     case 'action':
       return <ActionRow item={item} onCloseAll={onCloseAll} />;
     case 'submenu':
-      return <SubmenuRow item={item} onCloseAll={onCloseAll} />;
+      return <SubmenuRow item={item} onCloseAll={onCloseAll} preferLeft={preferLeft} />;
   }
 }
 
@@ -97,15 +114,17 @@ function ActionRow({
 function SubmenuRow({
   item,
   onCloseAll,
+  preferLeft,
 }: {
   item: Extract<ContextMenuItem, { kind: 'submenu' }>;
   onCloseAll: () => void;
+  preferLeft: boolean;
 }) {
   const disabled = !!item.disabled;
   const [open, setOpen] = useState(false);
   const rowRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const [pos, setPos] = useState<{ x: number; y: number; side: SubmenuSide } | null>(null);
 
   useLayoutEffect(() => {
     if (!open) {
@@ -122,9 +141,10 @@ function SubmenuRow({
         rowRect,
         { width: panelRect.width, height: panelRect.height },
         { width: window.innerWidth, height: window.innerHeight },
+        preferLeft,
       ),
     );
-  }, [open]);
+  }, [open, preferLeft]);
 
   return (
     <div
@@ -158,7 +178,11 @@ function SubmenuRow({
           role="menu"
           style={pos ? { left: pos.x, top: pos.y } : { visibility: 'hidden' }}
         >
-          <ContextMenuItemList items={item.items} onCloseAll={onCloseAll} />
+          <ContextMenuItemList
+            items={item.items}
+            onCloseAll={onCloseAll}
+            preferLeft={pos?.side === 'left'}
+          />
         </div>
       )}
     </div>

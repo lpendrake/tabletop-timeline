@@ -1,6 +1,6 @@
 .context-menu {
   position: fixed;
-  z-index: 300;
+  z-index: 1500;
   background: var(--theme-surface);
   border: 1px solid var(--theme-border-strong);
   border-radius: 3px;
