@@ -57,16 +57,18 @@ import { FooterPortal } from '../../components/footer-portal';
 import { FooterButton } from '../../components/footer-button';
 import { loadSavedViewState, saveViewState } from './view-state-persistence';
 import { useFilterState } from '../../timeline/filter/use-filter-state';
-import { applyFilters } from '../../timeline/filter/logic';
+import { applyFilters, newFilterId } from '../../timeline/filter/logic';
 import { FilterPanel } from '../../timeline/filter/filter-panel';
 import { EventContextMenu } from '../../timeline/components/event-context-menu';
 import {
   TimelineCanvasContextMenu,
   type CanvasContextMenuTarget,
 } from '../../timeline/components/timeline-canvas-context-menu';
+import { TagContextMenu } from '../../timeline/components/tag-context-menu';
 import { revealInExplorer } from '../../shared/reveal-in-explorer';
 import { buildEntityLink } from '../../shared/entity-link';
 import { copyToClipboard } from '../../shared/clipboard';
+import { entityIndex } from '../../shared/entity-index';
 import { LabelOverrideEditor } from '../../shared/components/label-override-editor';
 import { useConfirm } from '../../shared/confirm-dialog/confirm-provider';
 import '../../timeline/session-editor/session-mode.css';
@@ -120,6 +122,12 @@ export function TimelineView({
     y: number;
   } | null>(null);
   const [canvasMenuTarget, setCanvasMenuTarget] = useState<CanvasContextMenuTarget | null>(null);
+  const [tagMenuTarget, setTagMenuTarget] = useState<{
+    filename: string;
+    tag: string;
+    x: number;
+    y: number;
+  } | null>(null);
   const [labelEditorTarget, setLabelEditorTarget] = useState<{
     entityId: string;
     target: 'tagLabel' | 'linkLabel';
@@ -573,6 +581,42 @@ export function TimelineView({
     setContextMenuTarget({ item, x, y });
   }, []);
 
+  // ---- Tag chip context menu (right-click on a card's tag chip) ----
+
+  const handleTagContextMenu = useCallback(
+    (filename: string, tag: string, x: number, y: number) => {
+      if (sessionModeActiveRef.current) return;
+      setTagMenuTarget({ filename, tag, x, y });
+    },
+    [],
+  );
+
+  const handleEditTagLabel = useCallback((entityId: string) => {
+    setLabelEditorTarget({ entityId, target: 'tagLabel' });
+  }, []);
+
+  const handleResetTagLabel = useCallback((entityId: string) => {
+    void entityIndex.updateLabelOverride(entityId, 'tagLabel', null);
+  }, []);
+
+  const handleGoToTagEntity = useCallback(
+    (entityId: string) => {
+      onOpenById?.(entityId);
+    },
+    [onOpenById],
+  );
+
+  const handleCopyTagLink = useCallback((entityId: string) => {
+    void copyToClipboard(buildEntityLink(entityId));
+  }, []);
+
+  const handleFilterByTag = useCallback(
+    (tag: string) => {
+      addFilter({ id: newFilterId(), type: 'tag', enabled: true, pinned: false, tags: [tag] });
+    },
+    [addFilter],
+  );
+
   // ---- Timeline canvas context menu (right-click on pill / rail / background) ----
 
   const handleViewportContextMenu = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -760,6 +804,7 @@ export function TimelineView({
           onContextMenu={sessionModeActiveRef.current ? undefined : handleCardContextMenu}
           onOpenById={onOpenById}
           onRemoveTag={sessionModeActiveRef.current ? undefined : handleRemoveTag}
+          onTagContextMenu={sessionModeActiveRef.current ? undefined : handleTagContextMenu}
           entityLabelMap={entityLabelMap}
           entityTagLabelMap={entityTagLabelMap}
         />
@@ -881,6 +926,23 @@ export function TimelineView({
           onCopyLink={(item) => {
             if (item.id) void copyToClipboard(buildEntityLink(item.id));
           }}
+        />
+      )}
+
+      {/* Tag chip context menu (right-click on a card's tag chip) */}
+      {tagMenuTarget && (
+        <TagContextMenu
+          tag={tagMenuTarget.tag}
+          filename={tagMenuTarget.filename}
+          x={tagMenuTarget.x}
+          y={tagMenuTarget.y}
+          onClose={() => setTagMenuTarget(null)}
+          onEditTagLabel={handleEditTagLabel}
+          onResetTagLabel={handleResetTagLabel}
+          onGoTo={handleGoToTagEntity}
+          onCopyLink={handleCopyTagLink}
+          onRemoveTag={handleRemoveTag}
+          onFilterByTag={handleFilterByTag}
         />
       )}
 

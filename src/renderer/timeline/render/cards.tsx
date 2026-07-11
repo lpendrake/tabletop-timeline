@@ -51,6 +51,7 @@ interface CardsProps {
   onContextMenu?: (item: EventListItem, x: number, y: number) => void;
   onOpenById?: (id: string) => void;
   onRemoveTag?: (filename: string, tag: string) => void;
+  onTagContextMenu?: (filename: string, tag: string, clientX: number, clientY: number) => void;
   entityLabelMap?: Map<string, string>;
   entityTagLabelMap?: Map<string, string>;
 }
@@ -71,6 +72,7 @@ export function Cards({
   onContextMenu,
   onOpenById,
   onRemoveTag,
+  onTagContextMenu,
   entityLabelMap,
   entityTagLabelMap,
 }: CardsProps): ReactElement | null {
@@ -144,6 +146,7 @@ export function Cards({
             onContextMenu={onContextMenu}
             onOpenById={onOpenById}
             onRemoveTag={onRemoveTag}
+            onTagContextMenu={onTagContextMenu}
             entityLabelMap={entityLabelMap}
             entityTagLabelMap={entityTagLabelMap}
           />
@@ -170,6 +173,7 @@ interface CardItemProps {
   onContextMenu?: (item: EventListItem, x: number, y: number) => void;
   onOpenById?: (id: string) => void;
   onRemoveTag?: (filename: string, tag: string) => void;
+  onTagContextMenu?: (filename: string, tag: string, clientX: number, clientY: number) => void;
   entityLabelMap?: Map<string, string>;
   entityTagLabelMap?: Map<string, string>;
 }
@@ -191,6 +195,7 @@ function CardItem({
   onContextMenu,
   onOpenById,
   onRemoveTag,
+  onTagContextMenu,
   entityLabelMap,
   entityTagLabelMap,
 }: CardItemProps): ReactElement {
@@ -285,6 +290,12 @@ function CardItem({
                 <span
                   key={t}
                   className={`event-card-tag${isEntity ? ' entity-tag-chip--resolved' : ''}`}
+                  onContextMenu={(e) => {
+                    if (!onTagContextMenu) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onTagContextMenu(card.event.filename, t, e.clientX, e.clientY);
+                  }}
                 >
                   {display}
                   {canRemove && (
