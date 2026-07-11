@@ -1,5 +1,5 @@
-import { useContextMenuBehavior } from '../../shared/use-context-menu-behavior';
-import '../../shared/context-menu.css';
+import { useContextMenuBehavior } from '../../shared/context-menu';
+import '../../shared/context-menu/context-menu.css';
 
 export type ContextMenuTarget =
   | {
