@@ -20,6 +20,7 @@
   background: transparent;
   border: none;
   width: 100%;
+  box-sizing: border-box;
   text-align: left;
   font-family: inherit;
   font-size: inherit;
