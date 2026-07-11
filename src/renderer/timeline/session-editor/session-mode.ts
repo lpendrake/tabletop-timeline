@@ -36,6 +36,11 @@ const HANDLE_R = 7;
 const HANDLE_ZONE = 12;
 const CREATION_DRAG_THRESHOLD = 8;
 
+/** Whether a viewport-local y falls within the session rail's hit zone. */
+export function yInRailZone(y: number, axisY: number): boolean {
+  return y > axisY + 4 && y < axisY + 90;
+}
+
 export interface SessionModeDeps {
   getSessions(): Session[];
   getView(): ViewState;
@@ -171,10 +176,6 @@ export function createSessionMode(
     pendingGuideEl = null;
     pendingWashEl?.remove();
     pendingWashEl = null;
-  }
-
-  function yInRailZone(y: number, axisY: number): boolean {
-    return y > axisY + 4 && y < axisY + 90;
   }
 
   function snapToSessionEndpoints(

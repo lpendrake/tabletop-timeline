@@ -94,6 +94,12 @@ export function computeSessionBandsFromSessions(
     .sort((a, b) => a.startSeconds - b.startSeconds);
 }
 
+/** The latest end time across all session bands, or null if there are none. */
+export function lastSessionEndSeconds(bands: SessionBand[]): number | null {
+  if (bands.length === 0) return null;
+  return bands.reduce((max, b) => (b.endSeconds > max ? b.endSeconds : max), -Infinity);
+}
+
 export function computeSessionLabel(session: Session, allSessions: Session[]): string {
   const day = session.realStart.slice(0, 10);
   const parts = day.split('-');
@@ -232,4 +238,17 @@ export function computeSessionPills(
   }
 
   return result;
+}
+
+/**
+ * Geometric hit test for a session pill at a viewport-local point. Pills are
+ * `pointer-events: none` outside session mode, so DOM hit-testing
+ * (`elementFromPoint`) can't see them — this checks the same layout rects
+ * `computeSessionPills` produces directly.
+ */
+export function findSessionPillAt(pills: SessionPillLayout[], x: number, y: number): string | null {
+  const hit = pills.find(
+    (p) => x >= p.left && x <= p.left + p.width && y >= p.top && y <= p.top + p.height,
+  );
+  return hit ? hit.sessionId : null;
 }
