@@ -1,5 +1,6 @@
 import type { EventListItem } from '../data/types';
-import { useContextMenuBehavior } from '../../shared/context-menu';
+import { ContextMenu } from '../../shared/context-menu';
+import type { ContextMenuItem } from '../../shared/context-menu';
 import '../../shared/context-menu/context-menu.css';
 
 interface Props {
@@ -27,71 +28,37 @@ export function EventContextMenu({
   onOpenInExplorer,
   onCopyLink,
 }: Props) {
-  const { menuRef, pos } = useContextMenuBehavior(x, y, onClose);
+  const items: ContextMenuItem[] = [
+    { kind: 'action', label: 'Edit', onSelect: () => onEdit(item.filename) },
+    {
+      kind: 'action',
+      label: 'Delete',
+      onSelect: () => onDelete(item),
+      variant: 'danger',
+    },
+    { kind: 'separator' },
+    {
+      kind: 'action',
+      label: 'Edit Tag Label',
+      onSelect: () => {
+        if (item.id) onEditTagLabel(item.id);
+      },
+    },
+    {
+      kind: 'action',
+      label: 'Edit Link Label',
+      onSelect: () => {
+        if (item.id) onEditLinkLabel(item.id);
+      },
+    },
+    { kind: 'separator' },
+    {
+      kind: 'action',
+      label: 'Open in file explorer',
+      onSelect: () => onOpenInExplorer(item),
+    },
+    { kind: 'action', label: 'Copy Link', onSelect: () => onCopyLink(item) },
+  ];
 
-  return (
-    <div
-      ref={menuRef}
-      className="context-menu"
-      style={{ left: pos.x, top: pos.y }}
-      onContextMenu={(e) => e.preventDefault()}
-    >
-      <button
-        className="context-menu-item"
-        onClick={() => {
-          onEdit(item.filename);
-          onClose();
-        }}
-      >
-        Edit
-      </button>
-      <button
-        className="context-menu-item is-danger"
-        onClick={() => {
-          onDelete(item);
-          onClose();
-        }}
-      >
-        Delete
-      </button>
-      <div className="context-menu-sep" />
-      <button
-        className="context-menu-item"
-        onClick={() => {
-          if (item.id) onEditTagLabel(item.id);
-          onClose();
-        }}
-      >
-        Edit Tag Label
-      </button>
-      <button
-        className="context-menu-item"
-        onClick={() => {
-          if (item.id) onEditLinkLabel(item.id);
-          onClose();
-        }}
-      >
-        Edit Link Label
-      </button>
-      <div className="context-menu-sep" />
-      <button
-        className="context-menu-item"
-        onClick={() => {
-          onOpenInExplorer(item);
-          onClose();
-        }}
-      >
-        Open in file explorer
-      </button>
-      <button
-        className="context-menu-item"
-        onClick={() => {
-          onCopyLink(item);
-          onClose();
-        }}
-      >
-        Copy Link
-      </button>
-    </div>
-  );
+  return <ContextMenu items={items} x={x} y={y} onClose={onClose} />;
 }
