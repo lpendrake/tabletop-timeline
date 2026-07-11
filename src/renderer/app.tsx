@@ -21,6 +21,8 @@ import {
   applyEntityDelta,
 } from '../shared/entity-labels';
 import { applyWorkspaceDefaultTheme, applyCampaignTheme } from './views/settings/apply-theme';
+import { defaultViewSettingsData } from './views/settings/default-view-settings-data';
+import { resolveDefaultView } from './views/settings/domain/resolve-default-view';
 import '../../src/index.css';
 
 export default function App() {
@@ -65,6 +67,19 @@ export default function App() {
       void applyWorkspaceDefaultTheme(rootDir);
     }
   }, [rootDir, activeCampaign?.path]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Initialise the visible view from the active campaign's saved default view.
+  useEffect(() => {
+    if (!activeCampaign) return;
+    let cancelled = false;
+    defaultViewSettingsData.getCampaignDefaultView(activeCampaign.path).then((saved) => {
+      if (cancelled) return;
+      setCurrentView(resolveDefaultView(saved));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeCampaign?.path]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const entityIndexRef = useRef<EntityIndexEntry[]>([]);
   const [entityLabelMap, setEntityLabelMap] = useState<Map<string, string>>(new Map());
