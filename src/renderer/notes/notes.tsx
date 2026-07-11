@@ -201,8 +201,6 @@ export function NotesApp({
                 wikiLinks={{
                   suggest: ctrl.suggestLinks,
                   onOpen: ctrl.handleOpenLink,
-                  onEditLinkLabel: (id) =>
-                    ctrl.setLabelEditorTarget({ entityId: id, target: 'linkLabel' }),
                   ...peekWikiLinksConfig,
                   knownIds,
                   entityLabels,

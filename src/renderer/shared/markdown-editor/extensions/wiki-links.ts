@@ -24,12 +24,12 @@ import { makePointerGuard } from './pointer-guard';
 import { showContextMenu, type ContextMenuItem } from '../../context-menu';
 import '../../context-menu/context-menu.css';
 import { copyToClipboard } from '../../clipboard';
-import { entityIndex } from '../../entity-index';
+import { showLabelOverrideEditor } from '../../components/show-label-override-editor';
+import { showLocalLabelEditor } from '../../components/show-local-label-editor';
 import {
   overrideLocalLabelChange,
   resetLocalLabelChange,
   resolveDisplayLabel,
-  hasGlobalOverride,
 } from './wiki-link-context-menu';
 
 export type WikiLinkStatus = 'resolved' | 'loading' | 'missing' | 'unresolved';
@@ -49,8 +49,6 @@ export interface WikiLinksConfig {
   openOnClick?: boolean;
   onHover?: (id: string, el: HTMLElement) => void;
   onHoverEnd?: (relatedTarget: Element | null) => void;
-  /** Opens the global label-override editor for an entity id. Omit to hide the "Globally" menu item. */
-  onEditLinkLabel?: (id: string) => void;
   /** When true, hides local-label-editing menu items (this host's editor is not editable). */
   readOnly?: boolean;
 }
@@ -310,48 +308,35 @@ function makeWikiLinkContextMenuHandler(config: WikiLinksConfig): Extension {
       const entityLabelMap = view.state.field(entityLabelMapField);
       const items: ContextMenuItem[] = [];
 
-      const overrideItems: ContextMenuItem[] = [];
-      if (config.onEditLinkLabel) {
-        overrideItems.push({
+      const overrideItems: ContextMenuItem[] = [
+        {
           kind: 'action',
-          label: 'Globally',
-          onSelect: () => config.onEditLinkLabel!(link.id),
-        });
-      }
+          label: 'Globally…',
+          onSelect: () => showLabelOverrideEditor(link.id, 'linkLabel'),
+        },
+      ];
       if (!config.readOnly) {
         overrideItems.push({
           kind: 'action',
-          label: 'Locally',
+          label: 'Locally…',
           onSelect: () => {
-            const change = overrideLocalLabelChange(
-              link,
-              resolveDisplayLabel(link, entityLabelMap),
-            );
-            view.dispatch({ changes: change });
-            view.focus();
-          },
-        });
-      }
-      if (config.onEditLinkLabel) {
-        overrideItems.push({
-          kind: 'action',
-          label: 'Reset global override',
-          disabled: !hasGlobalOverride(link.id, entityLabelMap),
-          onSelect: () => {
-            void entityIndex.updateLabelOverride(link.id, 'linkLabel', null);
-          },
-        });
-      }
-      if (!config.readOnly) {
-        overrideItems.push({
-          kind: 'action',
-          label: 'Reset local override',
-          disabled: link.labelFrom === null,
-          onSelect: () => {
-            const change = resetLocalLabelChange(link);
-            if (!change) return;
-            view.dispatch({ changes: change });
-            view.focus();
+            showLocalLabelEditor({
+              title: 'Edit Local Link Label',
+              initialValue: link.label ?? '',
+              placeholder: entityLabelMap.get(link.id) ?? link.id,
+              onSave: (value) => {
+                const change = value
+                  ? overrideLocalLabelChange(link, value)
+                  : resetLocalLabelChange(link);
+                if (change) view.dispatch({ changes: change });
+                view.focus();
+              },
+              onReset: () => {
+                const change = resetLocalLabelChange(link);
+                if (change) view.dispatch({ changes: change });
+                view.focus();
+              },
+            });
           },
         });
       }
