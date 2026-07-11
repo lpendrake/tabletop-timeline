@@ -305,6 +305,7 @@ function makeWikiLinkContextMenuHandler(config: WikiLinksConfig): Extension {
       if (!link) return false;
 
       event.preventDefault();
+      event.stopPropagation();
 
       const entityLabelMap = view.state.field(entityLabelMapField);
       const items: ContextMenuItem[] = [];

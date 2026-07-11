@@ -25,7 +25,7 @@ import {
   toggleBulletList,
   toggleOrderedList,
   toggleBlockquote,
-  setHeadingLevel,
+  toggleHeadingLevel,
 } from './domain/markdown/toggle-block';
 import {
   linkTemplate,
@@ -103,14 +103,14 @@ export const bulletListCommand = makeToggleCommand(toggleBulletList);
 export const orderedListCommand = makeToggleCommand(toggleOrderedList);
 export const blockquoteCommand = makeToggleCommand(toggleBlockquote);
 
-/** Discrete (non-cycling) heading-level setters, for menu items that target a specific level. */
-function makeSetHeadingLevelCommand(level: 1 | 2 | 3): Command {
-  return makeToggleCommand((text, from, to) => setHeadingLevel(text, from, to, level));
+/** Discrete (non-cycling) heading-level toggles, for menu items that target a specific level. */
+function makeToggleHeadingLevelCommand(level: 1 | 2 | 3): Command {
+  return makeToggleCommand((text, from, to) => toggleHeadingLevel(text, from, to, level));
 }
 
-export const setHeadingLevel1Command = makeSetHeadingLevelCommand(1);
-export const setHeadingLevel2Command = makeSetHeadingLevelCommand(2);
-export const setHeadingLevel3Command = makeSetHeadingLevelCommand(3);
+export const toggleHeadingLevel1Command = makeToggleHeadingLevelCommand(1);
+export const toggleHeadingLevel2Command = makeToggleHeadingLevelCommand(2);
+export const toggleHeadingLevel3Command = makeToggleHeadingLevelCommand(3);
 
 // ---- Insert commands -----------------------------------------------------
 

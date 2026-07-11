@@ -5,7 +5,7 @@ import {
   toggleOrderedList,
   toggleBlockquote,
   linesInRange,
-  setHeadingLevel,
+  toggleHeadingLevel,
 } from '../toggle-block';
 
 // ---- linesInRange --------------------------------------------------------
@@ -78,27 +78,41 @@ describe('toggleHeading', () => {
   });
 });
 
-// ---- setHeadingLevel -------------------------------------------------------
+// ---- toggleHeadingLevel ----------------------------------------------------
 
-describe('setHeadingLevel', () => {
+describe('toggleHeadingLevel', () => {
   it('sets a plain line to a heading level (add heading)', () => {
-    expect(setHeadingLevel('foo', 0, 3, 2).text).toBe('## foo');
+    expect(toggleHeadingLevel('foo', 0, 3, 1).text).toBe('# foo');
   });
 
-  it('replaces an existing heading level with the requested one', () => {
-    expect(setHeadingLevel('# foo', 0, 5, 3).text).toBe('### foo');
+  it('toggles off when the line is already exactly that level', () => {
+    expect(toggleHeadingLevel('# foo', 0, 5, 1).text).toBe('foo');
+  });
+
+  it('changes level (not off) when the line is a different heading level', () => {
+    expect(toggleHeadingLevel('# foo', 0, 5, 2).text).toBe('## foo');
   });
 
   it('applies to every line in a multi-line selection', () => {
     const doc = 'foo\nbar';
-    expect(setHeadingLevel(doc, 0, 7, 2).text).toBe('## foo\n## bar');
+    expect(toggleHeadingLevel(doc, 0, 7, 2).text).toBe('## foo\n## bar');
   });
 
-  it('is idempotent when applied twice at the same level', () => {
-    const once = setHeadingLevel('foo', 0, 3, 3);
+  it('removes the heading from all lines in a multi-line selection when all are already that level', () => {
+    const doc = '### foo\n### bar';
+    expect(toggleHeadingLevel(doc, 0, doc.length, 3).text).toBe('foo\nbar');
+  });
+
+  it('applies (not removes) when only some selected lines are already that level', () => {
+    const doc = '### foo\nbar';
+    expect(toggleHeadingLevel(doc, 0, doc.length, 3).text).toBe('### foo\n### bar');
+  });
+
+  it('round-trips when applied twice at the same level: sets then removes', () => {
+    const once = toggleHeadingLevel('foo', 0, 3, 3);
     expect(once.text).toBe('### foo');
-    const twice = setHeadingLevel(once.text, once.from, once.to, 3);
-    expect(twice.text).toBe('### foo');
+    const twice = toggleHeadingLevel(once.text, once.from, once.to, 3);
+    expect(twice.text).toBe('foo');
   });
 });
 

@@ -4,9 +4,16 @@
  * owns right-clicks on `.cm-note-link` spans and is registered ahead of this
  * extension so it gets first refusal on the `contextmenu` event).
  *
- * Offers Copy (always), and — for editable (non-read-only) editors — Paste,
- * Delete, and a Formatting submenu, all operating on the current selection
- * or, if there is none, the line under the click.
+ * For editable editors: offers Copy, Paste, Delete, and a Formatting
+ * submenu, all operating on the current selection or, if there is none, the
+ * line under the click. `event.stopPropagation()` is called so the click
+ * doesn't also open an ancestor's (e.g. an event card's) own context menu.
+ *
+ * For read-only editors (expanded event card preview, peek, etc.): this
+ * extension shows no menu of its own. It only suppresses the native OS menu
+ * and lets the event bubble up (no `stopPropagation()`), so a read-only
+ * host's own `onContextMenu` (e.g. the card's Edit/Delete menu) can handle
+ * it instead.
  */
 import { type Extension } from '@codemirror/state';
 import { EditorView, type Command } from '@codemirror/view';
@@ -22,13 +29,13 @@ import {
   bulletListCommand,
   orderedListCommand,
   blockquoteCommand,
-  setHeadingLevel1Command,
-  setHeadingLevel2Command,
-  setHeadingLevel3Command,
+  toggleHeadingLevel1Command,
+  toggleHeadingLevel2Command,
+  toggleHeadingLevel3Command,
 } from '../commands';
 
 export interface EditorContextMenuConfig {
-  /** When true, hides Paste / Delete / Formatting — Copy only. */
+  /** When true, shows no menu — only suppresses the native OS menu and lets the event bubble to the host. */
   readOnly?: boolean;
 }
 
@@ -61,7 +68,16 @@ export function editorContextMenu(config: EditorContextMenuConfig = {}): Extensi
       const target = event.target as HTMLElement;
       if (target.closest('.cm-note-link')) return false;
 
+      if (config.readOnly) {
+        // Suppress the native OS menu, but don't stopPropagation — let the
+        // event bubble so a read-only host (e.g. an event card) can show
+        // its own context menu instead.
+        event.preventDefault();
+        return true;
+      }
+
       event.preventDefault();
+      event.stopPropagation();
 
       const { from, to } = resolveTargetRange(view, event);
       const hasSelection = from !== to;
@@ -75,10 +91,7 @@ export function editorContextMenu(config: EditorContextMenuConfig = {}): Extensi
             void copyToClipboard(resolveCopyTarget(docText, from, to));
           },
         },
-      ];
-
-      if (!config.readOnly) {
-        items.push({
+        {
           kind: 'action',
           label: 'Paste',
           onSelect: () => {
@@ -94,9 +107,8 @@ export function editorContextMenu(config: EditorContextMenuConfig = {}): Extensi
               })
               .catch((err: unknown) => console.error('readFromClipboard failed', err));
           },
-        });
-
-        items.push({
+        },
+        {
           kind: 'action',
           label: 'Delete',
           disabled: !hasSelection,
@@ -108,11 +120,9 @@ export function editorContextMenu(config: EditorContextMenuConfig = {}): Extensi
             });
             view.focus();
           },
-        });
-
-        items.push({ kind: 'separator' });
-
-        items.push({
+        },
+        { kind: 'separator' },
+        {
           kind: 'submenu',
           label: 'Formatting',
           items: [
@@ -123,17 +133,17 @@ export function editorContextMenu(config: EditorContextMenuConfig = {}): Extensi
                 {
                   kind: 'action',
                   label: 'H1',
-                  onSelect: () => runFormat(view, setHeadingLevel1Command),
+                  onSelect: () => runFormat(view, toggleHeadingLevel1Command),
                 },
                 {
                   kind: 'action',
                   label: 'H2',
-                  onSelect: () => runFormat(view, setHeadingLevel2Command),
+                  onSelect: () => runFormat(view, toggleHeadingLevel2Command),
                 },
                 {
                   kind: 'action',
                   label: 'H3',
-                  onSelect: () => runFormat(view, setHeadingLevel3Command),
+                  onSelect: () => runFormat(view, toggleHeadingLevel3Command),
                 },
               ],
             },
@@ -161,8 +171,8 @@ export function editorContextMenu(config: EditorContextMenuConfig = {}): Extensi
               onSelect: () => runFormat(view, blockquoteCommand),
             },
           ],
-        });
-      }
+        },
+      ];
 
       showContextMenu(items, event.clientX, event.clientY);
       return true;
