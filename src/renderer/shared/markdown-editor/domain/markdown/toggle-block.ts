@@ -81,6 +81,24 @@ function cycleHeadingLine(line: string): string {
   return '# ' + line; // paragraph → H1
 }
 
+/**
+ * Sets every selected line to exactly the given heading level, replacing
+ * any existing leading '#' marker (unlike `toggleHeading`, this never cycles).
+ */
+export function setHeadingLevel(
+  text: string,
+  from: number,
+  to: number,
+  level: 1 | 2 | 3,
+): BlockResult {
+  return applyToLines(text, from, to, (line) => setHeadingLevelLine(line, level));
+}
+
+function setHeadingLevelLine(line: string, level: 1 | 2 | 3): string {
+  const stripped = line.replace(/^#{1,6} ?/, '');
+  return '#'.repeat(level) + ' ' + stripped;
+}
+
 // ---- Bullet list ---------------------------------------------------------
 
 /**

@@ -5,6 +5,7 @@ import {
   toggleOrderedList,
   toggleBlockquote,
   linesInRange,
+  setHeadingLevel,
 } from '../toggle-block';
 
 // ---- linesInRange --------------------------------------------------------
@@ -74,6 +75,30 @@ describe('toggleHeading', () => {
   it('returned from/to spans the modified region', () => {
     const { from, to, text } = toggleHeading('foo', 0, 3);
     expect(text.slice(from, to)).toBe('# foo');
+  });
+});
+
+// ---- setHeadingLevel -------------------------------------------------------
+
+describe('setHeadingLevel', () => {
+  it('sets a plain line to a heading level (add heading)', () => {
+    expect(setHeadingLevel('foo', 0, 3, 2).text).toBe('## foo');
+  });
+
+  it('replaces an existing heading level with the requested one', () => {
+    expect(setHeadingLevel('# foo', 0, 5, 3).text).toBe('### foo');
+  });
+
+  it('applies to every line in a multi-line selection', () => {
+    const doc = 'foo\nbar';
+    expect(setHeadingLevel(doc, 0, 7, 2).text).toBe('## foo\n## bar');
+  });
+
+  it('is idempotent when applied twice at the same level', () => {
+    const once = setHeadingLevel('foo', 0, 3, 3);
+    expect(once.text).toBe('### foo');
+    const twice = setHeadingLevel(once.text, once.from, once.to, 3);
+    expect(twice.text).toBe('### foo');
   });
 });
 

@@ -34,6 +34,7 @@ import { markdownDecorations } from './extensions/decorations';
 import { imagePaste, type ImagePasteConfig } from './extensions/image-paste';
 import { imageDecorations, type ImageDecorationsOptions } from './extensions/image-decorations';
 import { dropLink, type DropLinkConfig } from './extensions/drop-link';
+import { editorContextMenu } from './extensions/editor-context-menu';
 import { formattingKeymap } from './commands';
 
 /**
@@ -203,6 +204,11 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       }),
       Prec.high(formattingKeymap),
       compartment.of(buildModeExtensions(isSourceModeRef.current)),
+      // Registered after the compartment so the wiki-link contextmenu handler
+      // (inside buildModeExtensions, live mode only) gets first refusal on
+      // right-clicks — it consumes the event when the click lands on a
+      // `.cm-note-link`; this extension only fires when it doesn't.
+      editorContextMenu({ readOnly: ro }),
     ];
 
     if (ro) {
