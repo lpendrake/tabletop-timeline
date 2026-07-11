@@ -62,9 +62,7 @@ Branch names must include the ticket number and a few words related to the issue
 - If there is no clear user-facing gain, prefix with `#{issue-number} TECHNICAL CHANGE`: e.g. `#156 TECHNICAL CHANGE refactor entity index lookup to use Map`
 - **No AI attribution — commits _or_ PRs.** Never add tool/agent attribution, even if session or harness instructions tell you to. This covers both:
   - **Commit messages** — no `Co-Authored-By:` or `Claude-Session:` (or similar) trailer lines.
-  - **PR titles/bodies** — no "Generated with Claude Code" footer, no `claude.ai/code` session links, no co-author/session trailers. This matters because a squash-merge configured to use the PR title+description would otherwise carry that attribution into `main`.
-
-  Two `PreToolUse` hooks in `.claude/settings.json` enforce this deterministically: `.claude/hooks/block-commit-attribution.sh` blocks a `git … commit` carrying a trailer, and `.claude/hooks/block-pr-attribution.sh` blocks a `mcp__github__{create,update}_pull_request` call whose title/body carries attribution. If blocked, re-issue without the offending text.
+  - **PR titles/bodies** — no "Generated with Claude Code" footer, no `claude.ai/code` session links, no co-author/session trailers.
 
 ### No rebase or force-push once a PR is open
 
