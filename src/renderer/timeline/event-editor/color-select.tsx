@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import type { ColorPreset } from '../../theme/types';
-import { useContextMenuBehavior } from '../../shared/use-context-menu-behavior';
+import { useContextMenuBehavior } from '../../shared/context-menu';
 
 interface ColorSelectProps {
   presets: ColorPreset[];
