@@ -137,6 +137,12 @@ contextBridge.exposeInMainWorld('fsApi', {
   getCampaignThemeOverrides: (campaignPaths: string[]) =>
     ipcRenderer.invoke('themeSettings:getCampaignOverrides', campaignPaths),
 
+  // Default View Settings
+  getCampaignDefaultView: (campaignPath: string) =>
+    ipcRenderer.invoke('defaultViewSettings:getCampaign', campaignPath),
+  setCampaignDefaultView: (campaignPath: string, view: string | null) =>
+    ipcRenderer.invoke('defaultViewSettings:setCampaign', campaignPath, view),
+
   // Calendar Settings
   getCampaignCalendarId: () => ipcRenderer.invoke('calendar:getCampaignId'),
   setCampaignCalendarId: (calendarId: string | null) =>

@@ -12,6 +12,7 @@ import { MarkdownEditor } from '../../shared/markdown-editor';
 import { FooterPortal } from '../../components/footer-portal';
 import { FooterButton } from '../../components/footer-button';
 import { ThemeSection } from './theme-section';
+import { GeneralSection } from './general-section';
 import type { Campaign } from '../../../types/global';
 import './campaign-settings-modal.css';
 
@@ -131,6 +132,18 @@ export function CampaignSettingsModal({
 
             {/* Content */}
             <div className="campaign-settings-content" ref={contentRef}>
+              {/* General section */}
+              <section
+                id="general"
+                className="campaign-settings-section"
+                ref={(el) => {
+                  sectionRefs.current['general'] = el;
+                }}
+              >
+                <h3 className="campaign-settings-section__title">General</h3>
+                <GeneralSection activeCampaign={activeCampaign} />
+              </section>
+
               {/* Timeline section */}
               <section
                 id="timeline"

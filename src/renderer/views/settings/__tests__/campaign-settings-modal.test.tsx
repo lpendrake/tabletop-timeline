@@ -55,6 +55,8 @@ function setupFsApiMocks() {
       getCampaignTheme: vi.fn().mockResolvedValue(null),
       setCampaignTheme: vi.fn().mockResolvedValue(undefined),
       getCampaignThemeOverrides: vi.fn().mockResolvedValue({}),
+      getCampaignDefaultView: vi.fn().mockResolvedValue(null),
+      setCampaignDefaultView: vi.fn().mockResolvedValue(undefined),
     },
   });
 }
@@ -69,13 +71,14 @@ describe('CampaignSettingsModal', () => {
     teardown();
   });
 
-  it('renders all four sidebar section headers', () => {
+  it('renders all five sidebar section headers', () => {
     setup();
     act(() => root.render(<CampaignSettingsModal {...defaultProps} />));
     const sidebar = container.querySelector('nav[aria-label="Settings sections"]');
     expect(sidebar).not.toBeNull();
     const buttons = sidebar!.querySelectorAll('button');
     const labels = Array.from(buttons).map((b) => b.textContent?.trim());
+    expect(labels).toContain('General');
     expect(labels).toContain('Timeline');
     expect(labels).toContain('Theme');
     expect(labels).toContain('Templates');
@@ -305,6 +308,8 @@ describe('CampaignSettingsModal', () => {
         getCampaignTheme: vi.fn().mockResolvedValue(null),
         setCampaignTheme: vi.fn().mockResolvedValue(undefined),
         getCampaignThemeOverrides: vi.fn().mockResolvedValue({ '/campaigns/alpha': 'lightfinder' }),
+        getCampaignDefaultView: vi.fn().mockResolvedValue(null),
+        setCampaignDefaultView: vi.fn().mockResolvedValue(undefined),
       },
     });
 
@@ -323,5 +328,31 @@ describe('CampaignSettingsModal', () => {
     });
 
     expect(window.fsApi.setCampaignTheme).toHaveBeenCalledWith(mockActiveCampaign.path, null);
+  });
+
+  it('General section offers Timeline and Notes as default view options; selecting Notes persists it', async () => {
+    setup();
+    await act(async () => {
+      root.render(<CampaignSettingsModal {...defaultProps} />);
+    });
+
+    const generalSection = container.querySelector('#general')!;
+    expect(generalSection).not.toBeNull();
+
+    const select = generalSection.querySelector('#general-default-view') as HTMLSelectElement;
+    expect(select).not.toBeNull();
+    const options = Array.from(select.options).map((o) => o.text);
+    expect(options).toContain('Timeline');
+    expect(options).toContain('Notes');
+
+    await act(async () => {
+      select.value = 'notes';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    expect(window.fsApi.setCampaignDefaultView).toHaveBeenCalledWith(
+      mockActiveCampaign.path,
+      'notes',
+    );
   });
 });

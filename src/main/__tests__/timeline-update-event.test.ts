@@ -1,3 +1,7 @@
+// NOTE: This suite imports timelineIpcHandlers, which pulls in `electron` at module
+// load. When no Electron binary is installed it fails to load, so vite.config.ts skips
+// it in environments that lack the binary (e.g. sandboxes that can't fetch the release
+// asset). It runs normally wherever Electron is installed.
 import { describe, it, expect, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';

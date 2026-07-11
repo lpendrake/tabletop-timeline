@@ -4,6 +4,7 @@ export interface SettingsSection {
 }
 
 export const SETTINGS_SECTIONS: SettingsSection[] = [
+  { id: 'general', label: 'General' },
   { id: 'timeline', label: 'Timeline' },
   { id: 'theme', label: 'Theme' },
   { id: 'templates', label: 'Templates' },
