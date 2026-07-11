@@ -206,6 +206,7 @@ export function createSessionMode(
   }
 
   function onMouseDown(e: MouseEvent) {
+    if (e.button !== 0) return;
     if (!active) return;
     if ((e.target as HTMLElement).closest('.session-editor-overlay')) return;
 

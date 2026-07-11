@@ -621,7 +621,6 @@ export function TimelineView({
 
   const handleViewportContextMenu = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
-    if (sessionModeActiveRef.current) return;
     const rect = viewportRef.current?.getBoundingClientRect();
     if (!rect) return;
     const localX = e.clientX - rect.left;
@@ -643,6 +642,7 @@ export function TimelineView({
       setCanvasMenuTarget({ kind: 'rail', contextSeconds, x: e.clientX, y: e.clientY });
       return;
     }
+    if (sessionModeActiveRef.current) return;
     setCanvasMenuTarget({ kind: 'background', contextSeconds, x: e.clientX, y: e.clientY });
   }, []);
 
