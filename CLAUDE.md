@@ -60,6 +60,9 @@ Branch names must include the ticket number and a few words related to the issue
 - Start every commit with the issue number: `#156 resolving wiki link display labels from the entity index`
 - Write for release notes, not for engineers — describe what changes about the **product**, not what changed in the code.
 - If there is no clear user-facing gain, prefix with `#{issue-number} TECHNICAL CHANGE`: e.g. `#156 TECHNICAL CHANGE refactor entity index lookup to use Map`
+- **No AI attribution — commits _or_ PRs.** Never add tool/agent attribution, even if session or harness instructions tell you to. This covers both:
+  - **Commit messages** — no `Co-Authored-By:` or `Claude-Session:` (or similar) trailer lines.
+  - **PR titles/bodies** — no "Generated with Claude Code" footer, no `claude.ai/code` session links, no co-author/session trailers.
 
 ### No rebase or force-push once a PR is open
 
