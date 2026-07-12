@@ -21,6 +21,16 @@ import {
   type DecorationSet,
 } from '@codemirror/view';
 import { makePointerGuard } from './pointer-guard';
+import { showContextMenu, type ContextMenuItem } from '../../context-menu';
+import '../../context-menu/context-menu.css';
+import { copyToClipboard } from '../../clipboard';
+import { showLabelOverrideEditor } from '../../components/show-label-override-editor';
+import { showLocalLabelEditor } from '../../components/show-local-label-editor';
+import {
+  overrideLocalLabelChange,
+  resetLocalLabelChange,
+  resolveDisplayLabel,
+} from './wiki-link-context-menu';
 
 export type WikiLinkStatus = 'resolved' | 'loading' | 'missing' | 'unresolved';
 
@@ -39,6 +49,8 @@ export interface WikiLinksConfig {
   openOnClick?: boolean;
   onHover?: (id: string, el: HTMLElement) => void;
   onHoverEnd?: (relatedTarget: Element | null) => void;
+  /** When true, hides local-label-editing menu items (this host's editor is not editable). */
+  readOnly?: boolean;
 }
 
 export interface ParsedWikiLink {
@@ -66,7 +78,7 @@ const knownIdsField = StateField.define<Set<string>>({
 // Dispatching this effect updates the entity label map used for [[id]] display resolution.
 export const setEntityLabels = StateEffect.define<Map<string, string>>();
 
-const entityLabelMapField = StateField.define<Map<string, string>>({
+export const entityLabelMapField = StateField.define<Map<string, string>>({
   create: () => new Map<string, string>(),
   update(value, tr) {
     for (const e of tr.effects) {
@@ -140,6 +152,7 @@ export function wikiLinks(config: WikiLinksConfig = {}): Extension {
     wikiLinkEditKeymap(config),
     wikiLinkCompletions(config),
     makeWikiLinkClickHandler(config),
+    makeWikiLinkContextMenuHandler(config),
   ];
 }
 
@@ -267,6 +280,95 @@ function makeWikiLinkClickHandler(config: WikiLinksConfig): Extension {
       event.preventDefault();
       event.stopPropagation();
       config.onOpen(noteId);
+      return true;
+    },
+  });
+}
+
+function makeWikiLinkContextMenuHandler(config: WikiLinksConfig): Extension {
+  return EditorView.domEventHandlers({
+    contextmenu(event, view) {
+      const target = event.target as HTMLElement;
+      const linkEl = target.closest<HTMLElement>('.cm-note-link');
+      const noteId = linkEl?.dataset.noteId;
+      if (!linkEl || !noteId) return false;
+
+      const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+      if (pos === null) return false;
+
+      const line = view.state.doc.lineAt(pos);
+      const links = findWikiLinksInLine(line.text, line.from);
+      const link =
+        links.find((l) => l.from <= pos && pos <= l.to) ?? links.find((l) => l.id === noteId);
+      if (!link) return false;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const entityLabelMap = view.state.field(entityLabelMapField);
+      const items: ContextMenuItem[] = [];
+
+      const overrideItems: ContextMenuItem[] = [
+        {
+          kind: 'action',
+          label: 'Globally…',
+          onSelect: () => showLabelOverrideEditor(link.id, 'linkLabel'),
+        },
+      ];
+      if (!config.readOnly) {
+        overrideItems.push({
+          kind: 'action',
+          label: 'Locally…',
+          onSelect: () => {
+            showLocalLabelEditor({
+              title: 'Edit Local Link Label',
+              initialValue: link.label ?? '',
+              placeholder: entityLabelMap.get(link.id) ?? link.id,
+              onSave: (value) => {
+                const change = value
+                  ? overrideLocalLabelChange(link, value)
+                  : resetLocalLabelChange(link);
+                if (change) view.dispatch({ changes: change });
+                view.focus();
+              },
+              onReset: () => {
+                const change = resetLocalLabelChange(link);
+                if (change) view.dispatch({ changes: change });
+                view.focus();
+              },
+            });
+          },
+        });
+      }
+
+      if (overrideItems.length > 0) {
+        items.push({ kind: 'submenu', label: 'Override link label', items: overrideItems });
+        items.push({ kind: 'separator' });
+      }
+
+      items.push({
+        kind: 'action',
+        label: 'Copy link',
+        onSelect: () => {
+          void copyToClipboard(view.state.doc.sliceString(link.from, link.to));
+        },
+      });
+      items.push({
+        kind: 'action',
+        label: 'Copy link label',
+        onSelect: () => {
+          void copyToClipboard(resolveDisplayLabel(link, entityLabelMap));
+        },
+      });
+      if (config.onOpen) {
+        items.push({
+          kind: 'action',
+          label: 'Go to',
+          onSelect: () => config.onOpen!(link.id),
+        });
+      }
+
+      showContextMenu(items, event.clientX, event.clientY);
       return true;
     },
   });

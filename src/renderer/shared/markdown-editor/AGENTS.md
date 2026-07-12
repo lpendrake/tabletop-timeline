@@ -16,6 +16,7 @@ A CodeMirror 6 wrapper for editing and previewing markdown. Used by notes and th
 - `commands.ts` — pure CodeMirror commands (bold/italic/heading/list/etc). Safe to import standalone for custom toolbars.
 - `theme.ts` — `lastGaspThemeExtensions` styling + syntax highlighting.
 - `extensions/wiki-links.ts` — `[[name|id]]` parsing, completion, click handler. Activated via `props.wikiLinks`.
+- `extensions/editor-context-menu.ts` — right-click menu on plain editor text (Copy / Paste / Delete / Formatting). Registered unconditionally, after the mode compartment so the wiki-link contextmenu handler (live mode only) gets first refusal on `.cm-note-link` clicks.
 - `extensions/decorations.ts` — markdown visual decorations (headings, bold, etc).
 - `extensions/image-decorations.ts` — renders `![alt](url)` as an inline image widget. Accepts `resolveSrc` to transform raw image paths (e.g. relative paths → `notes-asset://`).
 - `extensions/image-paste.ts` — clipboard paste. Calls `props.imagePaste.onImagePaste(blob, mime)` and inserts the returned URL.
@@ -57,7 +58,7 @@ When you add a new extension, write its tests in `extensions/__tests__/`. When y
 `<MarkdownEditor>` builds its extension list at mount time and never remounts for prop changes. The stack has two layers:
 
 **Base extensions (always active, built once):**
-CodeMirror standard extensions (history, keymaps, bracket matching, closeBrackets, etc.), the markdown language grammar with code language auto-detection, `lastGaspThemeExtensions`, `EditorView.lineWrapping`, and the `updateListener` that fires `onChange`. `imagePaste` and `dropLink` are pushed into this layer when their config objects are supplied — they must be fixed at mount and cannot be toggled.
+CodeMirror standard extensions (history, keymaps, bracket matching, closeBrackets, etc.), the markdown language grammar with code language auto-detection, `lastGaspThemeExtensions`, `EditorView.lineWrapping`, the `updateListener` that fires `onChange`, and `editorContextMenu({ readOnly })` (right-click text menu — Copy always, Paste/Delete/Formatting only when editable). `imagePaste` and `dropLink` are pushed into this layer when their config objects are supplied — they must be fixed at mount and cannot be toggled.
 
 **Mode compartment (hot-swappable via `Compartment`):**
 `markdownDecorations()`, `imageDecorations(imagesConfig)`, `wikiLinks(...)`, and `markdownLinkClick(...)` are all bundled inside a single `Compartment`. In source mode the compartment holds an empty array; in live mode it holds these four. Switching mode calls `compartment.reconfigure(...)` — no editor recreation. The compartment instance is part of the `SavedEditorInstance` and must always round-trip with the state it belongs to.

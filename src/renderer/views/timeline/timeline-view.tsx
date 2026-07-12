@@ -8,11 +8,13 @@ import {
 import type { EventListItem, Session, State } from '../../timeline/data/types';
 import {
   DEFAULT_SECONDS_PER_PIXEL,
+  xToSeconds,
   type ViewState,
   type ViewportSize,
 } from '../../timeline/math/zoom';
 import { CalendarProvider } from '../../timeline/calendar/provider';
 import { createCalendar, resolveCalendar, GOLARION_ID } from '../../../shared/calendar';
+import { addInGameDuration, type ExtendUnit } from '../../timeline/calendar/add-in-game-duration';
 import { buildRescheduleFrontmatter } from './reschedule-domain';
 import { ThemeProvider } from '../../theme';
 import { Axis } from '../../timeline/render/axis';
@@ -30,7 +32,13 @@ import { useEventEditor } from '../../timeline/event-editor/useEventEditor';
 import { deriveFilename } from '../../timeline/event-editor/domain';
 import { EventEditorModal } from '../../timeline/event-editor/EventEditorModal';
 import { NewEventModal } from '../../timeline/event-editor/new-event-modal';
-import { sessionTagsForSeconds } from '../../timeline/render/session-bands';
+import {
+  sessionTagsForSeconds,
+  computeSessionBandsFromSessions,
+  computeSessionPills,
+  findSessionPillAt,
+  lastSessionEndSeconds,
+} from '../../timeline/render/session-bands';
 import { AdvanceTimePopover } from '../../timeline/render/AdvanceTimePopover';
 import {
   applySessionUpdate,
@@ -42,19 +50,27 @@ import {
   mergeSeshTags,
 } from '../../timeline/interactions/session-tag-sync';
 import { useSessionMode } from '../../timeline/session-editor/use-session-mode';
+import { yInRailZone } from '../../timeline/session-editor/session-mode';
 import { useSessionEditor } from '../../timeline/session-editor/use-session-editor';
 import { SessionEditorModal } from '../../timeline/session-editor/session-editor-modal';
 import { FooterPortal } from '../../components/footer-portal';
 import { FooterButton } from '../../components/footer-button';
 import { loadSavedViewState, saveViewState } from './view-state-persistence';
 import { useFilterState } from '../../timeline/filter/use-filter-state';
-import { applyFilters } from '../../timeline/filter/logic';
+import { applyFilters, newFilterId } from '../../timeline/filter/logic';
 import { FilterPanel } from '../../timeline/filter/filter-panel';
 import { EventContextMenu } from '../../timeline/components/event-context-menu';
+import {
+  TimelineCanvasContextMenu,
+  type CanvasContextMenuTarget,
+} from '../../timeline/components/timeline-canvas-context-menu';
+import { TagContextMenu } from '../../timeline/components/tag-context-menu';
 import { revealInExplorer } from '../../shared/reveal-in-explorer';
 import { buildEntityLink } from '../../shared/entity-link';
 import { copyToClipboard } from '../../shared/clipboard';
+import { entityIndex } from '../../shared/entity-index';
 import { LabelOverrideEditor } from '../../shared/components/label-override-editor';
+import { useConfirm } from '../../shared/confirm-dialog/confirm-provider';
 import '../../timeline/session-editor/session-mode.css';
 import './timeline-view.css';
 
@@ -87,6 +103,7 @@ export function TimelineView({
   entityTagLabelMap,
 }: TimelineViewProps) {
   const weekdays = ThemeProvider.get().timeline.days;
+  const { confirm } = useConfirm();
   const [viewState, setViewState] = useState<ViewState>({
     centerSeconds: 0,
     secondsPerPixel: DEFAULT_SECONDS_PER_PIXEL,
@@ -101,6 +118,13 @@ export function TimelineView({
   const [advanceTimeAnchor, setAdvanceTimeAnchor] = useState<{ x: number; y: number } | null>(null);
   const [contextMenuTarget, setContextMenuTarget] = useState<{
     item: EventListItem;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [canvasMenuTarget, setCanvasMenuTarget] = useState<CanvasContextMenuTarget | null>(null);
+  const [tagMenuTarget, setTagMenuTarget] = useState<{
+    filename: string;
+    tag: string;
     x: number;
     y: number;
   } | null>(null);
@@ -371,6 +395,20 @@ export function TimelineView({
 
   const editor = useEventEditor(campaignPath, refreshEvents);
 
+  const setInGameNow = useCallback(
+    async (seconds: number) => {
+      const current = gameStateRef.current;
+      if (!current) return;
+      const next: State = {
+        ...current,
+        in_game_now_seconds: seconds,
+      };
+      await timelinePort.putState(campaignPath, next);
+      setLoadedData((d) => ({ ...d, gameState: next }));
+    },
+    [campaignPath],
+  );
+
   const quickAdd = useQuickAddZones(viewportRef, {
     getView: () => viewRef.current,
     getViewport: () => sizeRef.current,
@@ -382,16 +420,7 @@ export function TimelineView({
       const cal = CalendarProvider.get();
       editor.openNewEventPrompt(cal.format(cal.fromEpochSeconds(seconds)));
     },
-    onSetNow: async (seconds) => {
-      const current = gameStateRef.current;
-      if (!current) return;
-      const next: State = {
-        ...current,
-        in_game_now_seconds: seconds,
-      };
-      await timelinePort.putState(campaignPath, next);
-      setLoadedData((d) => ({ ...d, gameState: next }));
-    },
+    onSetNow: setInGameNow,
   });
 
   useEffect(() => {
@@ -552,6 +581,133 @@ export function TimelineView({
     setContextMenuTarget({ item, x, y });
   }, []);
 
+  // ---- Tag chip context menu (right-click on a card's tag chip) ----
+
+  const handleTagContextMenu = useCallback(
+    (filename: string, tag: string, x: number, y: number) => {
+      if (sessionModeActiveRef.current) return;
+      setTagMenuTarget({ filename, tag, x, y });
+    },
+    [],
+  );
+
+  const handleEditTagLabel = useCallback((entityId: string) => {
+    setLabelEditorTarget({ entityId, target: 'tagLabel' });
+  }, []);
+
+  const handleResetTagLabel = useCallback((entityId: string) => {
+    void entityIndex.updateLabelOverride(entityId, 'tagLabel', null);
+  }, []);
+
+  const handleGoToTagEntity = useCallback(
+    (entityId: string) => {
+      onOpenById?.(entityId);
+    },
+    [onOpenById],
+  );
+
+  const handleCopyTagLink = useCallback((entityId: string) => {
+    void copyToClipboard(buildEntityLink(entityId));
+  }, []);
+
+  const handleFilterByTag = useCallback(
+    (tag: string) => {
+      addFilter({ id: newFilterId(), type: 'tag', enabled: true, pinned: false, tags: [tag] });
+    },
+    [addFilter],
+  );
+
+  // ---- Timeline canvas context menu (right-click on pill / rail / background) ----
+
+  const handleViewportContextMenu = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const rect = viewportRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const localX = e.clientX - rect.left;
+    const localY = e.clientY - rect.top;
+    const view = viewRef.current;
+    const size = sizeRef.current;
+
+    const bands = computeSessionBandsFromSessions(sessionsRef.current, eventsRef.current);
+    const pills = computeSessionPills(bands, sessionsRef.current, view, size);
+    const hitSessionId = findSessionPillAt(pills, localX, localY);
+    if (hitSessionId) {
+      setCanvasMenuTarget({ kind: 'session', sessionId: hitSessionId, x: e.clientX, y: e.clientY });
+      return;
+    }
+
+    const axisY = Math.floor(size.height * 0.8);
+    const contextSeconds = xToSeconds(localX, view, size);
+    if (yInRailZone(localY, axisY)) {
+      setCanvasMenuTarget({ kind: 'rail', contextSeconds, x: e.clientX, y: e.clientY });
+      return;
+    }
+    if (sessionModeActiveRef.current) return;
+    setCanvasMenuTarget({ kind: 'background', contextSeconds, x: e.clientX, y: e.clientY });
+  }, []);
+
+  const handleExtendSession = useCallback(
+    async (sessionId: string, unit: ExtendUnit) => {
+      const session = sessionsRef.current.find((s) => s.id === sessionId);
+      if (!session) return;
+      const bands = computeSessionBandsFromSessions(sessionsRef.current, eventsRef.current);
+      const band = bands.find((b) => b.sessionId === sessionId);
+      if (!band) return;
+      const newEnd = addInGameDuration(band.endSeconds, unit, CalendarProvider.get());
+      await saveSessionUpdate({ ...session, inGameEndSeconds: newEnd });
+    },
+    [saveSessionUpdate],
+  );
+
+  const handleDeleteSessionFromCanvas = useCallback(
+    async (sessionId: string) => {
+      const session = sessionsRef.current.find((s) => s.id === sessionId);
+      const ok = await confirm({
+        title: 'Delete session',
+        message: `Delete this session${session ? ` (${session.id})` : ''}? This cannot be undone.`,
+        confirmLabel: 'Delete',
+        danger: true,
+      });
+      if (!ok) return;
+      await handleSessionDelete(sessionId);
+    },
+    [confirm, handleSessionDelete],
+  );
+
+  const handleCreateSessionAtPoint = useCallback(
+    (contextSeconds: number) => {
+      const cal = CalendarProvider.get();
+      const startSeconds = contextSeconds;
+      const endSeconds = addInGameDuration(startSeconds, 'day', cal);
+      sessionEditor.openCreate({
+        inGameStart: cal.format(cal.fromEpochSeconds(startSeconds)),
+        inGameEnd: cal.format(cal.fromEpochSeconds(endSeconds)),
+      });
+    },
+    [sessionEditor],
+  );
+
+  const handleCreateEventFromCanvas = useCallback(
+    (contextSeconds: number) => {
+      const cal = CalendarProvider.get();
+      editor.openNewEventPrompt(cal.format(cal.fromEpochSeconds(contextSeconds)));
+    },
+    [editor],
+  );
+
+  const handleCreateSessionFromLast = useCallback(
+    (contextSeconds: number) => {
+      const cal = CalendarProvider.get();
+      const bands = computeSessionBandsFromSessions(sessionsRef.current, eventsRef.current);
+      const startSeconds = lastSessionEndSeconds(bands) ?? contextSeconds;
+      sessionEditor.openCreate({
+        inGameStart: cal.format(cal.fromEpochSeconds(startSeconds)),
+        inGameEnd: cal.format(cal.fromEpochSeconds(contextSeconds)),
+      });
+    },
+    [sessionEditor],
+  );
+
   const filteredEvents = useMemo(
     () => applyFilters(loadedData.events, filterState, loadedData.sessions),
     [loadedData.events, filterState, loadedData.sessions],
@@ -614,7 +770,7 @@ export function TimelineView({
         data-center={viewState.centerSeconds}
         data-scale={viewState.secondsPerPixel}
         className={sessionMode.active ? 'is-session-mode' : undefined}
-        onContextMenu={(e) => e.preventDefault()}
+        onContextMenu={handleViewportContextMenu}
         style={{
           position: 'relative',
           width: '100%',
@@ -652,6 +808,7 @@ export function TimelineView({
           onContextMenu={sessionModeActiveRef.current ? undefined : handleCardContextMenu}
           onOpenById={onOpenById}
           onRemoveTag={sessionModeActiveRef.current ? undefined : handleRemoveTag}
+          onTagContextMenu={sessionModeActiveRef.current ? undefined : handleTagContextMenu}
           entityLabelMap={entityLabelMap}
           entityTagLabelMap={entityTagLabelMap}
         />
@@ -776,6 +933,38 @@ export function TimelineView({
         />
       )}
 
+      {/* Tag chip context menu (right-click on a card's tag chip) */}
+      {tagMenuTarget && (
+        <TagContextMenu
+          tag={tagMenuTarget.tag}
+          filename={tagMenuTarget.filename}
+          x={tagMenuTarget.x}
+          y={tagMenuTarget.y}
+          onClose={() => setTagMenuTarget(null)}
+          onEditTagLabel={handleEditTagLabel}
+          onResetTagLabel={handleResetTagLabel}
+          onGoTo={handleGoToTagEntity}
+          onCopyLink={handleCopyTagLink}
+          onRemoveTag={handleRemoveTag}
+          onFilterByTag={handleFilterByTag}
+        />
+      )}
+
+      {/* Timeline canvas context menu (session pill / rail / background) */}
+      {canvasMenuTarget && (
+        <TimelineCanvasContextMenu
+          target={canvasMenuTarget}
+          onClose={() => setCanvasMenuTarget(null)}
+          onEditSession={(sessionId) => sessionEditor.openEdit(sessionId)}
+          onExtendSession={(sessionId, unit) => void handleExtendSession(sessionId, unit)}
+          onDeleteSession={(sessionId) => void handleDeleteSessionFromCanvas(sessionId)}
+          onCreateSessionAtPoint={handleCreateSessionAtPoint}
+          onCreateEvent={handleCreateEventFromCanvas}
+          onCreateSessionFromLast={handleCreateSessionFromLast}
+          onSetNow={(contextSeconds) => void setInGameNow(contextSeconds)}
+        />
+      )}
+
       {/* New event title prompt */}
       {editor.newEventPrompt && (
         <NewEventModal
@@ -801,6 +990,7 @@ export function TimelineView({
           onAutosaved={editor.handleAutosaved}
           onDeleted={editor.handleDeleted}
           onOpenById={onOpenById}
+          onFilterByTag={handleFilterByTag}
         />
       )}
 

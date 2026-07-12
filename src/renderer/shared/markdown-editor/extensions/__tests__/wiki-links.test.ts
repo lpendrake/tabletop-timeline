@@ -10,6 +10,7 @@ import {
   buildWikiLinkInsert,
   setEntityLabels,
   setKnownIds,
+  entityLabelMapField,
   type WikiLinksConfig,
   type WikiLinkSuggestion,
 } from '../wiki-links';
@@ -408,5 +409,12 @@ describe('entity label resolution', () => {
     views.push(view);
     const link = container.querySelector<HTMLElement>('.cm-note-link');
     expect(link?.textContent).toBe('abc1');
+  });
+
+  it('exposes entityLabelMapField so callers can read the current label map directly', () => {
+    const { view } = makeViewWithDoc('See [[abc1]]');
+    views.push(view);
+    view.dispatch({ effects: setEntityLabels.of(new Map([['abc1', 'Alice the Wizard']])) });
+    expect(view.state.field(entityLabelMapField)).toEqual(new Map([['abc1', 'Alice the Wizard']]));
   });
 });

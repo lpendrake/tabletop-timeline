@@ -81,6 +81,36 @@ function cycleHeadingLine(line: string): string {
   return '# ' + line; // paragraph → H1
 }
 
+/**
+ * If every selected line is already exactly the given heading level, strips
+ * the heading marker from all of them (toggle off). Otherwise sets every
+ * selected line to exactly that level, replacing any existing leading '#'
+ * marker (unlike `toggleHeading`, this never cycles).
+ */
+export function toggleHeadingLevel(
+  text: string,
+  from: number,
+  to: number,
+  level: 1 | 2 | 3,
+): BlockResult {
+  const lines = linesInRange(text, from, to);
+  const allAtLevel = lines.length > 0 && lines.every((l) => headingLevelOf(l.text) === level);
+  return applyToLines(text, from, to, (line) =>
+    allAtLevel ? line.replace(/^#{1,6} ?/, '') : setHeadingLevelLine(line, level),
+  );
+}
+
+/** Returns the heading level of a line (leading '#' run of 1-6 followed by a space), or 0 if none. */
+function headingLevelOf(line: string): number {
+  const match = /^(#{1,6}) /.exec(line);
+  return match ? match[1].length : 0;
+}
+
+function setHeadingLevelLine(line: string, level: 1 | 2 | 3): string {
+  const stripped = line.replace(/^#{1,6} ?/, '');
+  return '#'.repeat(level) + ' ' + stripped;
+}
+
 // ---- Bullet list ---------------------------------------------------------
 
 /**
