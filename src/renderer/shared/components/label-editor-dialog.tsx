@@ -5,23 +5,29 @@ interface Props {
   title: string;
   initialValue: string;
   placeholder: string;
+  saving?: boolean;
   onSave: (value: string) => void;
   onReset: () => void;
   onClose: () => void;
 }
 
 /**
- * A text-prompt dialog for editing a link's *local* label (the text stored
- * directly in the `[[label|id]]` markdown, as opposed to the entity index's
- * global override). Mirrors `LabelOverrideEditor`'s markup and reuses its CSS
- * so the two dialogs look identical, but carries no `entityIndex` dependency
- * of its own — the caller supplies the current value and the save/reset
- * callbacks, so this stays a dumb prompt.
+ * Shared presentational shell for the two label-editor dialogs: the
+ * `entityIndex`-backed `LabelOverrideEditor` and the local (in-markdown)
+ * label prompt mounted via `showLocalLabelEditor`. Owns only the input
+ * state, the Escape-capture effect, and backdrop click-to-close — no IO of
+ * its own. Callers supply the current value and the save/reset callbacks.
+ *
+ * When `saving` is set, Reset/Cancel/Save are disabled and the primary
+ * button reads "Saving…"; this is used by the connected wrapper while its
+ * async update is in flight. The local editor's save is synchronous, so it
+ * omits `saving` entirely.
  */
-export function LocalLabelEditor({
+export function LabelEditorDialog({
   title,
   initialValue,
   placeholder,
+  saving,
   onSave,
   onReset,
   onClose,
@@ -41,13 +47,7 @@ export function LocalLabelEditor({
 
   const handleSave = useCallback(() => {
     onSave(value.trim());
-    onClose();
-  }, [value, onSave, onClose]);
-
-  const handleReset = useCallback(() => {
-    onReset();
-    onClose();
-  }, [onReset, onClose]);
+  }, [value, onSave]);
 
   return (
     <div
@@ -68,7 +68,7 @@ export function LocalLabelEditor({
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') handleSave();
+              if (e.key === 'Enter' && !saving) handleSave();
             }}
             placeholder={placeholder}
             autoFocus
@@ -78,19 +78,21 @@ export function LocalLabelEditor({
               type="button"
               className="label-editor-btn"
               title="Default is the first heading in the note, or the event title"
-              onClick={handleReset}
+              onClick={onReset}
+              disabled={saving}
             >
               Reset to Default
             </button>
-            <button type="button" className="label-editor-btn" onClick={onClose}>
+            <button type="button" className="label-editor-btn" onClick={onClose} disabled={saving}>
               Cancel
             </button>
             <button
               type="button"
               className="label-editor-btn label-editor-btn--primary"
               onClick={handleSave}
+              disabled={saving}
             >
-              Save
+              {saving ? 'Saving…' : 'Save'}
             </button>
           </div>
         </div>

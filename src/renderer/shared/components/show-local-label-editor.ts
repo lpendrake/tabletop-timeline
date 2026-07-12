@@ -1,6 +1,6 @@
 import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
-import { LocalLabelEditor } from './local-label-editor';
+import { LabelEditorDialog } from './label-editor-dialog';
 
 export interface ShowLocalLabelEditorOptions {
   title: string;
@@ -32,12 +32,18 @@ export function showLocalLabelEditor(opts: ShowLocalLabelEditorOptions): void {
   };
 
   root.render(
-    createElement(LocalLabelEditor, {
+    createElement(LabelEditorDialog, {
       title,
       initialValue,
       placeholder,
-      onSave: (value: string) => onSave(value),
-      onReset: () => onReset(),
+      onSave: (value: string) => {
+        onSave(value);
+        destroy();
+      },
+      onReset: () => {
+        onReset();
+        destroy();
+      },
       onClose: destroy,
     }),
   );
