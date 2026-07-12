@@ -19,13 +19,19 @@ export function useContextMenuBehavior(x: number, y: number, onClose: () => void
       if (!menuRef.current?.contains(e.target as Node)) onClose();
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        // Consume the event during window-capture, before it reaches any
+        // document-capture listener (e.g. a modal's own Escape handler), so
+        // Escape closes only this menu and not something behind it.
+        e.stopPropagation();
+        onClose();
+      }
     }
     document.addEventListener('mousedown', onMouseDown, true);
-    document.addEventListener('keydown', onKey, true);
+    window.addEventListener('keydown', onKey, true);
     return () => {
       document.removeEventListener('mousedown', onMouseDown, true);
-      document.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('keydown', onKey, true);
     };
   }, [onClose]);
 
