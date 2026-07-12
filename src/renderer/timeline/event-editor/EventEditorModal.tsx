@@ -32,6 +32,11 @@ import {
   buildEntityTagLabelMap,
   applyEntityDelta,
 } from '../../../shared/entity-labels';
+import { TagContextMenu } from '../components/tag-context-menu';
+import { showLabelOverrideEditor } from '../../shared/components/show-label-override-editor';
+import { entityIndex as entityIndexStore } from '../../shared/entity-index';
+import { buildEntityLink } from '../../shared/entity-link';
+import { copyToClipboard } from '../../shared/clipboard';
 import './EventEditorModal.css';
 
 function TagChipList({
@@ -40,12 +45,14 @@ function TagChipList({
   systemTags,
   entityTagLabelMap,
   onRemoveCustomTag,
+  onTagContextMenu,
 }: {
   tagsText: string;
   body: string;
   systemTags: string[];
   entityTagLabelMap: Map<string, string>;
   onRemoveCustomTag: (tag: string) => void;
+  onTagContextMenu: (raw: string, x: number, y: number) => void;
 }) {
   const chips = buildTagChips(tagsText, body, entityTagLabelMap, systemTags);
   if (chips.length === 0) return null;
@@ -55,6 +62,11 @@ function TagChipList({
         <span
           key={raw}
           className={`event-editor-tag-chip${isEntity ? ' entity-tag-chip--resolved' : ''}`}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onTagContextMenu(raw, e.clientX, e.clientY);
+          }}
         >
           {display}
           {isValidCustomTag(raw) && (
@@ -89,6 +101,7 @@ export interface EventEditorModalProps {
   /** Called after a background auto-save; editor stays open. */
   onAutosaved?: (filename: string) => void;
   onOpenById?: (id: string) => void;
+  onFilterByTag?: (tag: string) => void;
 }
 
 export function EventEditorModal({
@@ -99,6 +112,7 @@ export function EventEditorModal({
   onDeleted,
   onAutosaved,
   onOpenById,
+  onFilterByTag,
 }: EventEditorModalProps) {
   const { confirm } = useConfirm();
   const [loadState, setLoadState] = useState<LoadState>(mode.kind === 'edit' ? 'loading' : 'ready');
@@ -109,6 +123,7 @@ export function EventEditorModal({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [conflictPending, setConflictPending] = useState<ConflictPending | null>(null);
   const [customMode, setCustomMode] = useState(false);
+  const [tagMenu, setTagMenu] = useState<{ tag: string; x: number; y: number } | null>(null);
   const [entityIndex, setEntityIndex] = useState<
     Awaited<ReturnType<typeof notesData.getEntityIndex>>
   >([]);
@@ -602,6 +617,7 @@ export function EventEditorModal({
                     systemTags={buffer.systemTags}
                     entityTagLabelMap={entityTagLabelMap}
                     onRemoveCustomTag={handleRemoveCustomTag}
+                    onTagContextMenu={(raw, x, y) => setTagMenu({ tag: raw, x, y })}
                   />
                 </div>
 
@@ -678,6 +694,22 @@ export function EventEditorModal({
           )}
         </div>
       </div>
+
+      {tagMenu && (
+        <TagContextMenu
+          tag={tagMenu.tag}
+          filename={''}
+          x={tagMenu.x}
+          y={tagMenu.y}
+          onClose={() => setTagMenu(null)}
+          onEditTagLabel={(id) => showLabelOverrideEditor(id, 'tagLabel')}
+          onResetTagLabel={(id) => void entityIndexStore.updateLabelOverride(id, 'tagLabel', null)}
+          onGoTo={(id) => onOpenById?.(id)}
+          onCopyLink={(id) => void copyToClipboard(buildEntityLink(id))}
+          onRemoveTag={(_filename, tag) => handleRemoveCustomTag(tag)}
+          onFilterByTag={(tag) => onFilterByTag?.(tag)}
+        />
+      )}
 
       <FooterPortal slot="center">
         <FormatToolbar

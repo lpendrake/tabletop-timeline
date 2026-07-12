@@ -990,6 +990,7 @@ export function TimelineView({
           onAutosaved={editor.handleAutosaved}
           onDeleted={editor.handleDeleted}
           onOpenById={onOpenById}
+          onFilterByTag={handleFilterByTag}
         />
       )}
 
