@@ -677,8 +677,12 @@ export function TimelineView({
   const handleCreateSessionAtPoint = useCallback(
     (contextSeconds: number) => {
       const cal = CalendarProvider.get();
-      const label = cal.format(cal.fromEpochSeconds(contextSeconds));
-      sessionEditor.openCreate({ inGameStart: label, inGameEnd: label });
+      const startSeconds = contextSeconds;
+      const endSeconds = addInGameDuration(startSeconds, 'day', cal);
+      sessionEditor.openCreate({
+        inGameStart: cal.format(cal.fromEpochSeconds(startSeconds)),
+        inGameEnd: cal.format(cal.fromEpochSeconds(endSeconds)),
+      });
     },
     [sessionEditor],
   );
