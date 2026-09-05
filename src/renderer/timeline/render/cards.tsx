@@ -7,7 +7,7 @@ import type { ViewState, ViewportSize } from '../math/zoom';
 import { formatCardFace } from '../calendar/format';
 import {
   layoutCards,
-  assignRows,
+  placeCards,
   weekdayColor,
   computeExpansionLayout,
   CARD_HEIGHT,
@@ -81,10 +81,7 @@ export function Cards({
     [events, view, size, inGameNowSeconds],
   );
 
-  const placed = useMemo((): (LaidOutCard & CardPlacement)[] => {
-    const placements = assignRows(laidOut);
-    return laidOut.map((card) => ({ ...card, ...placements.get(card.event.filename)! }));
-  }, [laidOut]);
+  const placed = useMemo((): (LaidOutCard & CardPlacement)[] => placeCards(laidOut), [laidOut]);
 
   if (size.width === 0 || size.height === 0) return null;
 
@@ -220,6 +217,7 @@ function CardItem({
   const expansionEl = isExpanded ? (
     <CardExpansion
       body={expansion?.body ?? null}
+      status={expansion?.status ?? 'loading'}
       expandsDown={expandsDown}
       size={previewSize}
       centerX={card.x}

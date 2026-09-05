@@ -2,10 +2,12 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   layoutCards,
   assignRows,
+  placeCards,
   weekdayColor,
   CARD_HEIGHT,
   CARD_GAP,
   CARD_PADDING_X,
+  MAX_ROWS,
 } from '../cards';
 import type { EventListItem } from '../../data/types';
 import type { WeekdayColors } from '../../../theme';
@@ -253,6 +255,43 @@ describe('assignRows', () => {
       const connHeight = CARD_GAP + row * (CARD_HEIGHT + CARD_GAP);
       expect(connTop + connHeight).toBe(axisY);
       void filename;
+    }
+  });
+});
+
+// ---- placeCards ----
+
+describe('placeCards', () => {
+  // All ten events share the same instant, so they all mutually overlap in x
+  // and compete for the same rows — more than MAX_ROWS (8) of them.
+  const OVERLAPPING_EVENTS: EventListItem[] = Array.from({ length: MAX_ROWS + 2 }, (_, i) =>
+    ev(`c${i}.md`, '4726-05-04T12:00:00', `Event ${i}`),
+  );
+
+  it('omits cards the row cap could not place', () => {
+    const laidOut = layoutCards(OVERLAPPING_EVENTS, VIEW, SIZE, REF_SECS);
+    const placed = placeCards(laidOut);
+    // assignRows itself refuses to place anything beyond MAX_ROWS
+    expect(placed.length).toBe(MAX_ROWS);
+    expect(placed.length).toBeLessThan(OVERLAPPING_EVENTS.length);
+  });
+
+  it('returns every card when they all fit', () => {
+    const laidOut = layoutCards(FIXTURE_EVENTS, VIEW, SIZE, NOW_SECS);
+    const placed = placeCards(laidOut);
+    expect(placed.length).toBe(FIXTURE_EVENTS.length);
+    expect(new Set(placed.map((c) => c.event.filename))).toEqual(
+      new Set(FIXTURE_EVENTS.map((e) => e.filename)),
+    );
+  });
+
+  it('never returns a card with a non-finite row or width', () => {
+    const laidOut = layoutCards(OVERLAPPING_EVENTS, VIEW, SIZE, REF_SECS);
+    const placed = placeCards(laidOut);
+    expect(placed.length).toBeGreaterThan(0);
+    for (const card of placed) {
+      expect(Number.isFinite(card.row)).toBe(true);
+      expect(Number.isFinite(card.width)).toBe(true);
     }
   });
 });

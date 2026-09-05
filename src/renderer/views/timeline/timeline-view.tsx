@@ -982,12 +982,12 @@ export function TimelineView({
       {/* Event editor modal — rendered outside viewport to avoid pan/zoom transform */}
       {editor.editorMode && (
         <EventEditorModal
-          key={editor.editorMode.kind === 'edit' ? editor.editorMode.filename : 'new'}
+          key={editor.editorMode.sessionId}
           campaignPath={campaignPath}
           mode={editor.editorMode}
           onClose={editor.closeEditor}
           onSaved={editor.handleSaved}
-          onAutosaved={editor.handleAutosaved}
+          onPersisted={editor.handlePersisted}
           onDeleted={editor.handleDeleted}
           onOpenById={onOpenById}
           onFilterByTag={handleFilterByTag}

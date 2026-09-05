@@ -148,3 +148,18 @@ export function assignRows(laidOut: LaidOutCard[]): Map<string, CardPlacement> {
 
   return placements;
 }
+
+/**
+ * Lay out cards into rows, dropping any the row cap could not place.
+ *
+ * `assignRows` intentionally refuses to place cards beyond MAX_ROWS; returning
+ * them without a placement would put `undefined` into the position maths and
+ * render them at NaN coordinates, so they are omitted entirely here.
+ */
+export function placeCards(laidOut: LaidOutCard[]): (LaidOutCard & CardPlacement)[] {
+  const placements = assignRows(laidOut);
+  return laidOut.flatMap((card) => {
+    const placement = placements.get(card.event.filename);
+    return placement ? [{ ...card, ...placement }] : [];
+  });
+}

@@ -113,7 +113,7 @@ import { fireEvent } from '@testing-library/react';
 const CAMPAIGN = '/fake/campaign';
 const MTIME = '2026-01-01T00:00:00.000Z';
 
-const EDIT_MODE = { kind: 'edit' as const, filename: '4726-05-04-battle.md' };
+const EDIT_MODE = { kind: 'edit' as const, sessionId: 1, filename: '4726-05-04-battle.md' };
 
 const BASE_EVENT_DATA = {
   event: {
@@ -162,18 +162,20 @@ function renderCreate() {
   const onClose = vi.fn();
   const onSaved = vi.fn();
   const onDeleted = vi.fn();
+  const onPersisted = vi.fn();
   act(() => {
     root.render(
       <EventEditorModal
         campaignPath={CAMPAIGN}
-        mode={{ kind: 'create' }}
+        mode={{ kind: 'create', sessionId: 1 }}
         onClose={onClose}
         onSaved={onSaved}
         onDeleted={onDeleted}
+        onPersisted={onPersisted}
       />,
     );
   });
-  return { onClose, onSaved, onDeleted };
+  return { onClose, onSaved, onDeleted, onPersisted };
 }
 
 /** Render the editor in edit mode and wait for the load to complete. */
@@ -185,6 +187,7 @@ async function renderEdit(eventData = BASE_EVENT_DATA) {
   const onClose = vi.fn();
   const onSaved = vi.fn();
   const onDeleted = vi.fn();
+  const onPersisted = vi.fn();
 
   // Render synchronously
   act(() => {
@@ -195,6 +198,7 @@ async function renderEdit(eventData = BASE_EVENT_DATA) {
         onClose={onClose}
         onSaved={onSaved}
         onDeleted={onDeleted}
+        onPersisted={onPersisted}
       />,
     );
   });
@@ -207,7 +211,7 @@ async function renderEdit(eventData = BASE_EVENT_DATA) {
     await Promise.resolve();
   });
 
-  return { onClose, onSaved, onDeleted };
+  return { onClose, onSaved, onDeleted, onPersisted };
 }
 
 /** Dirty the buffer by changing the body text via fireEvent (which properly triggers React). */
@@ -454,6 +458,66 @@ describe('EventEditorModal', () => {
       await vi.runAllTimersAsync();
     });
     expect(timelinePort.updateEvent).toHaveBeenCalledTimes(1);
+  });
+
+  // ── onPersisted fires immediately on rename, ahead of any banner/close timer ──
+
+  it('notifies the parent with the new filename as soon as an autosave renames the file', async () => {
+    vi.useFakeTimers();
+    setup();
+    vi.mocked(timelinePort.updateEvent).mockResolvedValue({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      event: { ...BASE_EVENT_DATA.event, filename: 'renamed-battle.md' } as any,
+      lastModified: '2026-01-02T00:00:00.000Z',
+    });
+
+    const { onPersisted, onSaved } = await renderEdit();
+    await dirtyBuffer();
+
+    // Advance exactly through the 500ms autosave debounce — not the 900ms
+    // saved-banner timer — so onPersisted must have fired on its own, ahead
+    // of any timer-gated callback.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+
+    expect(timelinePort.updateEvent).toHaveBeenCalledTimes(1);
+    expect(onPersisted).toHaveBeenCalledTimes(1);
+    expect(onPersisted).toHaveBeenCalledWith('renamed-battle.md');
+    // The banner timer (900ms) hasn't elapsed yet, so onSaved must not have fired.
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+
+  it('notifies the parent even when the modal unmounts before the saved banner clears', async () => {
+    vi.useFakeTimers();
+    setup();
+    vi.mocked(timelinePort.updateEvent).mockResolvedValue({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      event: { ...BASE_EVENT_DATA.event, filename: 'renamed-battle.md' } as any,
+      lastModified: '2026-01-02T00:00:00.000Z',
+    });
+
+    const { onPersisted } = await renderEdit();
+    await dirtyBuffer();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    expect(onPersisted).toHaveBeenCalledWith('renamed-battle.md');
+
+    // Unmount the modal (as the parent would on a rename) before the 900ms
+    // saved-banner timer fires — this must not lose the notification, and
+    // must not throw despite the pending timer being torn down.
+    act(() => {
+      root.render(<></>);
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(900);
+    });
+
+    // Only the one persist notification from the autosave — nothing further.
+    expect(onPersisted).toHaveBeenCalledTimes(1);
   });
 
   // ── Field captions are rendered ──

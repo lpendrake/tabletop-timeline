@@ -79,14 +79,18 @@ describe('useCardExpansion', () => {
     });
 
     // Immediately after click: loading state
-    expect(result.current.expansion).toEqual({ filename: 'a.md', body: null });
+    expect(result.current.expansion).toEqual({ filename: 'a.md', body: null, status: 'loading' });
 
     // Resolve the fetch
     await act(async () => {
       resolveEvent(makeEventResponse('a.md', '# Hello'));
     });
 
-    expect(result.current.expansion).toEqual({ filename: 'a.md', body: '# Hello' });
+    expect(result.current.expansion).toEqual({
+      filename: 'a.md',
+      body: '# Hello',
+      status: 'loaded',
+    });
   });
 
   it('clicking the expanded card again collapses it', async () => {
@@ -135,7 +139,7 @@ describe('useCardExpansion', () => {
     });
 
     // B's expansion is still shown; A's body was discarded
-    expect(result.current.expansion).toEqual({ filename: 'b.md', body: '# B' });
+    expect(result.current.expansion).toEqual({ filename: 'b.md', body: '# B', status: 'loaded' });
   });
 
   it('clicking the loading card (body: null) collapses it, and the fetch result is discarded', async () => {
@@ -151,7 +155,7 @@ describe('useCardExpansion', () => {
 
     // Click A — starts loading
     act(() => result.current.handleCardClick('a.md'));
-    expect(result.current.expansion).toEqual({ filename: 'a.md', body: null });
+    expect(result.current.expansion).toEqual({ filename: 'a.md', body: null, status: 'loading' });
 
     // Click A again while loading — should collapse
     act(() => result.current.handleCardClick('a.md'));
@@ -202,6 +206,53 @@ describe('useCardExpansion', () => {
     });
 
     expect(result.current.expansion).toBeNull();
+  });
+
+  it('surfaces an error when the event body cannot be loaded', async () => {
+    const pan = makePan();
+    mockGetEvent.mockRejectedValueOnce(new Error('ENOENT'));
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { result } = renderHook(() => useCardExpansion('camp', pan));
+
+    act(() => result.current.handleCardClick('a.md'));
+    expect(result.current.expansion).toEqual({ filename: 'a.md', body: null, status: 'loading' });
+
+    await waitFor(() => expect(result.current.expansion?.status).toBe('error'));
+    expect(result.current.expansion).toEqual({ filename: 'a.md', body: null, status: 'error' });
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('ignores a failed load for a card the user already switched away from', async () => {
+    const pan = makePan();
+    let rejectA!: (err: Error) => void;
+    mockGetEvent
+      .mockReturnValueOnce(
+        new Promise((_resolve, reject) => {
+          rejectA = reject;
+        }),
+      ) // A rejects late
+      .mockResolvedValueOnce(makeEventResponse('b.md', '# B')); // B resolves first
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { result } = renderHook(() => useCardExpansion('camp', pan));
+
+    // Click A (hangs)
+    act(() => result.current.handleCardClick('a.md'));
+    expect(result.current.expansion?.filename).toBe('a.md');
+
+    // Switch to B before A rejects
+    await act(async () => result.current.handleCardClick('b.md'));
+    await waitFor(() => expect(result.current.expansion?.body).toBe('# B'));
+
+    // Now A rejects — should be discarded, leaving B's state untouched
+    await act(async () => {
+      rejectA(new Error('ENOENT'));
+    });
+
+    expect(result.current.expansion).toEqual({ filename: 'b.md', body: '# B', status: 'loaded' });
+
+    consoleErrorSpy.mockRestore();
   });
 
   it('other key presses do not collapse the expansion', async () => {

@@ -4,7 +4,9 @@ import type { PanController } from './usePan';
 
 export interface CardExpansionState {
   filename: string;
-  body: string | null; // null = still loading
+  /** Body markdown; null while loading and when loading failed. */
+  body: string | null;
+  status: 'loading' | 'loaded' | 'error';
 }
 
 export interface UseCardExpansionResult {
@@ -45,7 +47,7 @@ export function useCardExpansion(
       }
 
       // Start loading; record intent so the fetch callback can detect staleness
-      const next: CardExpansionState = { filename, body: null };
+      const next: CardExpansionState = { filename, body: null, status: 'loading' };
       expansionRef.current = next;
       setExpansion(next);
 
@@ -54,11 +56,18 @@ export function useCardExpansion(
         .then(({ event }) => {
           // If the user navigated away from this card before the fetch resolved, discard
           if (expansionRef.current?.filename !== filename) return;
-          const loaded: CardExpansionState = { filename, body: event.body };
+          const loaded: CardExpansionState = { filename, body: event.body, status: 'loaded' };
           expansionRef.current = loaded;
           setExpansion(loaded);
         })
-        .catch((err) => console.error('[useCardExpansion] failed to load event body', err));
+        .catch((err) => {
+          console.error('[useCardExpansion] failed to load event body', err);
+          // If the user navigated away from this card before the fetch rejected, discard
+          if (expansionRef.current?.filename !== filename) return;
+          const failed: CardExpansionState = { filename, body: null, status: 'error' };
+          expansionRef.current = failed;
+          setExpansion(failed);
+        });
     },
     [campaignPath, pan, collapse],
   );
