@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { timelinePort, ConflictError } from '../data/ports';
 import type { EventListItem } from '../data/types';
 import type { EditorMode } from './domain';
@@ -24,9 +24,9 @@ export interface UseEventEditorResult {
   openCreate: (initialDate?: string) => void;
   openEdit: (filename: string, initialCursor?: number) => void;
   closeEditor: () => void;
-  handleSaved: (filename: string) => void;
-  handleAutosaved: (filename: string) => void;
-  handleDeleted: (filename: string) => void;
+  handleSaved: () => void;
+  handlePersisted: (filename: string) => void;
+  handleDeleted: () => void;
   requestDeleteFromCard: (item: EventListItem) => Promise<void>;
   cardDeleteConflict: CardDeleteConflict | null;
   resolveCardDeleteConflict: (choice: 'overwrite' | 'cancel') => Promise<void>;
@@ -45,14 +45,20 @@ export function useEventEditor(
   const [editorMode, setEditorMode] = useState<EditorMode | null>(null);
   const [cardDeleteConflict, setCardDeleteConflict] = useState<CardDeleteConflict | null>(null);
   const [newEventPrompt, setNewEventPrompt] = useState<NewEventPromptState | null>(null);
+  const nextSessionIdRef = useRef(1);
 
   const openCreate = useCallback((initialDate?: string) => {
-    setEditorMode({ kind: 'create', ...(initialDate ? { initialDate } : {}) });
+    setEditorMode({
+      kind: 'create',
+      sessionId: nextSessionIdRef.current++,
+      ...(initialDate ? { initialDate } : {}),
+    });
   }, []);
 
   const openEdit = useCallback((filename: string, initialCursor?: number) => {
     setEditorMode({
       kind: 'edit',
+      sessionId: nextSessionIdRef.current++,
       filename,
       ...(initialCursor !== undefined ? { initialCursor } : {}),
     });
@@ -64,12 +70,17 @@ export function useEventEditor(
 
   const handleSaved = useCallback(() => {
     setEditorMode(null);
-    onEventsChanged();
-  }, [onEventsChanged]);
+  }, []);
 
-  const handleAutosaved = useCallback(() => {
-    onEventsChanged();
-  }, [onEventsChanged]);
+  const handlePersisted = useCallback(
+    (filename: string) => {
+      setEditorMode((m) =>
+        m !== null && m.kind === 'edit' && m.filename !== filename ? { ...m, filename } : m,
+      );
+      onEventsChanged();
+    },
+    [onEventsChanged],
+  );
 
   const handleDeleted = useCallback(() => {
     setEditorMode(null);
@@ -173,7 +184,7 @@ export function useEventEditor(
     openEdit,
     closeEditor,
     handleSaved,
-    handleAutosaved,
+    handlePersisted,
     handleDeleted,
     requestDeleteFromCard,
     cardDeleteConflict,

@@ -82,19 +82,23 @@ describe('editor mode transitions', () => {
   it('openCreate sets create mode', () => {
     const { result } = renderHook(() => useEventEditor(CAMPAIGN, vi.fn()));
     act(() => result.current.openCreate());
-    expect(result.current.editorMode).toEqual({ kind: 'create' });
+    expect(result.current.editorMode).toMatchObject({ kind: 'create' });
+    expect(typeof (result.current.editorMode as { sessionId: number }).sessionId).toBe('number');
   });
 
   it('openCreate with initialDate includes it', () => {
     const { result } = renderHook(() => useEventEditor(CAMPAIGN, vi.fn()));
     act(() => result.current.openCreate('4726-03-01'));
-    expect(result.current.editorMode).toEqual({ kind: 'create', initialDate: '4726-03-01' });
+    expect(result.current.editorMode).toMatchObject({
+      kind: 'create',
+      initialDate: '4726-03-01',
+    });
   });
 
   it('openEdit sets edit mode with filename', () => {
     const { result } = renderHook(() => useEventEditor(CAMPAIGN, vi.fn()));
     act(() => result.current.openEdit('foo.md'));
-    expect(result.current.editorMode).toEqual({ kind: 'edit', filename: 'foo.md' });
+    expect(result.current.editorMode).toMatchObject({ kind: 'edit', filename: 'foo.md' });
   });
 
   it('closeEditor resets to null', () => {
@@ -103,17 +107,55 @@ describe('editor mode transitions', () => {
     act(() => result.current.closeEditor());
     expect(result.current.editorMode).toBeNull();
   });
+
+  it('openEdit issues a fresh session id each time the same event is reopened', () => {
+    const { result } = renderHook(() => useEventEditor(CAMPAIGN, vi.fn()));
+    act(() => result.current.openEdit('foo.md'));
+    const firstId = (result.current.editorMode as { sessionId: number }).sessionId;
+    act(() => result.current.closeEditor());
+    act(() => result.current.openEdit('foo.md'));
+    const secondId = (result.current.editorMode as { sessionId: number }).sessionId;
+    expect(secondId).not.toBe(firstId);
+  });
 });
 
-// ---- handleSaved / handleDeleted ----
+// ---- handleSaved / handlePersisted / handleDeleted ----
 
 describe('handleSaved', () => {
-  it('closes editor and triggers refresh', () => {
+  it('closes the editor', () => {
     const onChanged = vi.fn();
     const { result } = renderHook(() => useEventEditor(CAMPAIGN, onChanged));
     act(() => result.current.openEdit('foo.md'));
-    act(() => result.current.handleSaved('foo.md'));
+    act(() => result.current.handleSaved());
     expect(result.current.editorMode).toBeNull();
+  });
+});
+
+describe('handlePersisted', () => {
+  it('updates the stored filename but keeps the same session id', () => {
+    const onChanged = vi.fn();
+    const { result } = renderHook(() => useEventEditor(CAMPAIGN, onChanged));
+    act(() => result.current.openEdit('foo.md'));
+    const sessionId = (result.current.editorMode as { sessionId: number }).sessionId;
+
+    act(() => result.current.handlePersisted('foo-renamed.md'));
+
+    expect(result.current.editorMode).toMatchObject({
+      kind: 'edit',
+      filename: 'foo-renamed.md',
+      sessionId,
+    });
+    expect(onChanged).toHaveBeenCalledOnce();
+  });
+
+  it('still refreshes the list even when the filename is unchanged', () => {
+    const onChanged = vi.fn();
+    const { result } = renderHook(() => useEventEditor(CAMPAIGN, onChanged));
+    act(() => result.current.openEdit('foo.md'));
+
+    act(() => result.current.handlePersisted('foo.md'));
+
+    expect(result.current.editorMode).toMatchObject({ kind: 'edit', filename: 'foo.md' });
     expect(onChanged).toHaveBeenCalledOnce();
   });
 });
@@ -123,7 +165,7 @@ describe('handleDeleted', () => {
     const onChanged = vi.fn();
     const { result } = renderHook(() => useEventEditor(CAMPAIGN, onChanged));
     act(() => result.current.openEdit('foo.md'));
-    act(() => result.current.handleDeleted('foo.md'));
+    act(() => result.current.handleDeleted());
     expect(result.current.editorMode).toBeNull();
     expect(onChanged).toHaveBeenCalledOnce();
   });

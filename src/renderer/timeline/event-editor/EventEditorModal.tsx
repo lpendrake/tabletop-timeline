@@ -96,10 +96,12 @@ export interface EventEditorModalProps {
   campaignPath: string;
   mode: EditorMode;
   onClose: () => void;
-  onSaved: (filename: string) => void;
-  onDeleted: (filename: string) => void;
-  /** Called after a background auto-save; editor stays open. */
-  onAutosaved?: (filename: string) => void;
+  onSaved: () => void;
+  onDeleted: () => void;
+  /** Called immediately after every successful save, with the filename the
+   *  event now has on disk. Fires before any banner/close timer, so the parent
+   *  is notified even if the modal unmounts straight away. */
+  onPersisted: (filename: string) => void;
   onOpenById?: (id: string) => void;
   onFilterByTag?: (tag: string) => void;
 }
@@ -110,7 +112,7 @@ export function EventEditorModal({
   onClose,
   onSaved,
   onDeleted,
-  onAutosaved,
+  onPersisted,
   onOpenById,
   onFilterByTag,
 }: EventEditorModalProps) {
@@ -252,24 +254,19 @@ export function EventEditorModal({
           filenameRef.current = result.event.filename;
         }
         lastModifiedRef.current = result.lastModified;
+        onPersisted(filenameRef.current!);
         setConflictPending(null);
         setSaveState('saved');
 
         if (opts.closeAfterSave) {
           // Close immediately (no banner delay).
-          onSaved(filenameRef.current!);
+          onSaved();
         } else if (opts.silent) {
-          // Auto-save: show brief banner then return to clean (editor stays open).
-          savedTimerRef.current = window.setTimeout(() => {
-            setSaveState('clean');
-            onAutosaved?.(filenameRef.current!);
-          }, SAVED_BANNER_MS);
+          // Auto-save: brief banner, then back to clean (editor stays open).
+          savedTimerRef.current = window.setTimeout(() => setSaveState('clean'), SAVED_BANNER_MS);
         } else {
           // Manual save (Ctrl+S): banner then close.
-          savedTimerRef.current = window.setTimeout(
-            () => onSaved(filenameRef.current!),
-            SAVED_BANNER_MS,
-          );
+          savedTimerRef.current = window.setTimeout(() => onSaved(), SAVED_BANNER_MS);
         }
       } catch (err) {
         if (err instanceof FilenameConflictError) {
@@ -291,7 +288,7 @@ export function EventEditorModal({
         setErrorMessage(err instanceof Error ? err.message : String(err));
       }
     },
-    [campaignPath, onSaved, onAutosaved],
+    [campaignPath, onSaved, onPersisted],
   );
 
   const scheduleAutoSave = useCallback(() => {
@@ -399,7 +396,7 @@ export function EventEditorModal({
       try {
         await timelinePort.deleteEvent(campaignPath, filenameRef.current ?? mode.filename, mtime!);
         setConflictPending(null);
-        onDeleted(filenameRef.current ?? mode.filename);
+        onDeleted();
       } catch (err) {
         if (err instanceof ConflictError) {
           setSaveState('dirty');

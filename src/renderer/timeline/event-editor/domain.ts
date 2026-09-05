@@ -25,9 +25,15 @@ export interface EditorBuffer {
   systemTags: string[];
 }
 
+/**
+ * `sessionId` identifies one editing session and stays stable across a
+ * rename — it (not the filename) is what the modal's React key is derived
+ * from, so a save that renames the underlying file does not remount the
+ * editor mid-edit.
+ */
 export type EditorMode =
-  | { kind: 'create'; initialDate?: string }
-  | { kind: 'edit'; filename: string; initialCursor?: number };
+  | { kind: 'create'; sessionId: number; initialDate?: string }
+  | { kind: 'edit'; sessionId: number; filename: string; initialCursor?: number };
 
 export type { ColorPreset } from '../../theme';
 
