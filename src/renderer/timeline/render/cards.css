@@ -185,6 +185,11 @@
   font-style: italic;
 }
 
+.exp-error {
+  color: var(--theme-danger);
+  font-style: italic;
+}
+
 /* ===== Resize handles ===== */
 
 .resize-handle {

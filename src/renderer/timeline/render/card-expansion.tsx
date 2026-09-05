@@ -1,6 +1,7 @@
 import { useRef, useCallback, type CSSProperties, type ReactElement } from 'react';
 import { MarkdownPreview } from '../../shared/markdown-editor';
 import type { PreviewSize } from '../interactions/usePreviewSize';
+import type { CardExpansionState } from '../interactions/useCardExpansion';
 
 const ABSOLUTE_SRC_RE = /^(?:https?:|data:|notes-asset:|file:|\/)/;
 
@@ -11,6 +12,7 @@ function resolveEventImageSrc(src: string): string {
 
 interface CardExpansionProps {
   body: string | null;
+  status: CardExpansionState['status'];
   expandsDown: boolean;
   size: PreviewSize;
   centerX: number;
@@ -23,6 +25,7 @@ interface CardExpansionProps {
 
 export function CardExpansion({
   body,
+  status,
   expandsDown,
   size,
   centerX,
@@ -123,6 +126,10 @@ export function CardExpansion({
               : undefined
           }
         />
+      ) : status === 'error' ? (
+        <div className="exp-body">
+          <span className="exp-error">Failed to load event.</span>
+        </div>
       ) : (
         <div className="exp-body">
           <span className="exp-loading">Loading…</span>
