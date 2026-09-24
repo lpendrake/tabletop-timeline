@@ -62,6 +62,24 @@ describe('createNote', () => {
     });
   });
 
+  it("reports the exists conflict even without Node's Buffer", async () => {
+    const original = globalThis.Buffer;
+    vi.stubGlobal('Buffer', undefined);
+    try {
+      createNoteFile.mockResolvedValueOnce({ ok: false, reason: 'exists' });
+      readNote.mockResolvedValueOnce('---\nid: xyz1\ntitle: Bob\n---\n# Bob\n\n');
+
+      const result = await createNote({ campaignPath, folder: 'Lore', title: 'Bob' });
+
+      expect(result).toEqual({
+        status: 'exists',
+        existing: { path: 'Lore/bob.md', id: 'xyz1', title: 'Bob' },
+      });
+    } finally {
+      vi.stubGlobal('Buffer', original);
+    }
+  });
+
   it('throws on a non-exists write error', async () => {
     createNoteFile.mockResolvedValueOnce({ ok: false, reason: 'error', message: 'disk full' });
 

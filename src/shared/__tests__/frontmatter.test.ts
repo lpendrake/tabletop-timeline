@@ -1,5 +1,11 @@
-import { describe, it, expect } from 'vitest';
-import { parseNote, stringifyNote, splitFrontmatter, joinFrontmatter } from '../frontmatter';
+import { describe, it, expect, vi } from 'vitest';
+import {
+  parseNote,
+  stringifyNote,
+  splitFrontmatter,
+  joinFrontmatter,
+  readFrontmatterFields,
+} from '../frontmatter';
 
 describe('parseNote', () => {
   it('returns existing id and title unchanged when both present', () => {
@@ -98,6 +104,65 @@ describe('stringifyNote', () => {
     const result = stringifyNote(body, fm);
     const { frontmatter } = parseNote(result, 'fallback');
     expect(frontmatter.tags).toEqual(['a', 'b']);
+  });
+});
+
+describe('readFrontmatterFields', () => {
+  it("readFrontmatterFields works without Node's Buffer", () => {
+    const original = globalThis.Buffer;
+    vi.stubGlobal('Buffer', undefined);
+    try {
+      const raw = '---\nid: abc1\ntitle: My Note\n---\n\n# My Note\n';
+      const { id, title } = readFrontmatterFields(raw);
+      expect(id).toBe('abc1');
+      expect(title).toBe('My Note');
+    } finally {
+      vi.stubGlobal('Buffer', original);
+    }
+  });
+
+  it('reads quoted and unquoted id/title', () => {
+    expect(readFrontmatterFields('---\nid: abc1\ntitle: Plain Title\n---\n')).toEqual({
+      id: 'abc1',
+      title: 'Plain Title',
+    });
+    expect(readFrontmatterFields('---\nid: "abc1"\ntitle: "Quoted \\"Title\\""\n---\n')).toEqual({
+      id: 'abc1',
+      title: 'Quoted "Title"',
+    });
+    expect(readFrontmatterFields("---\nid: 'abc1'\ntitle: 'Single Quoted'\n---\n")).toEqual({
+      id: 'abc1',
+      title: 'Single Quoted',
+    });
+    expect(readFrontmatterFields('---\nid: 1234\ntitle: Numeric Id Note\n---\n')).toEqual({
+      id: '1234',
+      title: 'Numeric Id Note',
+    });
+  });
+
+  it('falls back to name when title is missing', () => {
+    expect(readFrontmatterFields('---\nid: abc1\nname: Named Note\n---\n')).toEqual({
+      id: 'abc1',
+      title: 'Named Note',
+    });
+  });
+
+  it('returns nulls without frontmatter or with empty values', () => {
+    expect(readFrontmatterFields('# Just a heading\n\nSome text.')).toEqual({
+      id: null,
+      title: null,
+    });
+    expect(readFrontmatterFields('---\nid:\ntitle:\n---\n')).toEqual({ id: null, title: null });
+  });
+
+  it('handles CRLF files', () => {
+    const raw = '---\r\nid: abc1\r\ntitle: CRLF Note\r\n---\r\n\r\n# CRLF Note\r\n';
+    expect(readFrontmatterFields(raw)).toEqual({ id: 'abc1', title: 'CRLF Note' });
+  });
+
+  it('ignores nested keys', () => {
+    const raw = '---\nid: abc1\nmeta:\n  id: nested\n  title: nested title\n---\n';
+    expect(readFrontmatterFields(raw)).toEqual({ id: 'abc1', title: null });
   });
 });
 
