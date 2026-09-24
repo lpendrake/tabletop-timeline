@@ -368,7 +368,7 @@ function makeWikiLinkContextMenuHandler(config: WikiLinksConfig): Extension {
         });
       }
 
-      showContextMenu(items, event.clientX, event.clientY);
+      showContextMenu(items, event.clientX, event.clientY, { restoreFocus: () => view.focus() });
       return true;
     },
   });

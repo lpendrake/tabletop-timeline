@@ -13,4 +13,10 @@ export type { ImagePasteConfig } from './extensions/image-paste';
 export type { DropLinkConfig, DropInsert } from './extensions/drop-link';
 export type { ImageDecorationsOptions } from './extensions/image-decorations';
 export type { MarkdownLinkClickConfig } from './extensions/markdown-link-click';
+export { buildEditorMenuItems } from './extensions/editor-context-menu';
+export type {
+  EditorMenuContext,
+  EditorMenuExtraItems,
+  EditorContextMenuConfig,
+} from './extensions/editor-context-menu';
 export * from './commands';

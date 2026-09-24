@@ -13,3 +13,5 @@ export type {
 export { computeCaretPlacement } from './caret-position';
 export type { CaretPlacement, CaretSide } from './caret-position';
 export { isContextMenuFocused } from './is-context-menu-focused';
+export { filterMenu, pickAutoTarget } from './menu-search';
+export type { FilterMenuResult, FilteredNode, MenuTarget } from './menu-search';
