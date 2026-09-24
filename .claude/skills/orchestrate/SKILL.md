@@ -182,6 +182,8 @@ Read the key files the agent created/modified. Check for:
 - **Convention adherence** — file names kebab-case, no hardcoded
   colors, logic not inside components, etc.
 - **Quality** — is it clear, concise, well-structured?
+- **De-duplication** — repeated logic that should be a shared helper, hook, or component.
+- **Meaningful tests** — tests exercise behaviour and edge cases, not just mirror the implementation.
 
 ### Decide
 
@@ -410,6 +412,6 @@ If the user asks to stop, or something goes fundamentally wrong:
 ## See also
 
 - `CLAUDE.md` — planning workflow, git etiquette, commit message
-  format, oversight tiers, pre-commit hook rules.
+  format, pre-commit hook rules.
 - The relevant module's `AGENTS.md` — conventions to include in
   agent prompts (layer rules, file naming, patterns).

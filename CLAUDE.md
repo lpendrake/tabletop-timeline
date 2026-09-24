@@ -19,35 +19,16 @@ When you've been pointed at a GitHub issue (e.g. given a URL with a "title" pref
 
 ### 1. Fetch the issue first
 
-Before doing anything else, fetch both the **body** and the **labels** of the issue via the GitHub MCP tools. The body is your task description; the labels determine how much oversight is required.
+Before doing anything else, fetch the **body** of the issue via the GitHub MCP tools. The body is your task description.
 
 **Truncated issue bodies:** If the body seems to cut off mid-sentence, the issue likely contains angle-bracket placeholders (e.g. `<title>`) that GitHub's HTML pipeline strips. The owner will fix these by replacing `<>` with `[]`. If the body still seems incomplete, ask rather than guessing.
 
 **Images in issues:** `github.com/user-attachments` URLs require a two-step fetch. Call `WebFetch` on the URL — it will return a 302 redirect to a signed S3 URL. Call `WebFetch` again on that S3 URL; the image is downloaded and the path is reported in the result. Then use `Read` on that path to view the image. Do not give up after the first redirect — the image is always retrievable this way.
 
-### 2. Read the oversight mode from the labels
-
-| Label | allowed models | Plan stage                                                                       | Pre-PR review                                                 |
-| --- |--------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------|---------------------------------------------------------------|
-| `oversight:none` | Sonnet | Sonnet plans inline.                                                             | No opus review required.                                      |
-| `oversight:basic` | Sonnet | Sonnet plans inline.                                                             | Opus advisor reviews the diff before the PR is opened.        |
-| `oversight:extended` | Sonnet | Spawn an Opus `Plan` subagent first and post its plan as a comment on the issue. | Opus advisor reviews the diff before the PR is opened.        |
-| `oversight:orchestrator` | Opus | See the orchestrate skill                                                        | See the orchestrate skill                                     |
-| (no `oversight:*` label) | See chosen oversight mode | Stop and question the user as to which oversight mode to use.                    | Stop and question the user as to which oversight mode to use. |
+### 2. Sub-agent planning
 
 !Important! When asking a sub-agent to plan for you do not do research first, let it do its own research, else you pollute its views.
 Once it has a plan for you and has highlighted files, look into what it has guided you towards.
-
-### 3. Pre-PR opus advisor reviews for `basic` and `extended` oversight
-
-If in basic or extended oversight mode then before opening the PR, spawn an opus advisor on the diff. The advisor must verify, on top of any ticket-specific checks:
-
-- **Spec coverage** — whatever the ticket body specifies as the work to be done is actually implemented.
-- **De-duplication** — flag repeated logic that should be a shared helper, hook, or component.
-- **Abstraction & pattern adherence** — render / interaction / IO / state stay cleanly separated; the change follows the patterns documented in the nearest `AGENTS.md` / `CLAUDE.md`.
-- **Meaningful tests** — tests exercise behaviour and edge cases, not just mirror the implementation.
-
-Address the advisor's findings (or push back with a reason) before opening the PR.
 
 ## Git etiquette
 
@@ -83,11 +64,7 @@ Functions defined this way close over state and become untestable without mounti
 
 ## Theme system
 
-All colours come from the theme system at `src/renderer/theme/`. Never hardcode hex colour values — import from `ThemeProvider.get()` for TS/TSX or use `var(--theme-*)` CSS variables, which are set by the ThemeProvider before React mounts.
-
-- `dark-pathfinder.ts` — the default (and currently only) theme; single source of truth for every colour
-- `types.ts` — `Theme` interface organised by view: `chrome`, `timeline`, `notes`, `editor`, `bootstrap`
-- `provider.ts` — `ThemeProvider` singleton: `init()`, `get()`, `set(partial)` with Dark Pathfinder fallback
+Never hardcode colours. Every colour comes from the theme system — see `src/renderer/theme/AGENTS.md`. A new token needs a value in every core theme.
 
 # File Naming Convention
 
