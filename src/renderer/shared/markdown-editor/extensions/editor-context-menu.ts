@@ -4,8 +4,8 @@
  * on `.cm-note-link` spans and is registered ahead of this extension so it
  * gets first refusal on the `contextmenu` event).
  *
- * The same menu (Copy, Paste, Delete, a Formatting submenu, and any
- * host-supplied extra items) can be opened three ways:
+ * The same menu (any host-supplied extra items first, then a Formatting
+ * submenu, then Copy, Paste, Delete) can be opened three ways:
  *  - Right-click, at the pointer.
  *  - Typing `/` at a word boundary (start of line or after whitespace, and
  *    not inside code / a wiki-link query / a URL), anchored at the caret's
@@ -109,9 +109,9 @@ function makeMenuContext(view: EditorView, from: number, to: number): EditorMenu
 }
 
 /**
- * Builds the standard editor menu (Copy, Paste, Delete, separator,
- * Formatting) for the given range, plus a separator and any host-supplied
- * extra items when there are some.
+ * Builds the standard editor menu for the given range: any host-supplied
+ * extra items first (with a trailing separator, only when there are some),
+ * then the Formatting submenu, then a separator, then Copy, Paste, Delete.
  */
 export function buildEditorMenuItems(
   view: EditorView,
@@ -122,45 +122,15 @@ export function buildEditorMenuItems(
   const hasSelection = from !== to;
   const docText = view.state.doc.toString();
 
-  const items: ContextMenuItem[] = [
-    {
-      kind: 'action',
-      label: 'Copy',
-      onSelect: () => {
-        void copyToClipboard(resolveCopyTarget(docText, from, to));
-      },
-    },
-    {
-      kind: 'action',
-      label: 'Paste',
-      onSelect: () => {
-        readFromClipboard()
-          .then((clipboardText) => {
-            if (!clipboardText) return;
-            view.dispatch({
-              changes: { from, to, insert: clipboardText },
-              selection: { anchor: from + clipboardText.length },
-              userEvent: 'input.paste',
-            });
-            view.focus();
-          })
-          .catch((err: unknown) => console.error('readFromClipboard failed', err));
-      },
-    },
-    {
-      kind: 'action',
-      label: 'Delete',
-      disabled: !hasSelection,
-      onSelect: () => {
-        view.dispatch({
-          changes: { from, to, insert: '' },
-          selection: { anchor: from },
-          userEvent: 'delete',
-        });
-        view.focus();
-      },
-    },
-    { kind: 'separator' },
+  const items: ContextMenuItem[] = [];
+
+  const extra = extraItems?.(makeMenuContext(view, from, to)) ?? [];
+  if (extra.length > 0) {
+    items.push(...extra);
+    items.push({ kind: 'separator' });
+  }
+
+  items.push(
     {
       kind: 'submenu',
       label: 'Formatting',
@@ -226,13 +196,45 @@ export function buildEditorMenuItems(
         },
       ],
     },
-  ];
-
-  const extra = extraItems?.(makeMenuContext(view, from, to)) ?? [];
-  if (extra.length > 0) {
-    items.push({ kind: 'separator' });
-    items.push(...extra);
-  }
+    { kind: 'separator' },
+    {
+      kind: 'action',
+      label: 'Copy',
+      onSelect: () => {
+        void copyToClipboard(resolveCopyTarget(docText, from, to));
+      },
+    },
+    {
+      kind: 'action',
+      label: 'Paste',
+      onSelect: () => {
+        readFromClipboard()
+          .then((clipboardText) => {
+            if (!clipboardText) return;
+            view.dispatch({
+              changes: { from, to, insert: clipboardText },
+              selection: { anchor: from + clipboardText.length },
+              userEvent: 'input.paste',
+            });
+            view.focus();
+          })
+          .catch((err: unknown) => console.error('readFromClipboard failed', err));
+      },
+    },
+    {
+      kind: 'action',
+      label: 'Delete',
+      disabled: !hasSelection,
+      onSelect: () => {
+        view.dispatch({
+          changes: { from, to, insert: '' },
+          selection: { anchor: from },
+          userEvent: 'delete',
+        });
+        view.focus();
+      },
+    },
+  );
 
   return items;
 }

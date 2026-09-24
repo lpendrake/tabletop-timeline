@@ -22,6 +22,34 @@ describe('shouldOpenSlashMenu', () => {
     expect(shouldOpenSlashMenu(state, state.doc.length)).toBe(true);
   });
 
+  it('opens at the start of a later line', () => {
+    const state = makeState('first\n');
+    expect(shouldOpenSlashMenu(state, state.doc.length)).toBe(true);
+  });
+
+  it('opens at the start of an empty line between paragraphs', () => {
+    const state = makeState('first\n\nsecond');
+    const emptyLine = state.doc.line(2);
+    expect(shouldOpenSlashMenu(state, emptyLine.from)).toBe(true);
+  });
+
+  it('opens after a list marker and a blockquote marker', () => {
+    const listItem = makeState('- ');
+    expect(shouldOpenSlashMenu(listItem, listItem.doc.length)).toBe(true);
+
+    const blockquote = makeState('> ');
+    expect(shouldOpenSlashMenu(blockquote, blockquote.doc.length)).toBe(true);
+  });
+
+  it('opens on the line after a closed fenced code block, not inside one', () => {
+    const afterFence = makeState('```\ncode\n```\n');
+    expect(shouldOpenSlashMenu(afterFence, afterFence.doc.length)).toBe(true);
+
+    const insideFence = makeState('```\n\ncode\n```');
+    const emptyLineInFence = insideFence.doc.line(2);
+    expect(shouldOpenSlashMenu(insideFence, emptyLineInFence.from)).toBe(false);
+  });
+
   it('does not open in and/or or 1/2', () => {
     const andOr = makeState('and');
     expect(shouldOpenSlashMenu(andOr, andOr.doc.length)).toBe(false);

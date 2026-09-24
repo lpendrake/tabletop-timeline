@@ -93,6 +93,18 @@ describe('editorContextMenu', () => {
     expect(options.backspaceCloses).toBe(true);
   });
 
+  it('typing / at the start of a later line opens the menu', () => {
+    const view = makeView('first\n');
+    stubCoords(view);
+
+    const pos = view.state.doc.length;
+    const handled = typeSlash(view, pos);
+
+    expect(handled).toBe(true);
+    expect(view.state.doc.toString()).toBe('first\n');
+    expect(showContextMenuMock).toHaveBeenCalledTimes(1);
+  });
+
   it('Escape leaves a literal /', () => {
     const view = makeView('');
     stubCoords(view);
@@ -183,7 +195,8 @@ describe('editorContextMenu', () => {
       (i) => i.kind === 'action' && i.label === 'Custom action',
     ) as Extract<ContextMenuItem, { kind: 'action' }>;
     expect(rightClickCustom).toBeDefined();
-    expect(rightClickCall.items[rightClickCall.items.length - 2]).toEqual({ kind: 'separator' });
+    expect(rightClickCall.items[0]).toBe(rightClickCustom);
+    expect(rightClickCall.items[1]).toEqual({ kind: 'separator' });
 
     rightClickCustom.onSelect();
     expect(capturedText).toBe('hello');
@@ -228,6 +241,36 @@ describe('editorContextMenu', () => {
     options.restoreFocus();
 
     expect(focusSpy).toHaveBeenCalled();
+  });
+
+  it('host items come first, then Formatting, then Copy/Paste/Delete', () => {
+    const view = makeView('hello');
+    const items = buildEditorMenuItems(view, { from: 0, to: 0 });
+
+    // No host items: no leading separator, Formatting comes straight first.
+    expect(items[0]).toMatchObject({ kind: 'submenu', label: 'Formatting' });
+    expect(items.map((i) => ('label' in i ? i.label : i.kind))).toEqual([
+      'Formatting',
+      'separator',
+      'Copy',
+      'Paste',
+      'Delete',
+    ]);
+
+    const extraItems: EditorMenuExtraItems = () => [
+      { kind: 'action', label: 'New note…', onSelect: () => {} },
+    ];
+    const itemsWithHost = buildEditorMenuItems(view, { from: 0, to: 0 }, extraItems);
+
+    expect(itemsWithHost.map((i) => ('label' in i ? i.label : i.kind))).toEqual([
+      'New note…',
+      'separator',
+      'Formatting',
+      'separator',
+      'Copy',
+      'Paste',
+      'Delete',
+    ]);
   });
 
   it('formatting items are searchable by keyword', () => {
