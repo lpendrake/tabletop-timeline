@@ -1,14 +1,26 @@
 import { useEffect, useRef, useState } from 'react';
 import { SearchablePicker } from '../../shared/searchable-picker';
-import { canSubmit, folderOptions } from '../domain/new-note-form';
+import { canSubmit, conflictWarningText, folderOptions } from '../domain/new-note-form';
+import type { CreatedNote, CreateNoteResult, ExistingNoteConflict } from '../create-note';
 import '../styles/new-note-dialog.css';
 
 export interface NewNoteDialogProps {
   initialTitle: string;
   folders: string[];
   initialFolder: string;
-  onSubmit(result: { title: string; folder: string }): void;
+  create: (input: { title: string; folder: string }) => Promise<CreateNoteResult>;
+  onPeekOpen?: (id: string, el: HTMLElement) => void;
+  onPeekClose?: (relatedTarget: Element | null) => void;
+  onSubmit(note: CreatedNote): void;
   onCancel(): void;
+}
+
+/** The attempt that produced the currently-shown conflict, so a resubmit of
+ * the exact same title/folder (e.g. a stray Enter) doesn't re-run `create`. */
+interface ConflictState {
+  existing: ExistingNoteConflict;
+  title: string;
+  folder: string;
 }
 
 function folderLabel(folder: string, options: ReturnType<typeof folderOptions>): string {
@@ -16,20 +28,28 @@ function folderLabel(folder: string, options: ReturnType<typeof folderOptions>):
 }
 
 /**
- * Imperative "New Note" prompt: asks for a Title and a Folder and hands the
- * result back via `onSubmit`. Does not create the file itself — the caller
- * does that with `createNote`. Mounted via `showNewNoteDialog`.
+ * Imperative "New Note" prompt: asks for a Title and a Folder, then creates
+ * the note itself via `create`. Stays open and shows an inline warning when
+ * the file already exists (with a hoverable link to peek at it), or an
+ * inline error on a thrown failure. Mounted via `showNewNoteDialog`, which
+ * supplies the real `onPeekOpen`/`onPeekClose` — this component never
+ * imports `../peek/stack` or `notesData` itself.
  */
 export function NewNoteDialog({
   initialTitle,
   folders,
   initialFolder,
+  create,
+  onPeekOpen,
+  onPeekClose,
   onSubmit,
   onCancel,
 }: NewNoteDialogProps) {
   const [title, setTitle] = useState(initialTitle);
   const [chosenFolder, setChosenFolder] = useState(initialFolder);
   const [showError, setShowError] = useState(false);
+  const [conflict, setConflict] = useState<ConflictState | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   // Set by a capture-phase keydown on the wrapper below, ahead of the
@@ -58,12 +78,40 @@ export function NewNoteDialog({
     return () => window.removeEventListener('keydown', onKey, { capture: true });
   }, [onCancel]);
 
-  function trySubmit(folder: string) {
-    if (canSubmit(title)) {
-      onSubmit({ title: title.trim(), folder });
-    } else {
+  function clearWarning() {
+    if (conflict) setConflict(null);
+    if (errorMessage) setErrorMessage(null);
+  }
+
+  function handleBack() {
+    setConflict(null);
+    setErrorMessage(null);
+    titleInputRef.current?.focus();
+  }
+
+  async function trySubmit(folder: string) {
+    const trimmed = title.trim();
+    if (!canSubmit(title)) {
       setShowError(true);
       titleInputRef.current?.focus();
+      return;
+    }
+    // The warning is already showing for this exact title/folder — a stray
+    // Enter shouldn't blindly re-run create() and re-show the same warning.
+    if (conflict && conflict.title === trimmed && conflict.folder === folder) {
+      return;
+    }
+    setErrorMessage(null);
+    try {
+      const result = await create({ title: trimmed, folder });
+      if (result.status === 'created') {
+        onSubmit(result.note);
+      } else {
+        setConflict({ existing: result.existing, title: trimmed, folder });
+      }
+    } catch (err) {
+      setConflict(null);
+      setErrorMessage(err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -91,6 +139,7 @@ export function NewNoteDialog({
             onChange={(e) => {
               setTitle(e.target.value);
               if (showError) setShowError(false);
+              clearWarning();
             }}
             onFocus={(e) => {
               if (initialTitle) e.currentTarget.select();
@@ -123,6 +172,7 @@ export function NewNoteDialog({
               ariaLabel="Folder"
               onPick={(option) => {
                 setChosenFolder(option.id);
+                clearWarning();
                 const viaEnter = pickedViaEnterRef.current;
                 pickedViaEnterRef.current = false;
                 if (viaEnter) trySubmit(option.id);
@@ -130,6 +180,30 @@ export function NewNoteDialog({
               onCancel={onCancel}
             />
           </div>
+
+          {conflict && (
+            <div className="new-note-conflict">
+              <div className="new-note-conflict-text">
+                {conflictWarningText(conflict.title, folderLabel(conflict.folder, options))}
+              </div>
+              {conflict.existing.id ? (
+                <span
+                  className="new-note-conflict-link"
+                  onMouseEnter={(e) => onPeekOpen?.(conflict.existing.id!, e.currentTarget)}
+                  onMouseLeave={(e) => onPeekClose?.(e.relatedTarget as Element | null)}
+                >
+                  {conflict.existing.title}
+                </span>
+              ) : (
+                <span className="new-note-conflict-path">{conflict.existing.path}</span>
+              )}
+              <button type="button" className="new-note-btn new-note-back-btn" onClick={handleBack}>
+                Back
+              </button>
+            </div>
+          )}
+
+          {errorMessage && <div className="new-note-error">{errorMessage}</div>}
 
           <div className="new-note-actions">
             <button type="button" className="new-note-btn" onClick={onCancel}>

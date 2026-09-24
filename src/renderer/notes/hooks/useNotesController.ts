@@ -1,6 +1,5 @@
 import { useState, useReducer, useEffect, useCallback, useRef } from 'react';
 import { notesData } from '../data';
-import { createNote } from '../create-note';
 import { slugify } from '../domain/slugify';
 import { parseNotePath } from '../domain/open-note-by-path';
 import { suggestLinks as suggestLinksDomain } from '../../shared/suggest-links';
@@ -91,9 +90,6 @@ export function useNotesController({
 
   // ---- UI ----
   const [renderMode, setRenderMode] = useState<'live' | 'source'>('live');
-  const [quickAddOpen, setQuickAddOpen] = useState(false);
-  const [quickAddSeed, setQuickAddSeed] = useState('');
-  const [quickAddFolder, setQuickAddFolder] = useState<string | undefined>(undefined);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
 
@@ -248,13 +244,6 @@ export function useNotesController({
         if (at) setSavingState((prev) => ({ ...prev, [tabKey(at)]: 'dirty' }));
         return;
       }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setQuickAddSeed('');
-        setQuickAddFolder(undefined);
-        setQuickAddOpen(true);
-        return;
-      }
     }
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -350,61 +339,6 @@ export function useNotesController({
   function doCloseTab(tab: OpenTab) {
     dispatch({ type: 'close', folder: tab.folder, path: tab.path });
   }
-
-  const handleQuickAddCreate = useCallback(
-    async ({ folder, title }: { folder: string; title: string }) => {
-      const slug = slugify(title);
-      if (!slug) return;
-      setQuickAddOpen(false);
-      try {
-        // Write frontmatter from the start so the entity-index watcher finds needsWrite:false
-        // and does not rewrite the file, which would create a race with our autosave.
-        const {
-          id,
-          filename,
-          frontmatter,
-          body,
-          title: createdTitle,
-        } = await createNote({
-          campaignPath,
-          folder,
-          title,
-        });
-
-        const createdNote = { id, folder, filename, title: createdTitle };
-        // `folders` and `folderFiles` are independent React state, so the
-        // shared helper is applied to each via its own functional updater;
-        // it only ever reads the slice it's given and only ever changes the
-        // matching output field, so this is safe to split.
-        setFolderFiles((prevFolderFiles) => {
-          const next = addCreatedNoteToFolderFiles(
-            { folders: [], folderFiles: prevFolderFiles },
-            createdNote,
-          );
-          return next ? next.folderFiles : prevFolderFiles;
-        });
-        setFolders((prevFolders) => {
-          const next = addCreatedNoteToFolderFiles(
-            { folders: prevFolders, folderFiles: {} },
-            createdNote,
-          );
-          return next ? next.folders : prevFolders;
-        });
-        setOpenFolderPaths(
-          (prev) => new Set([...prev, ...folderPathsToOpenForCreatedNote(folder)]),
-        );
-        setOpenFiles((prev) => ({
-          ...prev,
-          [`${folder}/${filename}`]: { content: body, frontmatter, dirty: false, loading: false },
-        }));
-        dispatch({ type: 'open', folder, path: filename });
-        pushToast(`Created ${folder}/${filename}`);
-      } catch (err) {
-        pushToast(`Failed to create note: ${String(err)}`, true);
-      }
-    },
-    [campaignPath, pushToast],
-  );
 
   /**
    * Adds a note created from the editor's "New note…" menu action to the
@@ -662,9 +596,6 @@ export function useNotesController({
     dragTarget,
     // UI state
     renderMode,
-    quickAddOpen,
-    quickAddSeed,
-    quickAddFolder,
     toasts,
     confirm,
     // Computed
@@ -683,9 +614,6 @@ export function useNotesController({
     setDragTarget,
     setOpenFolderPaths,
     setConfirm,
-    setQuickAddSeed,
-    setQuickAddFolder,
-    setQuickAddOpen,
     setSavingState,
     setSavedAt,
     // Actions
@@ -709,7 +637,6 @@ export function useNotesController({
     handleOpenLabelEditor,
     openMarkdownLink,
     suggestLinks,
-    handleQuickAddCreate,
     handleNoteCreatedFromEditor,
     pushToast,
     dismissToast,

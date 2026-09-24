@@ -77,19 +77,19 @@ export interface MakeNewNoteMenuConfigOptions {
   campaignPath: string;
   getExistingIds?: () => ReadonlySet<string> | undefined;
   onCreated?: (note: CreatedNote) => void;
-  onError?: (err: unknown) => void;
 }
 
 /**
  * Builds the `contextMenu.extraItems` config that adds a "New note…" item
  * to the editor's own menu (right-click, `/`, Shift+F10). Selecting it runs
- * `runNewNoteFromEditor`, which shows the New Note dialog, writes the file,
- * and inserts `[[id]]` in place of the acted-on range.
+ * `runNewNoteFromEditor`, which shows the New Note dialog (itself handling
+ * conflicts and errors inline), and inserts `[[id]]` in place of the
+ * acted-on range once a note comes back.
  */
 export function makeNewNoteMenuConfig(opts: MakeNewNoteMenuConfigOptions): {
   extraItems: EditorMenuExtraItems;
 } {
-  const { campaignPath, getExistingIds, onCreated, onError } = opts;
+  const { campaignPath, getExistingIds, onCreated } = opts;
   return {
     extraItems: (ctx) => [
       {
@@ -101,10 +101,6 @@ export function makeNewNoteMenuConfig(opts: MakeNewNoteMenuConfigOptions): {
             campaignPath,
             existingIds: getExistingIds?.(),
             onCreated,
-            onError,
-          }).catch(() => {
-            // runNewNoteFromEditor already focuses the view and reports via
-            // onError on a failed create; nothing further to do here.
           });
         },
       },

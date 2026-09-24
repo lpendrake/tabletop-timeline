@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act } from 'react';
 import { fireEvent } from '@testing-library/react';
 import { showNewNoteDialog } from '../show-new-note-dialog';
@@ -18,14 +18,25 @@ async function flushMicrotasks() {
   });
 }
 
+const CREATED_NOTE = {
+  id: 'abcd',
+  folder: 'npcs',
+  filename: 'captain-varr.md',
+  title: 'Captain Varr',
+  frontmatter: 'id: abcd\ntitle: Captain Varr',
+  body: '# Captain Varr\n\n',
+};
+
 describe('showNewNoteDialog', () => {
-  it('showNewNoteDialog resolves with the result and unmounts', async () => {
+  it('showNewNoteDialog resolves with the created note and unmounts', async () => {
+    const create = vi.fn().mockResolvedValue({ status: 'created', note: CREATED_NOTE });
     let promise: ReturnType<typeof showNewNoteDialog>;
     act(() => {
       promise = showNewNoteDialog({
         initialTitle: 'Captain Varr',
         folders: ['npcs'],
         initialFolder: 'npcs',
+        create,
       });
     });
 
@@ -39,14 +50,16 @@ describe('showNewNoteDialog', () => {
     await flushMicrotasks();
 
     const result = await promise!;
-    expect(result).toEqual({ title: 'Captain Varr', folder: 'npcs' });
+    expect(create).toHaveBeenCalledWith({ title: 'Captain Varr', folder: 'npcs' });
+    expect(result).toEqual(CREATED_NOTE);
     expect(document.body.querySelector('.new-note-overlay')).toBeNull();
   });
 
   it('resolves null on cancel', async () => {
+    const create = vi.fn();
     let promise: ReturnType<typeof showNewNoteDialog>;
     act(() => {
-      promise = showNewNoteDialog({ folders: [], initialFolder: '' });
+      promise = showNewNoteDialog({ folders: [], initialFolder: '', create });
     });
 
     const overlay = document.body.querySelector('.new-note-overlay') as HTMLElement;
@@ -61,6 +74,7 @@ describe('showNewNoteDialog', () => {
 
     const result = await promise!;
     expect(result).toBeNull();
+    expect(create).not.toHaveBeenCalled();
     expect(document.body.querySelector('.new-note-overlay')).toBeNull();
   });
 });

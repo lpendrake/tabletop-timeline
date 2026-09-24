@@ -1,13 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { candidateFilename, pickUnusedId } from '../unique-filename';
-
-describe('candidateFilename', () => {
-  it('numbers from -2', () => {
-    expect(candidateFilename('slug', 0)).toBe('slug.md');
-    expect(candidateFilename('slug', 1)).toBe('slug-2.md');
-    expect(candidateFilename('slug', 2)).toBe('slug-3.md');
-  });
-});
+import { pickUnusedId } from '../unique-id';
 
 describe('pickUnusedId', () => {
   it('regenerates on clash with existing ids', () => {

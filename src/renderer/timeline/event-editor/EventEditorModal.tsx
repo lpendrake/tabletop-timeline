@@ -168,10 +168,6 @@ export function EventEditorModal({
             applyEntityDelta(prev, { op: 'add', entry: entityFromCreatedNote(note) }),
           );
         },
-        onError: (err) => {
-          setErrorMessage(err instanceof Error ? err.message : String(err));
-          setSaveState('error');
-        },
       }),
     [campaignPath],
   );

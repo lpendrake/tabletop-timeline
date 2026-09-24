@@ -13,7 +13,6 @@ import { buildEntityLabelMap } from '../../shared/entity-labels';
 import { revealInExplorer } from '../shared/reveal-in-explorer';
 import { buildEntityLink, buildAssetLink } from '../shared/entity-link';
 import { copyToClipboard } from '../shared/clipboard';
-import { QuickAdd } from './components/quick-add.tsx';
 import { NoteContextMenu } from './components/note-context-menu.tsx';
 import { LabelOverrideEditor } from '../shared/components/label-override-editor';
 import { EditorTabs } from './components/editor-tabs.tsx';
@@ -27,7 +26,6 @@ import './styles/sidebar.css';
 import './styles/tabs.css';
 import './styles/editor-surface.css';
 import './styles/markdown.css';
-import './styles/quick-add.css';
 import './styles/toast.css';
 import './styles/confirm.css';
 import './styles/context-menu.css';
@@ -82,10 +80,9 @@ export function NotesApp({
         campaignPath,
         getExistingIds: () => knownIdsRef.current,
         onCreated: ctrl.handleNoteCreatedFromEditor,
-        onError: (err) => ctrl.pushToast(`Failed to create note: ${String(err)}`, true),
       }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [campaignPath, ctrl.handleNoteCreatedFromEditor, ctrl.pushToast],
+
+    [campaignPath, ctrl.handleNoteCreatedFromEditor],
   );
 
   // Open a note from the search overlay, then scroll to the match position.
@@ -266,18 +263,6 @@ export function NotesApp({
           }
         />
       </FooterPortal>
-
-      <QuickAdd
-        open={ctrl.quickAddOpen}
-        folders={ctrl.folders}
-        initialText={ctrl.quickAddSeed}
-        initialFolder={ctrl.quickAddFolder}
-        onClose={() => {
-          ctrl.setQuickAddOpen(false);
-          ctrl.setQuickAddFolder(undefined);
-        }}
-        onCreate={ctrl.handleQuickAddCreate}
-      />
 
       <div className="notes-toasts">
         {ctrl.toasts.map((t) => (

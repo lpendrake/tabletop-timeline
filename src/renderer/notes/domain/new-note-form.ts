@@ -33,3 +33,13 @@ export function initialFolder(folders: readonly string[], last: string | null): 
 export function canSubmit(title: string): boolean {
   return slugify(title.trim()) !== '';
 }
+
+/**
+ * Formats the "already exists" warning shown when the attempted title
+ * collides with an existing file. `folderLabel` is the already-resolved
+ * display label for the folder the note was being created in (e.g. from
+ * `folderOptions`), not a raw folder id.
+ */
+export function conflictWarningText(attemptedTitle: string, folderLabel: string): string {
+  return `A note called "${attemptedTitle}" already exists in ${folderLabel}:`;
+}

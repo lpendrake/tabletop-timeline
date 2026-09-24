@@ -9,7 +9,6 @@ export interface RunNewNoteFromEditorOptions {
   campaignPath: string;
   existingIds?: ReadonlySet<string>;
   onCreated?: (note: CreatedNote) => void;
-  onError?: (err: unknown) => void;
 }
 
 /** A single-line title seed from the selection — a multi-line selection never becomes the title. */
@@ -20,46 +19,34 @@ function titleSeedFromSelection(selectedText: string): string {
 
 /**
  * Orchestrates the "New note…" editor menu action: shows the New Note
- * dialog, creates the note file in the chosen folder, and inserts a
- * `[[id]]` link in place of the range the menu was opened on. Never switches
- * views or opens a tab — the caller decides how the note appears elsewhere
- * (e.g. adding it to a sidebar) via `onCreated`.
+ * dialog, which creates the note file in the chosen folder itself (staying
+ * open to show a conflict warning or an error), and inserts a `[[id]]` link
+ * in place of the range the menu was opened on once a note comes back.
+ * Never switches views or opens a tab — the caller decides how the note
+ * appears elsewhere (e.g. adding it to a sidebar) via `onCreated`.
  */
 export async function runNewNoteFromEditor(
   ctx: EditorMenuContext,
   opts: RunNewNoteFromEditorOptions,
 ): Promise<CreatedNote | null> {
-  const { campaignPath, existingIds, onCreated, onError } = opts;
+  const { campaignPath, existingIds, onCreated } = opts;
 
   const folders = await listNoteFolders(campaignPath);
   const initial = initialFolder(folders, loadLastNoteFolder(campaignPath));
 
-  const result = await showNewNoteDialog({
+  const note = await showNewNoteDialog({
     initialTitle: titleSeedFromSelection(ctx.selectedText),
     folders,
     initialFolder: initial,
+    create: (input) => createNote({ ...input, campaignPath, existingIds }),
   });
 
-  if (!result) {
+  if (!note) {
     ctx.view.focus();
     return null;
   }
 
-  let note: CreatedNote;
-  try {
-    note = await createNote({
-      campaignPath,
-      folder: result.folder,
-      title: result.title,
-      existingIds,
-    });
-  } catch (err) {
-    ctx.view.focus();
-    onError?.(err);
-    throw err;
-  }
-
-  saveLastNoteFolder(campaignPath, result.folder);
+  saveLastNoteFolder(campaignPath, note.folder);
   ctx.replaceRange(`[[${note.id}]]`);
   onCreated?.(note);
   return note;

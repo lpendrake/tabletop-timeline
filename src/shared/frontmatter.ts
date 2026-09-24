@@ -64,6 +64,19 @@ export function joinFrontmatter(frontmatter: string, body: string): string {
   return `---\n${frontmatter}\n---\n${body}`;
 }
 
+/**
+ * Reads the id/title frontmatter fields from a raw file's content without
+ * generating fallbacks — unlike `parseNote`, a missing id comes back as
+ * `null` rather than a freshly generated one. Used when reporting on an
+ * *existing* file rather than normalizing one that will be saved.
+ */
+export function readFrontmatterFields(raw: string): { id: string | null; title: string | null } {
+  const { data } = matter(raw);
+  const id = data.id ? String(data.id) : null;
+  const title = (data.title ?? data.name) ? String(data.title ?? data.name) : null;
+  return { id, title };
+}
+
 export function extractH1(body: string): string | null {
   const m = /^#\s+(.+)$/m.exec(body);
   return m ? m[1].trim() : null;

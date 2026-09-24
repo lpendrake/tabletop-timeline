@@ -26,7 +26,6 @@ notes/
     breadcrumb-nav.tsx
     meta-panel.tsx
     note-context-menu.tsx
-    quick-add.tsx
   __tests__/                  # cross-cutting tests
   styles/
 ```
@@ -45,7 +44,7 @@ notes/
 ## useNotesController ceiling
 
 The orchestrator is ~750 lines. The remaining length is file-ops handlers (`handleRename*`,
-`handleDelete*`, `handleMove`, `commitNew*`, `handleQuickAddCreate`). Each drives 5–10 setState
+`handleDelete*`, `handleMove`, `commitNew*`). Each drives 5–10 setState
 calls in a fixed sequence; the interesting part is the state computation, not the sequencing.
 
 **The right pattern when a handler grows or needs a test:** extract the computation into a pure

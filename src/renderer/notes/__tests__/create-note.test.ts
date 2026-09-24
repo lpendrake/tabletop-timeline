@@ -1,78 +1,75 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../data', () => ({
-  notesData: { createNoteFile: vi.fn(), saveNote: vi.fn() },
+  notesData: { createNoteFile: vi.fn(), saveNote: vi.fn(), readNote: vi.fn() },
 }));
 
 import { notesData } from '../data';
 import { createNote } from '../create-note';
-import { MAX_CREATE_ATTEMPTS } from '../domain/unique-filename';
 
 const createNoteFile = notesData.createNoteFile as ReturnType<typeof vi.fn>;
 const saveNote = notesData.saveNote as ReturnType<typeof vi.fn>;
+const readNote = notesData.readNote as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   createNoteFile.mockReset();
   saveNote.mockReset();
+  readNote.mockReset();
 });
 
 const campaignPath = '/campaign';
 
 describe('createNote', () => {
-  it('writes id + title frontmatter and an H1 body', async () => {
+  it('returns created on success', async () => {
     createNoteFile.mockResolvedValue({ ok: true });
 
     const result = await createNote({ campaignPath, folder: 'Lore', title: 'Bob the Brave' });
 
-    expect(result.filename).toBe('bob-the-brave.md');
-    expect(result.frontmatter).toBe(`id: ${result.id}\ntitle: Bob the Brave`);
-    expect(result.body).toBe('# Bob the Brave\n\n');
+    expect(result.status).toBe('created');
+    if (result.status !== 'created') throw new Error('expected created');
+    expect(result.note.filename).toBe('bob-the-brave.md');
+    expect(result.note.frontmatter).toBe(`id: ${result.note.id}\ntitle: Bob the Brave`);
+    expect(result.note.body).toBe('# Bob the Brave\n\n');
     expect(createNoteFile).toHaveBeenCalledWith(
       '/campaign/notes/Lore/bob-the-brave.md',
-      `---\nid: ${result.id}\ntitle: Bob the Brave\n---\n# Bob the Brave\n\n`,
+      `---\nid: ${result.note.id}\ntitle: Bob the Brave\n---\n# Bob the Brave\n\n`,
     );
   });
 
-  it('picks slug-2.md when slug.md exists and never calls saveNote', async () => {
-    createNoteFile
-      .mockResolvedValueOnce({ ok: false, reason: 'exists' })
-      .mockResolvedValueOnce({ ok: true });
+  it('reports an existing file and never writes a numbered one', async () => {
+    createNoteFile.mockResolvedValueOnce({ ok: false, reason: 'exists' });
+    readNote.mockResolvedValueOnce('---\nid: xyz1\ntitle: Bob\n---\n# Bob\n\n');
 
     const result = await createNote({ campaignPath, folder: 'Lore', title: 'Bob' });
 
-    expect(result.filename).toBe('bob-2.md');
-    expect(createNoteFile).toHaveBeenCalledTimes(2);
+    expect(createNoteFile).toHaveBeenCalledTimes(1);
     expect(saveNote).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      status: 'exists',
+      existing: { path: 'Lore/bob.md', id: 'xyz1', title: 'Bob' },
+    });
   });
 
-  it('creates two distinct files when called twice with the same title', async () => {
-    // First call: slug.md is free.
-    createNoteFile.mockResolvedValueOnce({ ok: true });
-    const first = await createNote({ campaignPath, folder: 'Lore', title: 'Bob' });
-    expect(first.filename).toBe('bob.md');
+  it('existing note without an id still reports its path/title', async () => {
+    createNoteFile.mockResolvedValueOnce({ ok: false, reason: 'exists' });
+    readNote.mockResolvedValueOnce('---\ntitle: Bob\n---\n# Bob\n\n');
 
-    // Second call: slug.md now exists, so it falls through to slug-2.md.
-    createNoteFile
-      .mockResolvedValueOnce({ ok: false, reason: 'exists' })
-      .mockResolvedValueOnce({ ok: true });
-    const second = await createNote({ campaignPath, folder: 'Lore', title: 'Bob' });
-    expect(second.filename).toBe('bob-2.md');
+    const result = await createNote({ campaignPath, folder: 'Lore', title: 'Bob' });
+
+    expect(result).toEqual({
+      status: 'exists',
+      existing: { path: 'Lore/bob.md', id: null, title: 'Bob' },
+    });
   });
 
-  it('throws on a non-exists write error without retrying', async () => {
+  it('throws on a non-exists write error', async () => {
     createNoteFile.mockResolvedValueOnce({ ok: false, reason: 'error', message: 'disk full' });
 
     await expect(createNote({ campaignPath, folder: 'Lore', title: 'Bob' })).rejects.toThrow(
       'disk full',
     );
     expect(createNoteFile).toHaveBeenCalledTimes(1);
-  });
-
-  it('throws after MAX_CREATE_ATTEMPTS', async () => {
-    createNoteFile.mockResolvedValue({ ok: false, reason: 'exists' });
-
-    await expect(createNote({ campaignPath, folder: 'Lore', title: 'Bob' })).rejects.toThrow();
-    expect(createNoteFile).toHaveBeenCalledTimes(MAX_CREATE_ATTEMPTS);
+    expect(readNote).not.toHaveBeenCalled();
   });
 
   it('writes to the notes root when folder is empty', async () => {

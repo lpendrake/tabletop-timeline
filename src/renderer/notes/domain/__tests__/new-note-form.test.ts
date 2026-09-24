@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { canSubmit, folderOptions, initialFolder, NOTES_ROOT_FOLDER } from '../new-note-form';
+import {
+  canSubmit,
+  conflictWarningText,
+  folderOptions,
+  initialFolder,
+  NOTES_ROOT_FOLDER,
+} from '../new-note-form';
 
 describe('initialFolder', () => {
   it('initialFolder uses the last folder when it still exists', () => {
@@ -34,5 +40,11 @@ describe('folderOptions', () => {
         label: 'factions/the-house-of-storms',
       },
     ]);
+  });
+});
+
+describe('conflictWarningText', () => {
+  it('formats the attempted title and folder label', () => {
+    expect(conflictWarningText('Bob', 'npcs')).toBe('A note called "Bob" already exists in npcs:');
   });
 });

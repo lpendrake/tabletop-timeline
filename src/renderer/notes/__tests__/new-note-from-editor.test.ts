@@ -43,8 +43,7 @@ beforeEach(() => {
 
 describe('runNewNoteFromEditor', () => {
   it('creates the note in the chosen folder and replaces the selection with the link', async () => {
-    vi.mocked(showNewNoteDialog).mockResolvedValue({ title: 'Captain Varr', folder: 'npcs' });
-    vi.mocked(createNote).mockResolvedValue({
+    vi.mocked(showNewNoteDialog).mockResolvedValue({
       id: 'abcd',
       folder: 'npcs',
       filename: 'captain-varr.md',
@@ -60,11 +59,27 @@ describe('runNewNoteFromEditor', () => {
       initialTitle: 'Captain Varr',
       folders: ['npcs', 'factions'],
     });
-    expect(createNote).toHaveBeenCalledWith(
-      expect.objectContaining({ campaignPath: CAMPAIGN, folder: 'npcs', title: 'Captain Varr' }),
-    );
     expect(ctx.replaceRange).toHaveBeenCalledWith('[[abcd]]');
     expect(result?.id).toBe('abcd');
+  });
+
+  it('wires a `create` callback through to createNote with the campaign path and existing ids', async () => {
+    vi.mocked(showNewNoteDialog).mockResolvedValue(null);
+    const existingIds = new Set(['a']);
+
+    const ctx = makeCtx('');
+    await runNewNoteFromEditor(ctx, { campaignPath: CAMPAIGN, existingIds });
+
+    const { create } = vi.mocked(showNewNoteDialog).mock.calls[0][0];
+    vi.mocked(createNote).mockResolvedValue({ status: 'created', note: {} as never });
+    await create({ title: 'Bob', folder: 'npcs' });
+
+    expect(createNote).toHaveBeenCalledWith({
+      title: 'Bob',
+      folder: 'npcs',
+      campaignPath: CAMPAIGN,
+      existingIds,
+    });
   });
 
   it('defaults the folder to the last folder used, else the notes root', async () => {
@@ -84,8 +99,7 @@ describe('runNewNoteFromEditor', () => {
   });
 
   it('saves the chosen folder as the last folder', async () => {
-    vi.mocked(showNewNoteDialog).mockResolvedValue({ title: 'Faction X', folder: 'factions' });
-    vi.mocked(createNote).mockResolvedValue({
+    vi.mocked(showNewNoteDialog).mockResolvedValue({
       id: 'fx01',
       folder: 'factions',
       filename: 'faction-x.md',
@@ -109,23 +123,19 @@ describe('runNewNoteFromEditor', () => {
     expect(result).toBeNull();
     expect(ctx.replaceRange).not.toHaveBeenCalled();
     expect(ctx.view.focus).toHaveBeenCalled();
-    expect(createNote).not.toHaveBeenCalled();
   });
 
-  it('a failed create leaves the text untouched and reports the error', async () => {
-    vi.mocked(showNewNoteDialog).mockResolvedValue({ title: 'Bad', folder: '' });
-    const err = new Error('disk full');
-    vi.mocked(createNote).mockRejectedValue(err);
+  it('inserts the link only after a successful create — a conflict that is then cancelled leaves the text untouched', async () => {
+    // The dialog handles the "exists" conflict internally (showing its own
+    // warning); from here it only ever resolves with a created note or null.
+    vi.mocked(showNewNoteDialog).mockResolvedValue(null);
 
     const ctx = makeCtx('Bad');
-    const onError = vi.fn();
-    await expect(runNewNoteFromEditor(ctx, { campaignPath: CAMPAIGN, onError })).rejects.toThrow(
-      'disk full',
-    );
+    const result = await runNewNoteFromEditor(ctx, { campaignPath: CAMPAIGN });
 
+    expect(result).toBeNull();
     expect(ctx.replaceRange).not.toHaveBeenCalled();
     expect(ctx.view.focus).toHaveBeenCalled();
-    expect(onError).toHaveBeenCalledWith(err);
   });
 
   it('multi-line selection does not become the title', async () => {

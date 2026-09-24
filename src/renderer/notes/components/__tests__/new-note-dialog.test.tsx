@@ -6,6 +6,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
 import { fireEvent } from '@testing-library/react';
 import { NewNoteDialog } from '../new-note-dialog';
+import type { CreateNoteResult } from '../../create-note';
 
 let container: HTMLDivElement;
 let root: Root;
@@ -28,21 +29,38 @@ const FOLDERS = [
   'factions/the-house-of-storms/spies',
 ];
 
+function createdResult(title: string, folder: string): CreateNoteResult {
+  return {
+    status: 'created',
+    note: { id: 'new1', folder, filename: `${title}.md`, title, frontmatter: '', body: '' },
+  };
+}
+
 function render(props: Partial<React.ComponentProps<typeof NewNoteDialog>> = {}) {
   const onSubmit = vi.fn();
   const onCancel = vi.fn();
+  const onPeekOpen = vi.fn();
+  const onPeekClose = vi.fn();
+  const create =
+    props.create ??
+    vi.fn((input: { title: string; folder: string }) =>
+      Promise.resolve(createdResult(input.title, input.folder)),
+    );
   act(() => {
     root.render(
       <NewNoteDialog
         initialTitle={props.initialTitle ?? ''}
         folders={props.folders ?? FOLDERS}
         initialFolder={props.initialFolder ?? ''}
+        create={create}
+        onPeekOpen={props.onPeekOpen ?? onPeekOpen}
+        onPeekClose={props.onPeekClose ?? onPeekClose}
         onSubmit={props.onSubmit ?? onSubmit}
         onCancel={props.onCancel ?? onCancel}
       />,
     );
   });
-  return { onSubmit, onCancel };
+  return { onSubmit, onCancel, onPeekOpen, onPeekClose, create };
 }
 
 function titleInput(): HTMLInputElement {
@@ -51,6 +69,13 @@ function titleInput(): HTMLInputElement {
 
 function folderInput(): HTMLInputElement {
   return container.querySelector('.searchable-picker-input') as HTMLInputElement;
+}
+
+async function flush() {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
 }
 
 describe('NewNoteDialog', () => {
@@ -62,30 +87,36 @@ describe('NewNoteDialog', () => {
     expect(titleInput().value).toBe('Captain Varr');
   });
 
-  it('typing storm/spies in the folder box and Enter submits with that folder', () => {
-    const { onSubmit } = render({ initialTitle: 'Captain Varr', initialFolder: '' });
+  it('typing storm/spies in the folder box and Enter submits with that folder', async () => {
+    const { onSubmit, create } = render({ initialTitle: 'Captain Varr', initialFolder: '' });
 
     act(() => {
       fireEvent.change(folderInput(), { target: { value: 'storm/spies' } });
     });
-    act(() => {
+    await act(async () => {
       fireEvent.keyDown(folderInput(), { key: 'Enter' });
     });
+    await flush();
 
-    expect(onSubmit).toHaveBeenCalledWith({
+    expect(create).toHaveBeenCalledWith({
       title: 'Captain Varr',
       folder: 'factions/the-house-of-storms/spies',
     });
+    expect(onSubmit).toHaveBeenCalledWith(
+      createdResult('Captain Varr', 'factions/the-house-of-storms/spies').note,
+    );
   });
 
-  it('Enter in the title submits with the default folder', () => {
-    const { onSubmit } = render({ initialTitle: 'Captain Varr', initialFolder: 'npcs' });
+  it('Enter in the title submits with the default folder', async () => {
+    const { onSubmit, create } = render({ initialTitle: 'Captain Varr', initialFolder: 'npcs' });
 
-    act(() => {
+    await act(async () => {
       fireEvent.keyDown(titleInput(), { key: 'Enter' });
     });
+    await flush();
 
-    expect(onSubmit).toHaveBeenCalledWith({ title: 'Captain Varr', folder: 'npcs' });
+    expect(create).toHaveBeenCalledWith({ title: 'Captain Varr', folder: 'npcs' });
+    expect(onSubmit).toHaveBeenCalledWith(createdResult('Captain Varr', 'npcs').note);
   });
 
   it('the dialog shows the initial folder as chosen', () => {
@@ -116,13 +147,14 @@ describe('NewNoteDialog', () => {
     expect(documentHandler).not.toHaveBeenCalled();
   });
 
-  it('an empty title does not submit', () => {
-    const { onSubmit } = render({ initialTitle: '' });
+  it('an empty title does not submit', async () => {
+    const { onSubmit, create } = render({ initialTitle: '' });
 
     act(() => {
       fireEvent.keyDown(titleInput(), { key: 'Enter' });
     });
 
+    expect(create).not.toHaveBeenCalled();
     expect(onSubmit).not.toHaveBeenCalled();
     expect(container.querySelector('.new-note-error')).not.toBeNull();
   });
@@ -159,5 +191,161 @@ describe('NewNoteDialog', () => {
     });
 
     expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows an already-exists warning with a hoverable link and stays open', async () => {
+    const create = vi.fn().mockResolvedValue({
+      status: 'exists',
+      existing: { path: 'npcs/bob.md', id: 'bob1', title: 'Bob' },
+    });
+    const { onSubmit, onCancel, onPeekOpen, onPeekClose } = render({
+      initialTitle: 'Bob',
+      initialFolder: 'npcs',
+      create,
+    });
+
+    await act(async () => {
+      fireEvent.keyDown(titleInput(), { key: 'Enter' });
+    });
+    await flush();
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(onCancel).not.toHaveBeenCalled();
+    // The dialog is still mounted/open — nothing has torn it down.
+    expect(container.querySelector('.new-note-overlay')).not.toBeNull();
+
+    const warning = container.querySelector('.new-note-conflict');
+    expect(warning?.textContent).toContain('A note called "Bob" already exists in npcs:');
+
+    const link = container.querySelector('.new-note-conflict-link') as HTMLElement;
+    expect(link).toBeTruthy();
+    expect(link.textContent).toBe('Bob');
+
+    act(() => {
+      fireEvent.mouseEnter(link);
+    });
+    expect(onPeekOpen).toHaveBeenCalledWith('bob1', link);
+
+    act(() => {
+      fireEvent.mouseLeave(link);
+    });
+    expect(onPeekClose).toHaveBeenCalled();
+  });
+
+  it('an existing note without an id shows its path without a hover link', async () => {
+    const create = vi.fn().mockResolvedValue({
+      status: 'exists',
+      existing: { path: 'npcs/bob.md', id: null, title: 'Bob' },
+    });
+    const { onPeekOpen } = render({ initialTitle: 'Bob', initialFolder: 'npcs', create });
+
+    await act(async () => {
+      fireEvent.keyDown(titleInput(), { key: 'Enter' });
+    });
+    await flush();
+
+    expect(container.querySelector('.new-note-conflict-link')).toBeNull();
+    const path = container.querySelector('.new-note-conflict-path');
+    expect(path?.textContent).toBe('npcs/bob.md');
+    expect(onPeekOpen).not.toHaveBeenCalled();
+  });
+
+  it('changing the title clears the warning; Back refocuses the title', async () => {
+    const create = vi.fn().mockResolvedValue({
+      status: 'exists',
+      existing: { path: 'npcs/bob.md', id: 'bob1', title: 'Bob' },
+    });
+    render({ initialTitle: 'Bob', initialFolder: 'npcs', create });
+
+    await act(async () => {
+      fireEvent.keyDown(titleInput(), { key: 'Enter' });
+    });
+    await flush();
+    expect(container.querySelector('.new-note-conflict')).not.toBeNull();
+
+    act(() => {
+      fireEvent.change(titleInput(), { target: { value: 'Bob 2' } });
+    });
+    expect(container.querySelector('.new-note-conflict')).toBeNull();
+
+    // Re-trigger the warning, then dismiss it with Back.
+    await act(async () => {
+      fireEvent.change(titleInput(), { target: { value: 'Bob' } });
+      fireEvent.keyDown(titleInput(), { key: 'Enter' });
+    });
+    await flush();
+    expect(container.querySelector('.new-note-conflict')).not.toBeNull();
+
+    const backBtn = container.querySelector('.new-note-back-btn') as HTMLButtonElement;
+    act(() => {
+      fireEvent.click(backBtn);
+    });
+    expect(container.querySelector('.new-note-conflict')).toBeNull();
+    expect(document.activeElement).toBe(titleInput());
+  });
+
+  it('a second submit with a new title creates and resolves', async () => {
+    const create = vi
+      .fn()
+      .mockResolvedValueOnce({
+        status: 'exists',
+        existing: { path: 'npcs/bob.md', id: 'bob1', title: 'Bob' },
+      })
+      .mockResolvedValueOnce(createdResult('Bob 2', 'npcs'));
+    const { onSubmit } = render({ initialTitle: 'Bob', initialFolder: 'npcs', create });
+
+    await act(async () => {
+      fireEvent.keyDown(titleInput(), { key: 'Enter' });
+    });
+    await flush();
+    expect(container.querySelector('.new-note-conflict')).not.toBeNull();
+
+    act(() => {
+      fireEvent.change(titleInput(), { target: { value: 'Bob 2' } });
+    });
+    await act(async () => {
+      fireEvent.keyDown(titleInput(), { key: 'Enter' });
+    });
+    await flush();
+
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(create).toHaveBeenNthCalledWith(2, { title: 'Bob 2', folder: 'npcs' });
+    expect(onSubmit).toHaveBeenCalledWith(createdResult('Bob 2', 'npcs').note);
+    expect(container.querySelector('.new-note-conflict')).toBeNull();
+  });
+
+  it("a stray Enter with the same title/folder doesn't resubmit while the warning is shown", async () => {
+    const create = vi.fn().mockResolvedValue({
+      status: 'exists',
+      existing: { path: 'npcs/bob.md', id: 'bob1', title: 'Bob' },
+    });
+    render({ initialTitle: 'Bob', initialFolder: 'npcs', create });
+
+    await act(async () => {
+      fireEvent.keyDown(titleInput(), { key: 'Enter' });
+    });
+    await flush();
+    expect(create).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      fireEvent.keyDown(titleInput(), { key: 'Enter' });
+    });
+    await flush();
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it('a create error is shown inline and the dialog stays open', async () => {
+    const create = vi.fn().mockRejectedValue(new Error('disk full'));
+    const { onSubmit, onCancel } = render({ initialTitle: 'Bob', initialFolder: 'npcs', create });
+
+    await act(async () => {
+      fireEvent.keyDown(titleInput(), { key: 'Enter' });
+    });
+    await flush();
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(container.querySelector('.new-note-overlay')).not.toBeNull();
+    expect(container.querySelector('.new-note-error')?.textContent).toBe('disk full');
   });
 });

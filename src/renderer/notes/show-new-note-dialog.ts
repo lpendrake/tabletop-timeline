@@ -1,37 +1,42 @@
 import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { NewNoteDialog } from './components/new-note-dialog';
+import { openFromWikiLink, closeFromWikiLink } from '../peek/stack';
+import type { CreatedNote, CreateNoteResult } from './create-note';
 
 export interface ShowNewNoteDialogOptions {
   initialTitle?: string;
   folders: string[];
   initialFolder: string;
-}
-
-export interface NewNoteResult {
-  title: string;
-  folder: string;
+  /**
+   * Attempts to create the note. Resolves with the discriminated
+   * `CreateNoteResult` — the dialog stays open and shows an inline warning
+   * on `'exists'`, or an inline error if this rejects.
+   */
+  create: (input: { title: string; folder: string }) => Promise<CreateNoteResult>;
 }
 
 /**
  * Imperative entry point for the "New Note" dialog, opened from an editor
- * context menu (wiring is a later task). Mirrors `show-label-override-editor`:
- * mounts a fresh root into a `document.body` host and tears it down once the
- * user submits or cancels. Does not create the note file itself — the caller
- * does that with `createNote` using the resolved title/folder. Must not
- * import `notesData`.
+ * context menu. Mirrors `show-label-override-editor`: mounts a fresh root
+ * into a `document.body` host and tears it down once the user gets a note
+ * created or cancels. The dialog itself drives `create` and stays open to
+ * show a conflict warning or an error, so this resolves only on success or
+ * cancel. Wires the real peek hover behaviour (`openFromWikiLink` /
+ * `closeFromWikiLink`) into the dialog so the component itself never needs
+ * to import `../peek/stack`. Must not import `notesData`.
  */
-export function showNewNoteDialog(opts: ShowNewNoteDialogOptions): Promise<NewNoteResult | null> {
-  const { initialTitle = '', folders, initialFolder } = opts;
+export function showNewNoteDialog(opts: ShowNewNoteDialogOptions): Promise<CreatedNote | null> {
+  const { initialTitle = '', folders, initialFolder, create } = opts;
 
   const host = document.createElement('div');
   host.style.position = 'fixed';
-  host.style.zIndex = '2100';
+  host.style.zIndex = '1050';
   document.body.appendChild(host);
   const root = createRoot(host);
 
-  return new Promise<NewNoteResult | null>((resolve) => {
-    const destroy = (result: NewNoteResult | null) => {
+  return new Promise<CreatedNote | null>((resolve) => {
+    const destroy = (result: CreatedNote | null) => {
       queueMicrotask(() => {
         root.unmount();
         host.remove();
@@ -44,7 +49,10 @@ export function showNewNoteDialog(opts: ShowNewNoteDialogOptions): Promise<NewNo
         initialTitle,
         folders,
         initialFolder,
-        onSubmit: (result: NewNoteResult) => destroy(result),
+        create,
+        onPeekOpen: openFromWikiLink,
+        onPeekClose: closeFromWikiLink,
+        onSubmit: (note: CreatedNote) => destroy(note),
         onCancel: () => destroy(null),
       }),
     );

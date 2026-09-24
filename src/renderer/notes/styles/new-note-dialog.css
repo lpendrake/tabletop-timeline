@@ -3,7 +3,8 @@
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.65);
-  z-index: 2100;
+  /* Above the event editor modal (1000), below peek windows (1100+) so hovering the existing-note link previews on top. */
+  z-index: 1050;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -63,6 +64,41 @@
   font-size: 12px;
   color: var(--theme-text-secondary);
   margin-top: 6px;
+}
+
+.new-note-conflict {
+  border: 1px solid var(--theme-danger);
+  border-radius: 3px;
+  padding: 8px 10px;
+  margin-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.new-note-conflict-text {
+  font-size: 12px;
+  color: var(--theme-text-secondary);
+  width: 100%;
+}
+
+.new-note-conflict-link {
+  color: var(--theme-accent);
+  text-decoration: underline dotted;
+  cursor: default;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.new-note-conflict-path {
+  color: var(--theme-text-muted);
+  font-family: ui-monospace, 'Consolas', monospace;
+  font-size: 12px;
+}
+
+.new-note-back-btn {
+  margin-left: auto;
 }
 
 .new-note-actions {
