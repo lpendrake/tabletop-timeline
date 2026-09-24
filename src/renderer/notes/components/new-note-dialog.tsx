@@ -9,8 +9,6 @@ export interface NewNoteDialogProps {
   folders: string[];
   initialFolder: string;
   create: (input: { title: string; folder: string }) => Promise<CreateNoteResult>;
-  onPeekOpen?: (id: string, el: HTMLElement) => void;
-  onPeekClose?: (relatedTarget: Element | null) => void;
   onSubmit(note: CreatedNote): void;
   onCancel(): void;
 }
@@ -31,17 +29,17 @@ function folderLabel(folder: string, options: ReturnType<typeof folderOptions>):
  * Imperative "New Note" prompt: asks for a Title and a Folder, then creates
  * the note itself via `create`. Stays open and shows an inline warning when
  * the file already exists (with a hoverable link to peek at it), or an
- * inline error on a thrown failure. Mounted via `showNewNoteDialog`, which
- * supplies the real `onPeekOpen`/`onPeekClose` — this component never
- * imports `../peek/stack` or `notesData` itself.
+ * inline error on a thrown failure. The conflict link is rendered with the
+ * same `.cm-note-link`/`data-note-id` markup the editor's wiki-links use, so
+ * the global peek hover machinery in `../peek/stack` (wired up once via
+ * `initPeek`) picks it up on its own — this component never imports
+ * `../peek/stack` or `notesData` itself.
  */
 export function NewNoteDialog({
   initialTitle,
   folders,
   initialFolder,
   create,
-  onPeekOpen,
-  onPeekClose,
   onSubmit,
   onCancel,
 }: NewNoteDialogProps) {
@@ -188,9 +186,8 @@ export function NewNoteDialog({
               </div>
               {conflict.existing.id ? (
                 <span
-                  className="new-note-conflict-link"
-                  onMouseEnter={(e) => onPeekOpen?.(conflict.existing.id!, e.currentTarget)}
-                  onMouseLeave={(e) => onPeekClose?.(e.relatedTarget as Element | null)}
+                  className="new-note-conflict-link cm-note-link"
+                  data-note-id={conflict.existing.id}
                 >
                   {conflict.existing.title}
                 </span>

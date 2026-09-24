@@ -40,7 +40,11 @@ function cancelClose() {
 }
 
 function isLive(el: Element | null): boolean {
-  if (!el) return false;
+  // `relatedTarget` on a native mouse event isn't always an Element — the
+  // pointer can leave into the Document (or another non-Element node, or
+  // out of the window entirely, e.g. into devtools), and `.closest` would
+  // throw on anything that isn't one.
+  if (!(el instanceof Element)) return false;
   if (el.closest('.peek-window')) return true;
 
   // CM6 wiki-link decoration spans
@@ -124,7 +128,8 @@ function scheduleClose() {
 }
 
 function handleOver(e: MouseEvent) {
-  const target = e.target as Element;
+  if (!(e.target instanceof Element)) return;
+  const target = e.target;
   if (target.closest('.peek-window')) cancelClose();
 
   // CM6 wiki-link span

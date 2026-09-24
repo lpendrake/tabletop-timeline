@@ -107,6 +107,26 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
+describe('isLive/handleOver tolerate non-Element targets', () => {
+  it('a mouseover whose target is not an Element does not throw', () => {
+    // Dispatching directly on `document` gives it a Document target, not an
+    // Element — `handleOver`'s `.closest` call must not choke on that.
+    expect(() => hover(document as unknown as Element)).not.toThrow();
+    expect(mockShowPeek).not.toHaveBeenCalled();
+  });
+
+  it('a mouseout whose relatedTarget is not an Element does not throw', () => {
+    const handle = setupMock();
+    const link = makeLinkEl();
+    hover(link);
+    vi.advanceTimersByTime(150);
+
+    expect(() => unhover(link, document as unknown as Element)).not.toThrow();
+    vi.advanceTimersByTime(250);
+    expect(handle.close).toHaveBeenCalled();
+  });
+});
+
 describe('open delay', () => {
   it('does not open before 150ms', () => {
     setupMock();
@@ -414,6 +434,19 @@ describe('closeFromWikiLink', () => {
     closeFromWikiLink(innerEl);
     vi.advanceTimersByTime(300);
     expect(handle.close).not.toHaveBeenCalled();
+  });
+
+  it('leaving the link for a non-element does not throw', () => {
+    const handle = setupMock();
+    const link = makeLinkEl();
+    hover(link);
+    vi.advanceTimersByTime(150);
+
+    // `relatedTarget` can be a Document (or other non-Element node) when the
+    // pointer leaves the window entirely, e.g. into devtools.
+    expect(() => closeFromWikiLink(document as unknown as Element)).not.toThrow();
+    vi.advanceTimersByTime(250);
+    expect(handle.close).toHaveBeenCalled();
   });
 
   it('does not start timer when relatedTarget is null', () => {

@@ -7,6 +7,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
 import { createElement } from 'react';
 import { MarkdownEditor } from '../../shared/markdown-editor/markdown-editor';
+import { showNewNoteDialog } from '../../notes/show-new-note-dialog';
+import type { CreateNoteResult } from '../../notes/create-note';
 
 vi.mock('../show', () => ({ showPeek: vi.fn() }));
 
@@ -173,5 +175,83 @@ describe('peek hover integration — end-to-end via initPeek', () => {
     expect(mockShowPeek).toHaveBeenCalledWith(
       expect.objectContaining({ linkInfo: { path: 'notes/foo.md' } }),
     );
+  });
+
+  it('hovering the existing-note link in the dialog opens a peek', async () => {
+    initPeek({
+      fetcher: vi.fn(),
+      getEntityIndex: () => [{ id: 'bob1', path: 'npcs/bob.md', title: 'Bob', type: 'note' }],
+    });
+
+    const create = vi.fn<() => Promise<CreateNoteResult>>().mockResolvedValue({
+      status: 'exists',
+      existing: { path: 'npcs/bob.md', id: 'bob1', title: 'Bob' },
+    });
+
+    await act(async () => {
+      showNewNoteDialog({ initialTitle: 'Bob', folders: ['npcs'], initialFolder: 'npcs', create });
+      await Promise.resolve();
+    });
+
+    const titleInput = document.body.querySelector('#new-note-title-input') as HTMLInputElement;
+    await act(async () => {
+      titleInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const link = document.body.querySelector('.new-note-conflict-link') as HTMLElement;
+    expect(link).not.toBeNull();
+    expect(link.classList.contains('cm-note-link')).toBe(true);
+
+    link.dispatchEvent(
+      new MouseEvent('mouseover', { bubbles: true, relatedTarget: document.body }),
+    );
+    expect(mockShowPeek).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(150);
+    expect(mockShowPeek).toHaveBeenCalledTimes(1);
+    expect(mockShowPeek).toHaveBeenCalledWith(
+      expect.objectContaining({ linkInfo: { path: 'npcs/bob.md' } }),
+    );
+
+    document.body
+      .querySelectorAll('.new-note-overlay')
+      .forEach((el) => el.closest('div')?.remove());
+  });
+
+  it('a link without an id shows the path and does not peek', async () => {
+    initPeek({
+      fetcher: vi.fn(),
+      getEntityIndex: () => [],
+    });
+
+    const create = vi.fn<() => Promise<CreateNoteResult>>().mockResolvedValue({
+      status: 'exists',
+      existing: { path: 'npcs/bob.md', id: null, title: 'Bob' },
+    });
+
+    await act(async () => {
+      showNewNoteDialog({ initialTitle: 'Bob', folders: ['npcs'], initialFolder: 'npcs', create });
+      await Promise.resolve();
+    });
+
+    const titleInput = document.body.querySelector('#new-note-title-input') as HTMLInputElement;
+    await act(async () => {
+      titleInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(document.body.querySelector('.new-note-conflict-link')).toBeNull();
+    const path = document.body.querySelector('.new-note-conflict-path');
+    expect(path?.textContent).toBe('npcs/bob.md');
+
+    vi.advanceTimersByTime(200);
+    expect(mockShowPeek).not.toHaveBeenCalled();
+
+    document.body
+      .querySelectorAll('.new-note-overlay')
+      .forEach((el) => el.closest('div')?.remove());
   });
 });

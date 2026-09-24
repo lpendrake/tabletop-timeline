@@ -39,8 +39,6 @@ function createdResult(title: string, folder: string): CreateNoteResult {
 function render(props: Partial<React.ComponentProps<typeof NewNoteDialog>> = {}) {
   const onSubmit = vi.fn();
   const onCancel = vi.fn();
-  const onPeekOpen = vi.fn();
-  const onPeekClose = vi.fn();
   const create =
     props.create ??
     vi.fn((input: { title: string; folder: string }) =>
@@ -53,14 +51,12 @@ function render(props: Partial<React.ComponentProps<typeof NewNoteDialog>> = {})
         folders={props.folders ?? FOLDERS}
         initialFolder={props.initialFolder ?? ''}
         create={create}
-        onPeekOpen={props.onPeekOpen ?? onPeekOpen}
-        onPeekClose={props.onPeekClose ?? onPeekClose}
         onSubmit={props.onSubmit ?? onSubmit}
         onCancel={props.onCancel ?? onCancel}
       />,
     );
   });
-  return { onSubmit, onCancel, onPeekOpen, onPeekClose, create };
+  return { onSubmit, onCancel, create };
 }
 
 function titleInput(): HTMLInputElement {
@@ -198,7 +194,7 @@ describe('NewNoteDialog', () => {
       status: 'exists',
       existing: { path: 'npcs/bob.md', id: 'bob1', title: 'Bob' },
     });
-    const { onSubmit, onCancel, onPeekOpen, onPeekClose } = render({
+    const { onSubmit, onCancel } = render({
       initialTitle: 'Bob',
       initialFolder: 'npcs',
       create,
@@ -217,19 +213,16 @@ describe('NewNoteDialog', () => {
     const warning = container.querySelector('.new-note-conflict');
     expect(warning?.textContent).toContain('A note called "Bob" already exists in npcs:');
 
+    // The link carries the same markup the editor's wiki-links use, so the
+    // global peek hover machinery (wired up separately via initPeek) can
+    // recognize and preview it — see peek/__tests__/stack.test.ts and
+    // peek/__tests__/peek-hover-integration.test.tsx for the hover behavior
+    // itself.
     const link = container.querySelector('.new-note-conflict-link') as HTMLElement;
     expect(link).toBeTruthy();
     expect(link.textContent).toBe('Bob');
-
-    act(() => {
-      fireEvent.mouseEnter(link);
-    });
-    expect(onPeekOpen).toHaveBeenCalledWith('bob1', link);
-
-    act(() => {
-      fireEvent.mouseLeave(link);
-    });
-    expect(onPeekClose).toHaveBeenCalled();
+    expect(link.classList.contains('cm-note-link')).toBe(true);
+    expect(link.dataset.noteId).toBe('bob1');
   });
 
   it('an existing note without an id shows its path without a hover link', async () => {
@@ -237,7 +230,7 @@ describe('NewNoteDialog', () => {
       status: 'exists',
       existing: { path: 'npcs/bob.md', id: null, title: 'Bob' },
     });
-    const { onPeekOpen } = render({ initialTitle: 'Bob', initialFolder: 'npcs', create });
+    render({ initialTitle: 'Bob', initialFolder: 'npcs', create });
 
     await act(async () => {
       fireEvent.keyDown(titleInput(), { key: 'Enter' });
@@ -247,7 +240,6 @@ describe('NewNoteDialog', () => {
     expect(container.querySelector('.new-note-conflict-link')).toBeNull();
     const path = container.querySelector('.new-note-conflict-path');
     expect(path?.textContent).toBe('npcs/bob.md');
-    expect(onPeekOpen).not.toHaveBeenCalled();
   });
 
   it('changing the title clears the warning; Back refocuses the title', async () => {

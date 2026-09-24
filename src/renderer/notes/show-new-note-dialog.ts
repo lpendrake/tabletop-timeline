@@ -1,7 +1,6 @@
 import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { NewNoteDialog } from './components/new-note-dialog';
-import { openFromWikiLink, closeFromWikiLink } from '../peek/stack';
 import type { CreatedNote, CreateNoteResult } from './create-note';
 
 export interface ShowNewNoteDialogOptions {
@@ -22,9 +21,11 @@ export interface ShowNewNoteDialogOptions {
  * into a `document.body` host and tears it down once the user gets a note
  * created or cancels. The dialog itself drives `create` and stays open to
  * show a conflict warning or an error, so this resolves only on success or
- * cancel. Wires the real peek hover behaviour (`openFromWikiLink` /
- * `closeFromWikiLink`) into the dialog so the component itself never needs
- * to import `../peek/stack`. Must not import `notesData`.
+ * cancel. The dialog renders its conflict link with the same
+ * `.cm-note-link`/`data-note-id` markup the editor's wiki-links use, so the
+ * global peek hover machinery in `../peek/stack` picks it up on its own —
+ * no peek wiring needs to be threaded through here. Must not import
+ * `notesData`.
  */
 export function showNewNoteDialog(opts: ShowNewNoteDialogOptions): Promise<CreatedNote | null> {
   const { initialTitle = '', folders, initialFolder, create } = opts;
@@ -50,8 +51,6 @@ export function showNewNoteDialog(opts: ShowNewNoteDialogOptions): Promise<Creat
         folders,
         initialFolder,
         create,
-        onPeekOpen: openFromWikiLink,
-        onPeekClose: closeFromWikiLink,
         onSubmit: (note: CreatedNote) => destroy(note),
         onCancel: () => destroy(null),
       }),
