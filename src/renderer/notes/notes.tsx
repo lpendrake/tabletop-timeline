@@ -7,6 +7,7 @@ import {
   makeImagePasteConfig,
   makeDropLinkConfig,
   makePeekWikiLinksConfig,
+  makeNewNoteMenuConfig,
 } from './editor-bindings';
 import { buildEntityLabelMap } from '../../shared/entity-labels';
 import { revealInExplorer } from '../shared/reveal-in-explorer';
@@ -70,6 +71,22 @@ export function NotesApp({
   );
   const dropLinkConfig = useMemo(() => makeDropLinkConfig(), []);
   const peekWikiLinksConfig = useMemo(() => makePeekWikiLinksConfig(), []);
+
+  // `knownIds` changes on every entity-index update; a ref keeps the menu
+  // config's `getExistingIds` reading the latest set without rebuilding it.
+  const knownIdsRef = useRef(knownIds);
+  knownIdsRef.current = knownIds;
+  const newNoteMenuConfig = useMemo(
+    () =>
+      makeNewNoteMenuConfig({
+        campaignPath,
+        getExistingIds: () => knownIdsRef.current,
+        onCreated: ctrl.handleNoteCreatedFromEditor,
+        onError: (err) => ctrl.pushToast(`Failed to create note: ${String(err)}`, true),
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [campaignPath, ctrl.handleNoteCreatedFromEditor, ctrl.pushToast],
+  );
 
   // Open a note from the search overlay, then scroll to the match position.
   // Both steps are sequenced here so the scroll happens only after the note's
@@ -208,6 +225,7 @@ export function NotesApp({
                 mdLinks={{ onOpenInternal: ctrl.openMarkdownLink }}
                 imagePaste={imagePasteConfig}
                 dropLink={dropLinkConfig}
+                contextMenu={newNoteMenuConfig}
               />
             ) : ctrl.activeTab ? (
               <div className="editor-placeholder">Loading...</div>

@@ -7,8 +7,18 @@ vi.mock('../data', () => ({
   },
 }));
 
-import { makeImagePasteConfig, makeDropLinkConfig } from '../editor-bindings';
+vi.mock('../new-note-from-editor', () => ({
+  runNewNoteFromEditor: vi.fn().mockResolvedValue(null),
+}));
+
+import {
+  makeImagePasteConfig,
+  makeDropLinkConfig,
+  makeNewNoteMenuConfig,
+} from '../editor-bindings';
 import { notesData } from '../data';
+import { runNewNoteFromEditor } from '../new-note-from-editor';
+import { filterMenu, pickAutoTarget } from '../../shared/context-menu';
 
 const DRAG_MIME = 'application/x-last-gasp-note';
 
@@ -168,5 +178,38 @@ describe('makeDropLinkConfig', () => {
     expect(config.decodeDrop(event)).toEqual({
       insert: '![map.png](notes-asset://current/notes/locations/assets/map.png)',
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// makeNewNoteMenuConfig
+// ---------------------------------------------------------------------------
+
+describe('makeNewNoteMenuConfig', () => {
+  it("adds a searchable 'New note…' item", () => {
+    const config = makeNewNoteMenuConfig({ campaignPath: '/campaign' });
+    const fakeCtx = {
+      view: {} as unknown,
+      from: 0,
+      to: 0,
+      selectedText: '',
+      replaceRange: vi.fn(),
+    };
+    const items = config.extraItems(fakeCtx as never);
+
+    const { targets } = filterMenu(items, 'new');
+    const auto = pickAutoTarget(targets);
+    expect(auto?.labels).toEqual(['New note…']);
+
+    const [index] = auto!.path;
+    const item = items[index];
+    expect(item.kind).toBe('action');
+    if (item.kind === 'action') {
+      item.onSelect();
+      expect(runNewNoteFromEditor).toHaveBeenCalledWith(
+        fakeCtx,
+        expect.objectContaining({ campaignPath: '/campaign' }),
+      );
+    }
   });
 });

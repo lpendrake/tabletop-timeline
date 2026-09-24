@@ -305,6 +305,15 @@ describe('bufferToFrontmatter', () => {
     expect(fm.tags).toEqual(['combat', 'id:ab12', 'id:cd34']);
   });
 
+  it('event body with the new link produces an id: tag on save', () => {
+    // Mirrors a "New note…" insertion: the body now contains a fresh
+    // [[abcd]] link, and existing custom tags must survive alongside it.
+    const fm = bufferToFrontmatter(
+      buf({ tagsText: 'combat, ambush', body: 'Ambushed by [[abcd]] at the crossing.' }),
+    );
+    expect(fm.tags).toEqual(['combat', 'ambush', 'id:abcd']);
+  });
+
   it('removes entity tags whose wiki links are no longer in the body', () => {
     const fm = bufferToFrontmatter(buf({ tagsText: 'combat, id:ab12', body: '' }));
     expect(fm.tags).toEqual(['combat']);

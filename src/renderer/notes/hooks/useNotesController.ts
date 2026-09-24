@@ -25,6 +25,12 @@ import { generateShortId } from '../../../shared/ids';
 import { useSaveSync } from './useSaveSync';
 import { useFolderTree } from './useFolderTree';
 import {
+  addCreatedNoteToFolderFiles,
+  folderPathsToOpenForCreatedNote,
+} from '../domain/created-note-state';
+import { entityFromCreatedNote } from '../domain/entity-from-created-note';
+import type { CreatedNote } from '../create-note';
+import {
   tabKey,
   isEditableNote,
   type NoteEntry,
@@ -353,19 +359,40 @@ export function useNotesController({
       try {
         // Write frontmatter from the start so the entity-index watcher finds needsWrite:false
         // and does not rewrite the file, which would create a race with our autosave.
-        const { id, filename, frontmatter, body } = await createNote({
+        const {
+          id,
+          filename,
+          frontmatter,
+          body,
+          title: createdTitle,
+        } = await createNote({
           campaignPath,
           folder,
           title,
         });
 
-        setFolderFiles((prev) => {
-          const existing = prev[folder] ?? [];
-          if (existing.some((e) => e.path === filename)) return prev;
-          return { ...prev, [folder]: [...existing, { id, path: filename, title, kind: 'note' }] };
+        const createdNote = { id, folder, filename, title: createdTitle };
+        // `folders` and `folderFiles` are independent React state, so the
+        // shared helper is applied to each via its own functional updater;
+        // it only ever reads the slice it's given and only ever changes the
+        // matching output field, so this is safe to split.
+        setFolderFiles((prevFolderFiles) => {
+          const next = addCreatedNoteToFolderFiles(
+            { folders: [], folderFiles: prevFolderFiles },
+            createdNote,
+          );
+          return next ? next.folderFiles : prevFolderFiles;
         });
-        setFolders((prev) => (prev.includes(folder) ? prev : [...prev, folder].sort()));
-        setOpenFolderPaths((prev) => new Set([...prev, folder]));
+        setFolders((prevFolders) => {
+          const next = addCreatedNoteToFolderFiles(
+            { folders: prevFolders, folderFiles: {} },
+            createdNote,
+          );
+          return next ? next.folders : prevFolders;
+        });
+        setOpenFolderPaths(
+          (prev) => new Set([...prev, ...folderPathsToOpenForCreatedNote(folder)]),
+        );
         setOpenFiles((prev) => ({
           ...prev,
           [`${folder}/${filename}`]: { content: body, frontmatter, dirty: false, loading: false },
@@ -378,6 +405,28 @@ export function useNotesController({
     },
     [campaignPath, pushToast],
   );
+
+  /**
+   * Adds a note created from the editor's "New note…" menu action to the
+   * sidebar and the entity index, without opening a tab or switching views
+   * (the editor the user was typing in stays focused and in place).
+   */
+  const handleNoteCreatedFromEditor = useCallback((note: CreatedNote) => {
+    setFolderFiles((prevFolderFiles) => {
+      const next = addCreatedNoteToFolderFiles({ folders: [], folderFiles: prevFolderFiles }, note);
+      return next ? next.folderFiles : prevFolderFiles;
+    });
+    setFolders((prevFolders) => {
+      const next = addCreatedNoteToFolderFiles({ folders: prevFolders, folderFiles: {} }, note);
+      return next ? next.folders : prevFolders;
+    });
+    setOpenFolderPaths(
+      (prev) => new Set([...prev, ...folderPathsToOpenForCreatedNote(note.folder)]),
+    );
+    setEntityIndex((prev) =>
+      applyEntityDelta(prev, { op: 'add', entry: entityFromCreatedNote(note) }),
+    );
+  }, []);
 
   async function commitNewFileInFolder(ctx: { folder: string; subdir?: string }, name: string) {
     setCreatingIn(null);
@@ -661,6 +710,7 @@ export function useNotesController({
     openMarkdownLink,
     suggestLinks,
     handleQuickAddCreate,
+    handleNoteCreatedFromEditor,
     pushToast,
     dismissToast,
   };

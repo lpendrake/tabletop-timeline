@@ -3,9 +3,12 @@ import type {
   DropLinkConfig,
   DropInsert,
   WikiLinksHostConfig,
+  EditorMenuExtraItems,
 } from '../shared/markdown-editor';
 import { notesData } from './data';
 import { openFromWikiLink, closeFromWikiLink } from '../peek/stack';
+import { runNewNoteFromEditor } from './new-note-from-editor';
+import type { CreatedNote } from './create-note';
 
 interface SidebarDropPayload {
   folder: string;
@@ -67,5 +70,44 @@ export function makePeekWikiLinksConfig(): Pick<WikiLinksHostConfig, 'onHover' |
   return {
     onHover: openFromWikiLink,
     onHoverEnd: closeFromWikiLink,
+  };
+}
+
+export interface MakeNewNoteMenuConfigOptions {
+  campaignPath: string;
+  getExistingIds?: () => ReadonlySet<string> | undefined;
+  onCreated?: (note: CreatedNote) => void;
+  onError?: (err: unknown) => void;
+}
+
+/**
+ * Builds the `contextMenu.extraItems` config that adds a "New note…" item
+ * to the editor's own menu (right-click, `/`, Shift+F10). Selecting it runs
+ * `runNewNoteFromEditor`, which shows the New Note dialog, writes the file,
+ * and inserts `[[id]]` in place of the acted-on range.
+ */
+export function makeNewNoteMenuConfig(opts: MakeNewNoteMenuConfigOptions): {
+  extraItems: EditorMenuExtraItems;
+} {
+  const { campaignPath, getExistingIds, onCreated, onError } = opts;
+  return {
+    extraItems: (ctx) => [
+      {
+        kind: 'action',
+        label: 'New note…',
+        keywords: ['create', 'note', 'link'],
+        onSelect: () => {
+          void runNewNoteFromEditor(ctx, {
+            campaignPath,
+            existingIds: getExistingIds?.(),
+            onCreated,
+            onError,
+          }).catch(() => {
+            // runNewNoteFromEditor already focuses the view and reports via
+            // onError on a failed create; nothing further to do here.
+          });
+        },
+      },
+    ],
   };
 }
