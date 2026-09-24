@@ -81,12 +81,6 @@ export function NewNoteDialog({
     if (errorMessage) setErrorMessage(null);
   }
 
-  function handleBack() {
-    setConflict(null);
-    setErrorMessage(null);
-    titleInputRef.current?.focus();
-  }
-
   async function trySubmit(folder: string) {
     const trimmed = title.trim();
     if (!canSubmit(title)) {
@@ -194,9 +188,6 @@ export function NewNoteDialog({
               ) : (
                 <span className="new-note-conflict-path">{conflict.existing.path}</span>
               )}
-              <button type="button" className="new-note-btn new-note-back-btn" onClick={handleBack}>
-                Back
-              </button>
             </div>
           )}
 

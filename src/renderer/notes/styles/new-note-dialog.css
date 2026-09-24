@@ -105,10 +105,6 @@
   font-size: 12px;
 }
 
-.new-note-back-btn {
-  margin-left: auto;
-}
-
 .new-note-actions {
   display: flex;
   gap: 8px;

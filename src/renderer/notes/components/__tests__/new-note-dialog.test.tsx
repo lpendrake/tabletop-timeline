@@ -242,7 +242,7 @@ describe('NewNoteDialog', () => {
     expect(path?.textContent).toBe('npcs/bob.md');
   });
 
-  it('changing the title clears the warning; Back refocuses the title', async () => {
+  it('changing the title clears the warning', async () => {
     const create = vi.fn().mockResolvedValue({
       status: 'exists',
       existing: { path: 'npcs/bob.md', id: 'bob1', title: 'Bob' },
@@ -259,21 +259,6 @@ describe('NewNoteDialog', () => {
       fireEvent.change(titleInput(), { target: { value: 'Bob 2' } });
     });
     expect(container.querySelector('.new-note-conflict')).toBeNull();
-
-    // Re-trigger the warning, then dismiss it with Back.
-    await act(async () => {
-      fireEvent.change(titleInput(), { target: { value: 'Bob' } });
-      fireEvent.keyDown(titleInput(), { key: 'Enter' });
-    });
-    await flush();
-    expect(container.querySelector('.new-note-conflict')).not.toBeNull();
-
-    const backBtn = container.querySelector('.new-note-back-btn') as HTMLButtonElement;
-    act(() => {
-      fireEvent.click(backBtn);
-    });
-    expect(container.querySelector('.new-note-conflict')).toBeNull();
-    expect(document.activeElement).toBe(titleInput());
   });
 
   it('a second submit with a new title creates and resolves', async () => {
