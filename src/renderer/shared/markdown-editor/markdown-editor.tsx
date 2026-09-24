@@ -34,7 +34,7 @@ import { markdownDecorations } from './extensions/decorations';
 import { imagePaste, type ImagePasteConfig } from './extensions/image-paste';
 import { imageDecorations, type ImageDecorationsOptions } from './extensions/image-decorations';
 import { dropLink, type DropLinkConfig } from './extensions/drop-link';
-import { editorContextMenu } from './extensions/editor-context-menu';
+import { editorContextMenu, type EditorMenuExtraItems } from './extensions/editor-context-menu';
 import { formattingKeymap } from './commands';
 
 /**
@@ -89,6 +89,9 @@ export interface MarkdownEditorProps {
   /** Enables Ctrl/Cmd+click on standard markdown links `[text](url)`. */
   mdLinks?: MarkdownLinkClickConfig;
 
+  /** Host-supplied items appended to the editor's own context menu (right-click and `/`). */
+  contextMenu?: { extraItems?: EditorMenuExtraItems };
+
   /**
    * Document offset at which to place the caret when the editor first mounts
    * with fresh content (i.e. no `savedInstance`). Clamped to [0, doc.length].
@@ -110,6 +113,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   imagePaste: imagePasteConfig,
   dropLink: dropLinkConfig,
   mdLinks: mdLinksConfig,
+  contextMenu: contextMenuConfig,
   initialCursor,
 }) => {
   const editorRef = useRef<HTMLDivElement>(null);
@@ -123,6 +127,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   const wikiLinksRef = useRef(wikiLinksConfig);
   const imagesRef = useRef(imagesConfig);
   const mdLinksRef = useRef(mdLinksConfig);
+  const contextMenuRef = useRef(contextMenuConfig);
   onChangeRef.current = onChange;
   onSaveInstanceRef.current = onSaveInstance;
   isSourceModeRef.current = isSourceMode;
@@ -130,6 +135,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   wikiLinksRef.current = wikiLinksConfig;
   imagesRef.current = imagesConfig;
   mdLinksRef.current = mdLinksConfig;
+  contextMenuRef.current = contextMenuConfig;
 
   const modeCompartmentRef = useRef<Compartment>(
     savedInstance?.modeCompartment ?? new Compartment(),
@@ -203,7 +209,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       // (inside buildModeExtensions, live mode only) gets first refusal on
       // right-clicks — it consumes the event when the click lands on a
       // `.cm-note-link`; this extension only fires when it doesn't.
-      editorContextMenu({ readOnly: ro }),
+      editorContextMenu({ readOnly: ro, getExtraItems: () => contextMenuRef.current?.extraItems }),
     ];
 
     if (ro) {

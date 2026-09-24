@@ -37,6 +37,7 @@ import { showLabelOverrideEditor } from '../../shared/components/show-label-over
 import { entityIndex as entityIndexStore } from '../../shared/entity-index';
 import { buildEntityLink } from '../../shared/entity-link';
 import { copyToClipboard } from '../../shared/clipboard';
+import { useNewNoteMenuConfig, entityFromCreatedNote, type CreatedNote } from '../../notes/public';
 import './EventEditorModal.css';
 
 function TagChipList({
@@ -151,6 +152,17 @@ export function EventEditorModal({
   const knownIds = useMemo(() => new Set(entityIndex.map((e) => e.id)), [entityIndex]);
   const entityLabelMap = useMemo(() => buildEntityLabelMap(entityIndex), [entityIndex]);
   const entityTagLabelMap = useMemo(() => buildEntityTagLabelMap(entityIndex), [entityIndex]);
+
+  const handleNewNoteCreated = useCallback((note: CreatedNote) => {
+    setEntityIndex((prev) =>
+      applyEntityDelta(prev, { op: 'add', entry: entityFromCreatedNote(note) }),
+    );
+  }, []);
+  const newNoteMenuConfig = useNewNoteMenuConfig({
+    campaignPath,
+    entityIndex,
+    onCreated: handleNewNoteCreated,
+  });
 
   // Refs for stable access inside async callbacks without needing deps
   const lastModifiedRef = useRef<string | null>(null);
@@ -547,6 +559,7 @@ export function EventEditorModal({
                     knownIds,
                     entityLabels: entityLabelMap,
                   }}
+                  contextMenu={newNoteMenuConfig}
                 />
               </div>
 

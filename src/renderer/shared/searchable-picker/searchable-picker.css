@@ -1,0 +1,45 @@
+/* ---- Searchable picker (generic, reusable search-over-list) ---- */
+.searchable-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.searchable-picker-input {
+  background: var(--theme-surface);
+  border: 1px solid var(--theme-border);
+  border-radius: 4px;
+  padding: 6px 10px;
+  color: var(--theme-text-primary);
+  font-family: inherit;
+  font-size: 14px;
+  outline: none;
+}
+.searchable-picker-input::placeholder {
+  color: var(--theme-text-muted);
+}
+.searchable-picker-input:focus {
+  border-color: var(--theme-border-strong);
+}
+.searchable-picker-list {
+  max-height: 280px;
+  overflow-y: auto;
+  border: 1px solid var(--theme-border);
+  border-radius: 4px;
+}
+.searchable-picker-row {
+  padding: 6px 10px;
+  color: var(--theme-text-primary);
+  cursor: pointer;
+  border-left: 2px solid transparent;
+}
+.searchable-picker-row:hover,
+.searchable-picker-row.is-highlighted {
+  background: var(--theme-panel);
+  border-left-color: var(--theme-accent-gold);
+}
+.searchable-picker-empty {
+  padding: 12px 10px;
+  color: var(--theme-text-muted);
+  font-size: 13px;
+  text-align: center;
+}

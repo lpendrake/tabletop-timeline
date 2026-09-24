@@ -16,7 +16,9 @@ A CodeMirror 6 wrapper for editing and previewing markdown. Used by notes and th
 - `commands.ts` — pure CodeMirror commands (bold/italic/heading/list/etc). Safe to import standalone for custom toolbars.
 - `theme.ts` — `lastGaspThemeExtensions` styling + syntax highlighting.
 - `extensions/wiki-links.ts` — `[[name|id]]` parsing, completion, click handler. Activated via `props.wikiLinks`.
-- `extensions/editor-context-menu.ts` — right-click menu on plain editor text (Copy / Paste / Delete / Formatting). Registered unconditionally, after the mode compartment so the wiki-link contextmenu handler (live mode only) gets first refusal on `.cm-note-link` clicks.
+- `extensions/wiki-link-query.ts` — pure `WIKI_LINK_QUERY_RE` / `isInWikiLinkQuery(textBeforeCaret)`: detects an open `[[...` or `@...` link query. Shared by `wiki-links.ts` (completion source) and `slash-trigger.ts` (to suppress the `/` menu mid-query) so the two definitions can't drift.
+- `extensions/editor-context-menu.ts` — the editor's own menu (Copy / Paste / Delete / Formatting, plus any host `contextMenu.extraItems`) on plain editor text. Opens on right-click, on typing `/` at the caret (see `extensions/slash-trigger.ts`), and on Shift+F10 / the ContextMenu key. Registered unconditionally, after the mode compartment so the wiki-link contextmenu handler (live mode only) gets first refusal on `.cm-note-link` clicks.
+- `extensions/slash-trigger.ts` — pure `shouldOpenSlashMenu(state, pos)`: decides whether a typed `/` should open the menu instead of inserting a character.
 - `extensions/decorations.ts` — markdown visual decorations (headings, bold, etc).
 - `extensions/image-decorations.ts` — renders `![alt](url)` as an inline image widget. Accepts `resolveSrc` to transform raw image paths (e.g. relative paths → `notes-asset://`).
 - `extensions/image-paste.ts` — clipboard paste. Calls `props.imagePaste.onImagePaste(blob, mime)` and inserts the returned URL.
@@ -32,6 +34,7 @@ A CodeMirror 6 wrapper for editing and previewing markdown. Used by notes and th
 - `savedInstance` / `onSaveInstance` — preserve doc + selection + undo history across host-level remounts (e.g., tab switching). The compartment is part of the saved instance and must round-trip.
 - `viewRef` — imperative access for toolbars and focus management.
 - `wikiLinks`, `imagePaste`, `dropLink` — optional host-supplied behaviors. Each is its own config object; omit to disable that feature entirely.
+- `contextMenu.extraItems` — optional `EditorMenuExtraItems` (`(ctx: EditorMenuContext) => ContextMenuItem[]`) appended, after a separator, to the editor's own menu — both the right-click menu and the `/`-triggered one. `EditorMenuContext` gives the host the acted-on range (`from`/`to`), `selectedText`, and `replaceRange(text)` to replace it and refocus the editor. Read lazily each time a menu opens (via a ref), so changing the callback after mount takes effect on the next open without rebuilding the base extension layer.
 
 ## How to add a new read-only preview surface
 
@@ -58,7 +61,15 @@ When you add a new extension, write its tests in `extensions/__tests__/`. When y
 `<MarkdownEditor>` builds its extension list at mount time and never remounts for prop changes. The stack has two layers:
 
 **Base extensions (always active, built once):**
-CodeMirror standard extensions (history, keymaps, bracket matching, closeBrackets, etc.), the markdown language grammar with code language auto-detection, `lastGaspThemeExtensions`, `EditorView.lineWrapping`, the `updateListener` that fires `onChange`, and `editorContextMenu({ readOnly })` (right-click text menu — Copy always, Paste/Delete/Formatting only when editable). `imagePaste` and `dropLink` are pushed into this layer when their config objects are supplied — they must be fixed at mount and cannot be toggled.
+CodeMirror standard extensions (history, keymaps, bracket matching, closeBrackets, etc.), the markdown language grammar with code language auto-detection, `lastGaspThemeExtensions`, `EditorView.lineWrapping`, the `updateListener` that fires `onChange`, and `editorContextMenu({ readOnly, getExtraItems })` (the editor's own menu — see below). `imagePaste` and `dropLink` are pushed into this layer when their config objects are supplied — they must be fixed at mount and cannot be toggled.
+
+#### The editor's own context menu
+
+`editorContextMenu` shows no menu at all in a read-only editor (right-click just suppresses the native OS menu and lets the event bubble to the host; the `/` trigger and Shift+F10/ContextMenu keymap are no-ops). In an editable editor the menu opens three ways, always in the same order: any `contextMenu.extraItems` first (e.g. "New note…"), then a separator (only when there were host items), then a Formatting submenu, then a separator, then Copy, Paste, Delete.
+
+- **Right-click** — at the pointer, acting on the selection if the click landed inside it, otherwise a caret at the click point.
+- **Typing `/`** — held back (not inserted) and the menu opens anchored at the caret's line, when `shouldOpenSlashMenu` (`extensions/slash-trigger.ts`) says the caret is at a word boundary — the start of its line (any line, including an empty one, or right after a list/blockquote marker's space) or after whitespace — and not inside code, a wiki-link `[[...` or `@...` query (`extensions/wiki-link-query.ts`), or a URL/Link — this is what keeps `and/or`, `1/2`, and `http://` from ever triggering it. Escape (or clicking outside) re-inserts a literal `/`; Backspace drops it entirely; choosing an action runs it in place of the `/`. Typing `/` while there's a selection just types `/` normally (replacing the selection), it never opens the menu.
+- **Shift+F10 / the ContextMenu key** — opens the same menu anchored at the caret, acting on the current selection, without the `/` bookkeeping (no re-insertion on Escape, Backspace doesn't close it).
 
 **Mode compartment (hot-swappable via `Compartment`):**
 `markdownDecorations()`, `imageDecorations(imagesConfig)`, `wikiLinks(...)`, and `markdownLinkClick(...)` are all bundled inside a single `Compartment`. In source mode the compartment holds an empty array; in live mode it holds these four. Switching mode calls `compartment.reconfigure(...)` — no editor recreation. The compartment instance is part of the `SavedEditorInstance` and must always round-trip with the state it belongs to.

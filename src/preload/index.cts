@@ -19,6 +19,8 @@ contextBridge.exposeInMainWorld('fsApi', {
   readDir: (dirPath: string) => ipcRenderer.invoke('fs:readDir', dirPath),
   read: (filePath: string) => ipcRenderer.invoke('fs:read', filePath),
   write: (filePath: string, content: string) => ipcRenderer.invoke('fs:write', filePath, content),
+  writeNew: (filePath: string, content: string) =>
+    ipcRenderer.invoke('fs:writeNew', filePath, content),
   writeBuffer: (filePath: string, buffer: Uint8Array) => ipcRenderer.invoke('fs:writeBuffer', filePath, buffer),
   delete: (filePath: string) => ipcRenderer.invoke('fs:delete', filePath),
   trash: (filePath: string) => ipcRenderer.invoke('fs:trash', filePath),

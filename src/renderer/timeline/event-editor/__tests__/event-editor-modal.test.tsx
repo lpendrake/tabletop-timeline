@@ -49,12 +49,23 @@ vi.mock('../../../peek/stack', () => ({
   closeFromWikiLink: vi.fn(),
 }));
 
+// Captures the latest props MarkdownEditor was rendered with, so tests can
+// inspect contextMenu/knownIds without a real CodeMirror instance.
+const lastMarkdownEditorProps: { current: Record<string, unknown> | null } = { current: null };
+
+vi.mock('../../../notes/new-note-from-editor', () => ({
+  runNewNoteFromEditor: vi.fn(),
+}));
+
 // Render MarkdownEditor as a simple textarea so onChange is testable.
 // FormatToolbar renders its footerSlot inline so buttons are discoverable.
 vi.mock('../../../shared/markdown-editor', () => ({
-  MarkdownEditor: ({ onChange }: { onChange: (s: string) => void; content: string }) => (
-    <textarea data-testid="markdown-editor" onChange={(e) => onChange(e.target.value)} />
-  ),
+  MarkdownEditor: (props: { onChange: (s: string) => void; content: string }) => {
+    lastMarkdownEditorProps.current = props;
+    return (
+      <textarea data-testid="markdown-editor" onChange={(e) => props.onChange(e.target.value)} />
+    );
+  },
   FormatToolbar: ({
     footerSlot,
   }: {
@@ -109,6 +120,7 @@ vi.mock('../../../theme', () => ({
 import { timelinePort } from '../../data/ports';
 import { EventEditorModal } from '../EventEditorModal';
 import { fireEvent } from '@testing-library/react';
+import { runNewNoteFromEditor } from '../../../notes/new-note-from-editor';
 
 const CAMPAIGN = '/fake/campaign';
 const MTIME = '2026-01-01T00:00:00.000Z';
@@ -635,5 +647,64 @@ describe('EventEditorModal', () => {
 
     expect(confirmMock).toHaveBeenCalledTimes(1);
     expect(timelinePort.deleteEvent).not.toHaveBeenCalled();
+  });
+
+  // ── "New note…" menu item ──
+
+  it('passes a New note menu item to the editor and stays open after creating', async () => {
+    setup();
+    const { applyEntityDelta } = await import('../../../../shared/entity-labels');
+    vi.mocked(applyEntityDelta).mockImplementation((prev: unknown, delta: unknown) => {
+      const list = prev as { id: string; path: string }[];
+      const d = delta as
+        | { op: 'add' | 'update'; entry: { id: string; path: string } }
+        | { op: 'remove'; path: string };
+      if (d.op === 'add' || d.op === 'update') {
+        return [...list.filter((e) => e.id !== d.entry.id && e.path !== d.entry.path), d.entry];
+      }
+      return list.filter((e) => e.path !== d.path);
+    });
+
+    const { onClose } = await renderCreate();
+
+    expect(lastMarkdownEditorProps.current?.contextMenu).toBeDefined();
+    const contextMenu = lastMarkdownEditorProps.current!.contextMenu as {
+      extraItems: (ctx: unknown) => { onSelect: () => void }[];
+    };
+
+    const fakeCtx = {
+      view: { focus: vi.fn() },
+      from: 0,
+      to: 0,
+      selectedText: '',
+      replaceRange: vi.fn(),
+    };
+    const items = contextMenu.extraItems(fakeCtx);
+    expect(items).toHaveLength(1);
+
+    const createdNote = {
+      id: 'newn',
+      folder: 'npcs',
+      filename: 'new-npc.md',
+      title: 'New NPC',
+      frontmatter: '',
+      body: '',
+    };
+    vi.mocked(runNewNoteFromEditor).mockImplementation(async (_ctx, opts) => {
+      opts.onCreated?.(createdNote);
+      return createdNote;
+    });
+
+    await act(async () => {
+      items[0].onSelect();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(runNewNoteFromEditor).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+    const wikiLinks = lastMarkdownEditorProps.current!.wikiLinks as { knownIds: Set<string> };
+    expect(wikiLinks.knownIds).toBeInstanceOf(Set);
+    expect(wikiLinks.knownIds.has('newn')).toBe(true);
   });
 });

@@ -9,6 +9,17 @@ export const notesData = {
     return window.fsApi.write(path, content);
   },
 
+  /**
+   * Writes a brand-new note file. Never overwrites an existing file — see
+   * `window.fsApi.writeNew` / `fs:writeNew` in the main process.
+   */
+  async createNoteFile(
+    path: string,
+    content: string,
+  ): Promise<{ ok: true } | { ok: false; reason: 'exists' | 'error'; message?: string }> {
+    return window.fsApi.writeNew(path, content);
+  },
+
   async deleteNote(path: string): Promise<boolean> {
     return window.fsApi.trash(path);
   },

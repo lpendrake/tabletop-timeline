@@ -9,6 +9,14 @@ import { act } from 'react';
 import { EditorView } from '@codemirror/view';
 import { MarkdownEditor } from '../markdown-editor';
 import { FormatToolbar } from '../format-toolbar';
+import type { EditorMenuExtraItems } from '../extensions/editor-context-menu';
+
+const showContextMenuMock = vi.fn();
+
+vi.mock('../../context-menu', async () => {
+  const actual = await vi.importActual<typeof import('../../context-menu')>('../../context-menu');
+  return { ...actual, showContextMenu: (...args: unknown[]) => showContextMenuMock(...args) };
+});
 
 let container: HTMLDivElement;
 let root: Root;
@@ -184,6 +192,53 @@ describe('MarkdownEditor', () => {
     setup();
     renderEl(<MarkdownEditor content="no extras" onChange={vi.fn()} />);
     expect(container.querySelector('.markdown-editor-container')).not.toBeNull();
+  });
+
+  it('contextMenu.extraItems prop is read at open time', () => {
+    setup();
+    showContextMenuMock.mockClear();
+    const viewRef = createRef<EditorView | null>() as React.MutableRefObject<EditorView | null>;
+
+    const makeItems =
+      (label: string): EditorMenuExtraItems =>
+      () => [{ kind: 'action', label, onSelect: () => {} }];
+
+    renderEl(
+      <MarkdownEditor
+        content="hello"
+        onChange={vi.fn()}
+        viewRef={viewRef}
+        contextMenu={{ extraItems: makeItems('First') }}
+      />,
+    );
+
+    // Change the prop after mount — the base extension layer is built once,
+    // but getExtraItems() should read the latest callback each time it opens.
+    renderEl(
+      <MarkdownEditor
+        content="hello"
+        onChange={vi.fn()}
+        viewRef={viewRef}
+        contextMenu={{ extraItems: makeItems('Second') }}
+      />,
+    );
+
+    const view = viewRef.current!;
+    vi.spyOn(view, 'posAtCoords').mockReturnValue(null);
+    const event = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 1,
+      clientY: 1,
+    });
+    act(() => {
+      view.contentDOM.dispatchEvent(event);
+    });
+
+    expect(showContextMenuMock).toHaveBeenCalledTimes(1);
+    const items = showContextMenuMock.mock.calls[0][0] as { kind: string; label?: string }[];
+    expect(items.some((i) => i.label === 'Second')).toBe(true);
+    expect(items.some((i) => i.label === 'First')).toBe(false);
   });
 
   it('mounts in readOnly mode without onChange and is non-editable', () => {

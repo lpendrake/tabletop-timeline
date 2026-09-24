@@ -8,11 +8,11 @@ import {
   makeDropLinkConfig,
   makePeekWikiLinksConfig,
 } from './editor-bindings';
+import { useNewNoteMenuConfig } from './hooks/use-new-note-menu-config';
 import { buildEntityLabelMap } from '../../shared/entity-labels';
 import { revealInExplorer } from '../shared/reveal-in-explorer';
 import { buildEntityLink, buildAssetLink } from '../shared/entity-link';
 import { copyToClipboard } from '../shared/clipboard';
-import { QuickAdd } from './components/quick-add.tsx';
 import { NoteContextMenu } from './components/note-context-menu.tsx';
 import { LabelOverrideEditor } from '../shared/components/label-override-editor';
 import { EditorTabs } from './components/editor-tabs.tsx';
@@ -26,7 +26,6 @@ import './styles/sidebar.css';
 import './styles/tabs.css';
 import './styles/editor-surface.css';
 import './styles/markdown.css';
-import './styles/quick-add.css';
 import './styles/toast.css';
 import './styles/confirm.css';
 import './styles/context-menu.css';
@@ -70,6 +69,12 @@ export function NotesApp({
   );
   const dropLinkConfig = useMemo(() => makeDropLinkConfig(), []);
   const peekWikiLinksConfig = useMemo(() => makePeekWikiLinksConfig(), []);
+
+  const newNoteMenuConfig = useNewNoteMenuConfig({
+    campaignPath,
+    entityIndex: ctrl.entityIndex,
+    onCreated: ctrl.handleNoteCreatedFromEditor,
+  });
 
   // Open a note from the search overlay, then scroll to the match position.
   // Both steps are sequenced here so the scroll happens only after the note's
@@ -208,6 +213,7 @@ export function NotesApp({
                 mdLinks={{ onOpenInternal: ctrl.openMarkdownLink }}
                 imagePaste={imagePasteConfig}
                 dropLink={dropLinkConfig}
+                contextMenu={newNoteMenuConfig}
               />
             ) : ctrl.activeTab ? (
               <div className="editor-placeholder">Loading...</div>
@@ -248,18 +254,6 @@ export function NotesApp({
           }
         />
       </FooterPortal>
-
-      <QuickAdd
-        open={ctrl.quickAddOpen}
-        folders={ctrl.folders}
-        initialText={ctrl.quickAddSeed}
-        initialFolder={ctrl.quickAddFolder}
-        onClose={() => {
-          ctrl.setQuickAddOpen(false);
-          ctrl.setQuickAddFolder(undefined);
-        }}
-        onCreate={ctrl.handleQuickAddCreate}
-      />
 
       <div className="notes-toasts">
         {ctrl.toasts.map((t) => (

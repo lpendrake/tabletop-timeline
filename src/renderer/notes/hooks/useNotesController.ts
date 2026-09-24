@@ -19,10 +19,17 @@ import {
   computeRenamedPath,
 } from '../domain/file-ops';
 import { tabsReducer, type TabsState } from '../domain/tabs-reducer';
-import { splitFrontmatter, joinFrontmatter } from '../../../shared/frontmatter';
-import { generateShortId } from '../../../shared/ids';
+import { splitFrontmatter } from '../../../shared/frontmatter';
 import { useSaveSync } from './useSaveSync';
 import { useFolderTree } from './useFolderTree';
+import {
+  addCreatedNoteToFolderFiles,
+  addFolderForCreatedNote,
+  folderPathsToOpenForCreatedNote,
+} from '../domain/created-note-state';
+import { entityFromCreatedNote } from '../domain/entity-from-created-note';
+import { createNoteInFolder } from '../create-note-in-folder';
+import type { CreatedNote } from '../create-note';
 import {
   tabKey,
   isEditableNote,
@@ -84,9 +91,6 @@ export function useNotesController({
 
   // ---- UI ----
   const [renderMode, setRenderMode] = useState<'live' | 'source'>('live');
-  const [quickAddOpen, setQuickAddOpen] = useState(false);
-  const [quickAddSeed, setQuickAddSeed] = useState('');
-  const [quickAddFolder, setQuickAddFolder] = useState<string | undefined>(undefined);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
 
@@ -241,13 +245,6 @@ export function useNotesController({
         if (at) setSavingState((prev) => ({ ...prev, [tabKey(at)]: 'dirty' }));
         return;
       }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setQuickAddSeed('');
-        setQuickAddFolder(undefined);
-        setQuickAddOpen(true);
-        return;
-      }
     }
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -344,64 +341,46 @@ export function useNotesController({
     dispatch({ type: 'close', folder: tab.folder, path: tab.path });
   }
 
-  const handleQuickAddCreate = useCallback(
-    async ({ folder, title }: { folder: string; title: string }) => {
-      const slug = slugify(title);
-      if (!slug) return;
-      const filename = `${slug}.md`;
-      setQuickAddOpen(false);
-      // Write frontmatter from the start so the entity-index watcher finds needsWrite:false
-      // and does not rewrite the file, which would create a race with our autosave.
-      const id = generateShortId();
-      const frontmatter = `id: ${id}\ntitle: ${title}`;
-      const body = `# ${title}\n\n`;
-      try {
-        const fullPath = `${campaignPath}/notes/${folder}/${filename}`;
-        await notesData.saveNote(fullPath, joinFrontmatter(frontmatter, body));
-
-        setFolderFiles((prev) => {
-          const existing = prev[folder] ?? [];
-          if (existing.some((e) => e.path === filename)) return prev;
-          return { ...prev, [folder]: [...existing, { id, path: filename, title, kind: 'note' }] };
-        });
-        setFolders((prev) => (prev.includes(folder) ? prev : [...prev, folder].sort()));
-        setOpenFolderPaths((prev) => new Set([...prev, folder]));
-        setOpenFiles((prev) => ({
-          ...prev,
-          [`${folder}/${filename}`]: { content: body, frontmatter, dirty: false, loading: false },
-        }));
-        dispatch({ type: 'open', folder, path: filename });
-        pushToast(`Created ${folder}/${filename}`);
-      } catch (err) {
-        pushToast(`Failed to create note: ${String(err)}`, true);
-      }
-    },
-    [campaignPath, pushToast],
-  );
+  /**
+   * Adds a note created from the editor's "New note…" menu action to the
+   * sidebar and the entity index, without opening a tab or switching views
+   * (the editor the user was typing in stays focused and in place).
+   */
+  const handleNoteCreatedFromEditor = useCallback((note: CreatedNote) => {
+    setFolderFiles((prev) => addCreatedNoteToFolderFiles(prev, note) ?? prev);
+    setFolders((prev) => addFolderForCreatedNote(prev, note));
+    setOpenFolderPaths(
+      (prev) => new Set([...prev, ...folderPathsToOpenForCreatedNote(note.folder)]),
+    );
+    setEntityIndex((prev) =>
+      applyEntityDelta(prev, { op: 'add', entry: entityFromCreatedNote(note) }),
+    );
+  }, []);
 
   async function commitNewFileInFolder(ctx: { folder: string; subdir?: string }, name: string) {
     setCreatingIn(null);
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    const slug = slugify(trimmed);
-    const base = slug.endsWith('.md') ? slug : `${slug}.md`;
-    const filePath = ctx.subdir ? `${ctx.subdir}/${base}` : base;
     try {
-      // Write frontmatter from the start so the entity-index watcher finds needsWrite:false
-      // and does not rewrite the file, which would race with ensureLoaded's disk read.
-      const id = generateShortId();
-      const frontmatter = `id: ${id}\ntitle: ${trimmed}`;
-      const body = `# ${trimmed}\n\n`;
-      const fullPath = `${campaignPath}/notes/${ctx.folder}/${filePath}`;
-      await notesData.saveNote(fullPath, joinFrontmatter(frontmatter, body));
-
-      setFolderFiles((prev) => {
-        const existing = prev[ctx.folder] ?? [];
-        return {
-          ...prev,
-          [ctx.folder]: [...existing, { id, path: filePath, title: trimmed, kind: 'note' }],
-        };
+      const result = await createNoteInFolder({
+        campaignPath,
+        folder: ctx.folder,
+        subdir: ctx.subdir,
+        name,
+        entityIndex,
       });
+      if (!result) return;
+      if (result.status === 'exists') {
+        pushToast(result.message, true);
+        return;
+      }
+
+      const { note } = result;
+      setFolderFiles((prev) => addCreatedNoteToFolderFiles(prev, note) ?? prev);
+      setFolders((prev) => addFolderForCreatedNote(prev, note));
+      setEntityIndex((prev) =>
+        applyEntityDelta(prev, { op: 'add', entry: entityFromCreatedNote(note) }),
+      );
+
+      const filePath = ctx.subdir ? `${ctx.subdir}/${note.filename}` : note.filename;
       await openFile(ctx.folder, filePath);
     } catch (err) {
       pushToast(`Failed to create: ${String(err)}`, true);
@@ -613,9 +592,6 @@ export function useNotesController({
     dragTarget,
     // UI state
     renderMode,
-    quickAddOpen,
-    quickAddSeed,
-    quickAddFolder,
     toasts,
     confirm,
     // Computed
@@ -634,9 +610,6 @@ export function useNotesController({
     setDragTarget,
     setOpenFolderPaths,
     setConfirm,
-    setQuickAddSeed,
-    setQuickAddFolder,
-    setQuickAddOpen,
     setSavingState,
     setSavedAt,
     // Actions
@@ -660,7 +633,7 @@ export function useNotesController({
     handleOpenLabelEditor,
     openMarkdownLink,
     suggestLinks,
-    handleQuickAddCreate,
+    handleNoteCreatedFromEditor,
     pushToast,
     dismissToast,
   };

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { generateShortId } from '../ids';
 
 describe('generateShortId', () => {
@@ -24,5 +24,36 @@ describe('generateShortId', () => {
     // any collision in 1000 samples.  Allow up to 2 collisions so the test
     // is non-flaky while still failing if the generator is badly broken.
     expect(ids.size).toBeGreaterThanOrEqual(998);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('avoids ids in the existing set', () => {
+    // Four Math.random() calls produce 'aaaa', the next four 'bbbb'.
+    vi.spyOn(Math, 'random')
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0.03)
+      .mockReturnValueOnce(0.03)
+      .mockReturnValueOnce(0.03)
+      .mockReturnValueOnce(0.03);
+
+    const id = generateShortId(new Set(['aaaa']));
+
+    expect(id).toBe('bbbb');
+  });
+
+  it('returns the first id when there is no existing set', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    expect(generateShortId()).toBe('aaaa');
+  });
+
+  it('throws after bounded retries when every candidate clashes', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0); // always generates 'aaaa'
+    expect(() => generateShortId(new Set(['aaaa']))).toThrow();
   });
 });

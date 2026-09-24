@@ -2,6 +2,7 @@ import type { EntityIndexEntry } from '../../types/global';
 import { showPeek, type PeekHandle } from './show';
 import { resolvePeekTarget } from './resolve';
 import { buildEntityLabelMap } from '../../shared/entity-labels';
+import { isContextMenuOpen, onContextMenuOpenChange } from '../shared/context-menu';
 
 const OPEN_DELAY_MS = 150;
 const CLOSE_DELAY_MS = 250;
@@ -18,6 +19,7 @@ let openTimer: ReturnType<typeof setTimeout> | null = null;
 let closeTimer: ReturnType<typeof setTimeout> | null = null;
 let stackConfig: PeekStackConfig | null = null;
 let unsubDelta: (() => void) | null = null;
+let unsubMenu: (() => void) | null = null;
 
 export interface PeekStackConfig {
   fetcher: (path: string, signal: AbortSignal) => Promise<string>;
@@ -40,7 +42,11 @@ function cancelClose() {
 }
 
 function isLive(el: Element | null): boolean {
-  if (!el) return false;
+  // `relatedTarget` on a native mouse event isn't always an Element — the
+  // pointer can leave into the Document (or another non-Element node, or
+  // out of the window entirely, e.g. into devtools), and `.closest` would
+  // throw on anything that isn't one.
+  if (!(el instanceof Element)) return false;
   if (el.closest('.peek-window')) return true;
 
   // CM6 wiki-link decoration spans
@@ -114,7 +120,7 @@ function scheduleOpen(path: string, anchor: HTMLElement) {
   }, OPEN_DELAY_MS);
 }
 
-function scheduleClose() {
+function startCloseTimer() {
   if (stack.length > 0 && closeTimer === null) {
     closeTimer = setTimeout(() => {
       closeTimer = null;
@@ -123,8 +129,42 @@ function scheduleClose() {
   }
 }
 
+function scheduleClose() {
+  // A context menu opened from inside a peek (or anywhere else) must not
+  // let a hover-out close the peek stack out from under it — the menu's
+  // actions (e.g. "Go to", "Copy link") need the peek's context to still be
+  // there. `recheckAfterMenuCloses` re-evaluates once the menu goes away.
+  if (isContextMenuOpen()) return;
+  startCloseTimer();
+}
+
+/**
+ * The element the pointer is currently over, without a global `mousemove`
+ * tracker: Chromium (and so Electron's renderer) keeps `:hover` accurate on
+ * every element the pointer is over, most-specific last, so the last match
+ * is the same element `elementFromPoint` at the pointer would return.
+ */
+function hoveredElement(): Element | null {
+  const hovered = document.querySelectorAll(':hover');
+  return hovered.length > 0 ? hovered[hovered.length - 1] : null;
+}
+
+/**
+ * Re-applies the normal hover-out rule right after a context menu closes:
+ * if the pointer isn't over a live element any more, schedule the usual
+ * close. Without this, a peek whose hover-out was suppressed while the menu
+ * was open (see `scheduleClose`) would stay open indefinitely until the next
+ * unrelated mouse movement happened to cross a element boundary.
+ */
+function recheckAfterMenuCloses() {
+  if (stack.length === 0) return;
+  if (isLive(hoveredElement())) return;
+  scheduleClose();
+}
+
 function handleOver(e: MouseEvent) {
-  const target = e.target as Element;
+  if (!(e.target instanceof Element)) return;
+  const target = e.target;
   if (target.closest('.peek-window')) cancelClose();
 
   // CM6 wiki-link span
@@ -174,6 +214,12 @@ export function initPeek(config: PeekStackConfig): void {
   document.addEventListener('mouseover', handleOver);
   document.addEventListener('mouseout', handleOut);
   window.addEventListener('keydown', handleKey);
+  // Notified on every open/close transition (0→1 or 1→0 open menus); we
+  // only act on the close side, re-applying the hover-out rule that was
+  // suppressed while a menu was open.
+  unsubMenu = onContextMenuOpenChange((open) => {
+    if (!open) recheckAfterMenuCloses();
+  });
   unsubDelta = window.fsApi.onEntityDelta(() => {
     if (!stackConfig) return;
     const labels = buildEntityLabelMap(stackConfig.getEntityIndex());
@@ -186,6 +232,8 @@ export function teardownPeek(): void {
   document.removeEventListener('mouseover', handleOver);
   document.removeEventListener('mouseout', handleOut);
   window.removeEventListener('keydown', handleKey);
+  unsubMenu?.();
+  unsubMenu = null;
   cancelOpen();
   cancelClose();
   closeStack();

@@ -21,6 +21,7 @@ import {
 } from './settings/default-view-settings.js';
 import { setCampaignVersion } from './migration/campaign-version.js';
 import { LATEST_VERSION } from './migration/registry.js';
+import { writeNewFile } from './write-new-file.js';
 
 const { autoUpdater } = pkg;
 
@@ -250,6 +251,10 @@ ${description}
       console.error('Failed to write file:', error);
       throw error;
     }
+  });
+
+  ipcMain.handle('fs:writeNew', async (_event, filePath: string, content: string) => {
+    return writeNewFile(filePath, content);
   });
 
   ipcMain.handle('fs:delete', async (event, filePath: string) => {
