@@ -239,6 +239,51 @@ export function buildEditorMenuItems(
   return items;
 }
 
+/**
+ * Rect shape returned by `view.coordsAtPos` — also what our line-block
+ * fallback below produces.
+ */
+interface CaretRect {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+/**
+ * Resolves a caret rect for `pos` that's always usable, even when
+ * `EditorView.coordsAtPos` can't measure one.
+ *
+ * `coordsAtPos` measures from the DOM text node touching `pos`. At the
+ * start of an *empty* line (a brand-new blank line, an empty document, or
+ * the line right after a blank one) there is no such text node — CodeMirror
+ * renders an empty line as an unmeasurable point — so `coordsAtPos` returns
+ * `null` for both caret sides (`1` and `-1`) there. That's exactly the case
+ * that made typing `/` at the start of an empty line silently insert a
+ * literal `/` instead of opening the menu: `openCaretMenu` bailed out on the
+ * null result and the input handler let the character through.
+ *
+ * When both sides come back null, we fall back to the line's block geometry
+ * (`lineBlockAt` + `documentTop`, which together give screen-space
+ * top/bottom for the line even when it holds no measurable content) for
+ * vertical position, and the content box's left edge plus its CSS padding
+ * for horizontal position — which is exactly where the caret sits at the
+ * start of a line with no indentation.
+ */
+function getCaretRect(view: EditorView, pos: number): CaretRect | null {
+  const direct = view.coordsAtPos(pos, 1) ?? view.coordsAtPos(pos, -1);
+  if (direct) return direct;
+
+  const line = view.lineBlockAt(pos);
+  const top = view.documentTop + line.top;
+  const bottom = view.documentTop + line.bottom;
+  const contentRect = view.contentDOM.getBoundingClientRect();
+  const paddingLeft = parseFloat(getComputedStyle(view.contentDOM).paddingLeft || '0') || 0;
+  const left = contentRect.left + paddingLeft;
+
+  return { left, right: left, top, bottom };
+}
+
 /** Opens the menu anchored at the caret (shared by the `/` trigger and Shift+F10/ContextMenu). */
 function openCaretMenu(
   view: EditorView,
@@ -246,7 +291,7 @@ function openCaretMenu(
   config: EditorContextMenuConfig,
   extraOptions: { backspaceCloses?: boolean; onClose?: (reason?: ContextMenuCloseReason) => void },
 ): boolean {
-  const coords = view.coordsAtPos(range.from);
+  const coords = getCaretRect(view, range.from);
   if (!coords) return false;
 
   const lineRect = {
@@ -299,8 +344,9 @@ function makeSlashInputHandler(config: EditorContextMenuConfig): Extension {
     });
 
     // Return true to hold the '/' back (don't insert it) — whether or not
-    // the menu actually opened; if coordsAtPos failed, openCaretMenu
-    // returned false and we fall through to letting '/' type normally.
+    // the menu actually opened; openCaretMenu only returns false in the
+    // (practically unreachable) case where getCaretRect can't resolve any
+    // rect at all, and we fall through to letting '/' type normally then.
     return opened;
   });
 }

@@ -93,6 +93,44 @@ describe('editorContextMenu', () => {
     expect(options.backspaceCloses).toBe(true);
   });
 
+  it('opens the menu, anchored to the line, when coordsAtPos cannot measure a rect (the real-browser bug at an empty line)', () => {
+    // Real Chromium's `coordsAtPos` returns null (for both bias sides) right
+    // at the start of an empty line — a brand-new blank line, an empty
+    // document, or the line right after a blank one — because there is no
+    // text node there to measure a rect from. That's the actual root cause
+    // of the reported bug: typing `/` there inserted a literal `/` instead
+    // of opening the menu, because `openCaretMenu` bailed out on the null
+    // coordsAtPos result. We reproduce that exact condition here (rather
+    // than the happy-dom default, which doesn't reliably return null) and
+    // assert `getCaretRect`'s line-block fallback still produces a usable
+    // rect so the menu opens.
+    const view = makeView('');
+    vi.spyOn(view, 'coordsAtPos').mockReturnValue(null);
+
+    const handled = typeSlash(view, 0);
+
+    expect(handled).toBe(true);
+    expect(view.state.doc.toString()).toBe('');
+    expect(showContextMenuMock).toHaveBeenCalledTimes(1);
+
+    const { x, y, options } = lastShowContextMenuCall();
+    expect(Number.isFinite(x)).toBe(true);
+    expect(Number.isFinite(y)).toBe(true);
+    expect(options.anchor.lineRect).toBeDefined();
+  });
+
+  it('opens the menu on the empty line right after Enter, with no coordsAtPos rect available', () => {
+    const view = makeView('first\n');
+    vi.spyOn(view, 'coordsAtPos').mockReturnValue(null);
+
+    const pos = view.state.doc.length;
+    const handled = typeSlash(view, pos);
+
+    expect(handled).toBe(true);
+    expect(view.state.doc.toString()).toBe('first\n');
+    expect(showContextMenuMock).toHaveBeenCalledTimes(1);
+  });
+
   it('typing / at the start of a later line opens the menu', () => {
     const view = makeView('first\n');
     stubCoords(view);
