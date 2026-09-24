@@ -2,7 +2,7 @@ import type { EntityIndexEntry } from '../../types/global';
 import { showPeek, type PeekHandle } from './show';
 import { resolvePeekTarget } from './resolve';
 import { buildEntityLabelMap } from '../../shared/entity-labels';
-import { isContextMenuOpen } from '../shared/context-menu';
+import { isContextMenuOpen, onContextMenuOpenChange } from '../shared/context-menu';
 
 const OPEN_DELAY_MS = 150;
 const CLOSE_DELAY_MS = 250;
@@ -19,10 +19,7 @@ let openTimer: ReturnType<typeof setTimeout> | null = null;
 let closeTimer: ReturnType<typeof setTimeout> | null = null;
 let stackConfig: PeekStackConfig | null = null;
 let unsubDelta: (() => void) | null = null;
-let menuWatcher: MutationObserver | null = null;
-let lastPointerX = 0;
-let lastPointerY = 0;
-let wasMenuOpen = false;
+let unsubMenu: (() => void) | null = null;
 
 export interface PeekStackConfig {
   fetcher: (path: string, signal: AbortSignal) => Promise<string>;
@@ -123,12 +120,7 @@ function scheduleOpen(path: string, anchor: HTMLElement) {
   }, OPEN_DELAY_MS);
 }
 
-function scheduleClose() {
-  // A context menu opened from inside a peek (or anywhere else) must not
-  // let a hover-out close the peek stack out from under it — the menu's
-  // actions (e.g. "Go to", "Copy link") need the peek's context to still be
-  // there. `recheckAfterMenuCloses` re-evaluates once the menu goes away.
-  if (isContextMenuOpen()) return;
+function startCloseTimer() {
   if (stack.length > 0 && closeTimer === null) {
     closeTimer = setTimeout(() => {
       closeTimer = null;
@@ -137,18 +129,44 @@ function scheduleClose() {
   }
 }
 
+function scheduleClose() {
+  // A context menu opened from inside a peek (or anywhere else) must not
+  // let a hover-out close the peek stack out from under it — the menu's
+  // actions (e.g. "Go to", "Copy link") need the peek's context to still be
+  // there. `recheckAfterMenuCloses` re-evaluates once the menu goes away.
+  if (isContextMenuOpen()) return;
+  startCloseTimer();
+}
+
+/**
+ * The element the pointer is currently over, without a global `mousemove`
+ * tracker: Chromium (and so Electron's renderer) keeps `:hover` accurate on
+ * every element the pointer is over, most-specific last, so the last match
+ * is the same element `elementFromPoint` at the pointer would return.
+ */
+function hoveredElement(): Element | null {
+  const hovered = document.querySelectorAll(':hover');
+  return hovered.length > 0 ? hovered[hovered.length - 1] : null;
+}
+
 /**
  * Re-applies the normal hover-out rule right after a context menu closes:
  * if the pointer isn't over a live element any more, schedule the usual
  * close. Without this, a peek whose hover-out was suppressed while the menu
  * was open (see `scheduleClose`) would stay open indefinitely until the next
  * unrelated mouse movement happened to cross a element boundary.
+ *
+ * Calls `startCloseTimer` directly rather than `scheduleClose` — the
+ * subscription that calls this already knows (from the registry, not a DOM
+ * query) that the last menu just closed, and a closing `<ContextMenu>`'s
+ * `.context-menu` node can still be attached for a tick after its unmount
+ * effect cleanup (this function's caller) runs; `scheduleClose`'s
+ * `isContextMenuOpen` guard would see that lingering node and wrongly skip.
  */
 function recheckAfterMenuCloses() {
   if (stack.length === 0) return;
-  const hovered = document.elementFromPoint(lastPointerX, lastPointerY);
-  if (isLive(hovered)) return;
-  scheduleClose();
+  if (isLive(hoveredElement())) return;
+  startCloseTimer();
 }
 
 function handleOver(e: MouseEvent) {
@@ -197,30 +215,18 @@ function handleKey(e: KeyboardEvent) {
   stack.pop()!.handle.close();
 }
 
-function trackPointer(e: MouseEvent) {
-  lastPointerX = e.clientX;
-  lastPointerY = e.clientY;
-}
-
-function checkMenuTransition() {
-  const menuOpen = isContextMenuOpen();
-  if (wasMenuOpen && !menuOpen) recheckAfterMenuCloses();
-  wasMenuOpen = menuOpen;
-}
-
 export function initPeek(config: PeekStackConfig): void {
   if (stackConfig !== null) teardownPeek();
   stackConfig = config;
   document.addEventListener('mouseover', handleOver);
   document.addEventListener('mouseout', handleOut);
-  document.addEventListener('mousemove', trackPointer, { passive: true });
   window.addEventListener('keydown', handleKey);
-  wasMenuOpen = isContextMenuOpen();
-  // `showContextMenu` always mounts its host directly on `document.body`
-  // (see `shared/context-menu/show.ts`), so watching direct children is
-  // enough to notice the menu closing — no need for `subtree: true`.
-  menuWatcher = new MutationObserver(checkMenuTransition);
-  menuWatcher.observe(document.body, { childList: true });
+  // Notified on every open/close transition (0→1 or 1→0 open menus); we
+  // only act on the close side, re-applying the hover-out rule that was
+  // suppressed while a menu was open.
+  unsubMenu = onContextMenuOpenChange((open) => {
+    if (!open) recheckAfterMenuCloses();
+  });
   unsubDelta = window.fsApi.onEntityDelta(() => {
     if (!stackConfig) return;
     const labels = buildEntityLabelMap(stackConfig.getEntityIndex());
@@ -232,10 +238,9 @@ export function initPeek(config: PeekStackConfig): void {
 export function teardownPeek(): void {
   document.removeEventListener('mouseover', handleOver);
   document.removeEventListener('mouseout', handleOut);
-  document.removeEventListener('mousemove', trackPointer);
   window.removeEventListener('keydown', handleKey);
-  menuWatcher?.disconnect();
-  menuWatcher = null;
+  unsubMenu?.();
+  unsubMenu = null;
   cancelOpen();
   cancelClose();
   closeStack();

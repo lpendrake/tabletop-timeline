@@ -1,5 +1,10 @@
 // @vitest-environment happy-dom
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { createRoot, type Root } from 'react-dom/client';
+import { createElement } from 'react';
+import { act } from 'react';
 import type { EntityIndexDelta } from '../../../types/global';
 
 vi.mock('../show', () => ({ showPeek: vi.fn() }));
@@ -8,6 +13,8 @@ vi.mock('../resolve', () => ({ resolvePeekTarget: vi.fn() }));
 import { showPeek } from '../show';
 import { resolvePeekTarget } from '../resolve';
 import { initPeek, teardownPeek, openFromWikiLink, closeFromWikiLink } from '../stack';
+import { registerContextMenuOpen } from '../../shared/context-menu';
+import { ContextMenu } from '../../shared/context-menu/context-menu';
 import type { ShowPeekOptions, PeekHandle } from '../show';
 
 const mockShowPeek = vi.mocked(showPeek);
@@ -530,19 +537,25 @@ describe('MAX_DEPTH cap', () => {
 });
 
 describe('context menu suppresses hover-out close', () => {
-  function addContextMenu(): HTMLDivElement {
+  // Simulates a menu opening/closing via the presence registry that
+  // `context-menu.tsx` itself registers with — the same mechanism
+  // `stack.ts` subscribes to via `onContextMenuOpenChange`. Also drops a
+  // `.context-menu` marker in the DOM so `isLive`/`isContextMenuOpen`'s DOM
+  // fallback and any `:hover`-based checks see a consistent picture.
+  function addContextMenu(): { close: () => void } {
     const menu = document.createElement('div');
     menu.className = 'context-menu';
     document.body.appendChild(menu);
-    return menu;
+    const unregister = registerContextMenuOpen();
+    return {
+      close: () => {
+        unregister();
+        menu.remove();
+      },
+    };
   }
 
-  async function flushMicrotasks() {
-    await Promise.resolve();
-    await Promise.resolve();
-  }
-
-  it('a peek stays open while a context menu opened from it is open', async () => {
+  it('a peek stays open while a context menu opened from it is open', () => {
     const handle = setupMock();
     const link = makeLinkEl();
     hover(link);
@@ -552,28 +565,26 @@ describe('context menu suppresses hover-out close', () => {
     // pointer then moves off the link and onto the menu, firing a document
     // `mouseout` whose `relatedTarget` sits inside `.context-menu`.
     const menu = addContextMenu();
-    await flushMicrotasks(); // let the MutationObserver register the open menu
-    unhover(link, menu);
+    unhover(link, document.querySelector('.context-menu'));
 
     vi.advanceTimersByTime(1000);
     expect(handle.close).not.toHaveBeenCalled();
+    menu.close();
   });
 
-  it('after the menu closes, moving away closes the peek as usual', async () => {
+  it('after the menu closes, moving away closes the peek as usual', () => {
     const handle = setupMock();
     const link = makeLinkEl();
     hover(link);
     vi.advanceTimersByTime(150);
 
     const menu = addContextMenu();
-    await flushMicrotasks();
-    unhover(link, menu);
+    unhover(link, document.querySelector('.context-menu'));
     vi.advanceTimersByTime(1000);
     expect(handle.close).not.toHaveBeenCalled();
 
     // The menu closes (e.g. an item was selected, or Escape/outside click).
-    menu.remove();
-    await flushMicrotasks();
+    menu.close();
 
     // Normal hover-out rules resume: moving away from the link now starts
     // the usual close timer.
@@ -584,7 +595,7 @@ describe('context menu suppresses hover-out close', () => {
     expect(handle.close).toHaveBeenCalled();
   });
 
-  it('closeFromWikiLink (CM6 hover-end path) is also suppressed while any context menu is open', async () => {
+  it('closeFromWikiLink (CM6 hover-end path) is also suppressed while any context menu is open', () => {
     const handle = setupMock();
     const link = makeLinkEl();
     hover(link);
@@ -594,15 +605,47 @@ describe('context menu suppresses hover-out close', () => {
     // mouseover/mouseout path) must still suppress the close — the
     // suppression lives in `scheduleClose` itself, not just in `isLive`.
     const menu = addContextMenu();
-    await flushMicrotasks();
 
     closeFromWikiLink(document.body);
     vi.advanceTimersByTime(1000);
     expect(handle.close).not.toHaveBeenCalled();
 
-    menu.remove();
-    await flushMicrotasks();
+    menu.close();
     vi.advanceTimersByTime(250);
+    expect(handle.close).toHaveBeenCalled();
+  });
+
+  it('an in-tree menu closing also re-checks the peek', () => {
+    // The old MutationObserver only ever watched `document.body`'s direct
+    // children, so it only ever saw `showContextMenu`'s body-level host. An
+    // in-tree `<ContextMenu>` mounted elsewhere in the app tree (e.g. inside
+    // a peek window) must re-check the peek on close just the same, since
+    // both go through the same registry now.
+    const handle = setupMock();
+    const link = makeLinkEl();
+    hover(link);
+    vi.advanceTimersByTime(150);
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root: Root = createRoot(container);
+    act(() => {
+      root.render(createElement(ContextMenu, { items: [], x: 0, y: 0, onClose: vi.fn() }));
+    });
+
+    unhover(link, container.querySelector('.context-menu'));
+    vi.advanceTimersByTime(1000);
+    expect(handle.close).not.toHaveBeenCalled();
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+
+    unhover(link, document.body);
+    vi.advanceTimersByTime(249);
+    expect(handle.close).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
     expect(handle.close).toHaveBeenCalled();
   });
 });

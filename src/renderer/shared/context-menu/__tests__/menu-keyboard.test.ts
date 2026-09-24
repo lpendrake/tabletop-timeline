@@ -56,6 +56,7 @@ describe('menuKeyDown', () => {
       query: 'de',
       targetIndex: 0,
       preSearchHighlight: [2],
+      filtered: { visible: [], targets: [] },
     };
     const result = menuKeyDown(searching, key('Escape'), items, {});
 
@@ -75,6 +76,7 @@ describe('menuKeyDown', () => {
       query: 'de',
       targetIndex: 0,
       preSearchHighlight: [0],
+      filtered: { visible: [], targets: [] },
     };
     const next = menuQueryChange(searching, '', items);
 
@@ -174,6 +176,32 @@ describe('menuKeyDown', () => {
     const result = menuKeyDown(initialMenuKeyState, key('Escape'), items, {});
     expect(result.handled).toBe(false);
     expect(result.effect).toBeUndefined();
+  });
+
+  it('menu state holds the filtered result; rendering and Enter use the same targets', () => {
+    const items = formattingMenu();
+    // Typing 'de' matches 'Delete' (danger) and 'Details'; the auto target
+    // ('Details') is the same object the component would render.
+    let state = menuKeyDown(initialMenuKeyState, key('d'), items, {}).state;
+    state = menuQueryChange(state, 'de', items);
+
+    // The state itself carries the filtered tree/targets — nothing needs to
+    // recompute `filterMenu` to know what's visible or what Enter will hit.
+    // 'Delete' and 'Details' tie on rank (both prefix matches), so they keep
+    // menu order; the auto target skips the danger 'Delete' for 'Details'.
+    expect(state.filtered.targets.map((t) => t.labels[0])).toEqual(['Delete', 'Details']);
+    expect(state.filtered.visible.map((n) => n.item.label)).toEqual(['Delete', 'Details']);
+    expect(state.targetIndex).toBe(
+      state.filtered.targets.findIndex((t) => t.labels[0] === 'Details'),
+    );
+
+    const hit = menuKeyDown(state, key('Enter'), items, {});
+    expect(hit.effect).toEqual({ type: 'select', path: [2] }); // 'Details' is index 2
+
+    // Arrowing moves within that same stored list of targets.
+    const down = menuKeyDown(state, key('ArrowDown'), items, {});
+    const movedTarget = down.state.filtered.targets[down.state.targetIndex];
+    expect(movedTarget.labels[0]).toBe('Delete');
   });
 });
 

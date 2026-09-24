@@ -4,6 +4,7 @@
  * No DOM access, no React — see `context-menu.tsx` for how this is wired to
  * component state.
  */
+import { wrapIndex } from '../search/wrap-index';
 import type { ContextMenuItem } from './types';
 
 /** An action or submenu row that isn't disabled — the only navigable kinds. */
@@ -27,7 +28,7 @@ export function nextNavigableIndex(
   if (n === 0) return null;
   let i = current;
   for (let step = 0; step < n; step++) {
-    i = (((i + dir) % n) + n) % n;
+    i = wrapIndex(i, dir, n);
     if (isNavigable(items[i])) return i;
   }
   return null;

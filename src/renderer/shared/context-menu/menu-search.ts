@@ -5,7 +5,7 @@
  * Ranking comes from `rankMatch` in `shared/search/rank.ts` (prefix, then
  * word-prefix, then substring; no fuzzy matching).
  */
-import { rankMatch, type MatchRank } from '../search/rank';
+import { compareRanked, rankMatch, type MatchRank } from '../search/rank';
 import type { ContextMenuItem } from './types';
 
 /** A leaf `action` item that matched the query, reachable while searching. */
@@ -46,9 +46,9 @@ export function filterMenu(items: readonly ContextMenuItem[], query: string): Fi
   if (!q) return { visible: [], targets: [] };
 
   const { nodes, targets } = filterLevel(items, q, []);
-  const ordered = targets.map((t, index) => ({ t, index }));
-  ordered.sort((a, b) => a.t.rank - b.t.rank || a.index - b.index);
-  return { visible: nodes, targets: ordered.map((o) => o.t) };
+  const ranked = targets.map((t, index) => ({ ...t, index }));
+  ranked.sort(compareRanked);
+  return { visible: nodes, targets: ranked.map(({ index: _index, ...t }) => t) };
 }
 
 function filterLevel(

@@ -5,6 +5,7 @@
  * React state and to the two side effects a keystroke can request
  * (`MenuEffect`: run an action, or close the menu on Backspace).
  */
+import { wrapIndex } from '../search/wrap-index';
 import {
   firstNavigableIndex,
   firstNonDangerNavigableIndex,
@@ -13,8 +14,10 @@ import {
   nextNavigableIndex,
   pathsEqual,
 } from './menu-navigation';
-import { filterMenu, pickAutoTarget } from './menu-search';
+import { filterMenu, pickAutoTarget, type FilterMenuResult } from './menu-search';
 import type { ContextMenuItem } from './types';
+
+const emptyFiltered: FilterMenuResult = { visible: [], targets: [] };
 
 export interface MenuKeyState {
   highlightPath: number[] | null;
@@ -22,6 +25,14 @@ export interface MenuKeyState {
   query: string;
   targetIndex: number;
   preSearchHighlight: number[] | null;
+  /**
+   * The filtered tree + targets for the current `query`, computed here (the
+   * single source of truth) whenever the query changes. `context-menu.tsx`
+   * renders from this instead of recomputing `filterMenu` itself, so the
+   * targets it renders and the targets `targetIndex` indexes into can never
+   * drift apart.
+   */
+  filtered: FilterMenuResult;
 }
 
 export const initialMenuKeyState: MenuKeyState = {
@@ -30,6 +41,7 @@ export const initialMenuKeyState: MenuKeyState = {
   query: '',
   targetIndex: -1,
   preSearchHighlight: null,
+  filtered: emptyFiltered,
 };
 
 /**
@@ -127,7 +139,7 @@ function retargetedAfter(
   const filtered = filterMenu(items, query);
   const auto = pickAutoTarget(filtered.targets);
   const targetIndex = auto ? filtered.targets.indexOf(auto) : -1;
-  return { ...state, query, targetIndex };
+  return { ...state, query, targetIndex, filtered };
 }
 
 function startSearch(
@@ -149,18 +161,14 @@ function exitSearch(state: MenuKeyState): MenuKeyState {
     query: '',
     targetIndex: -1,
     preSearchHighlight: null,
+    filtered: emptyFiltered,
   };
 }
 
-function moveTarget(
-  state: MenuKeyState,
-  items: readonly ContextMenuItem[],
-  dir: 1 | -1,
-): MenuKeyState {
-  const filtered = filterMenu(items, state.query);
-  const n = filtered.targets.length;
+function moveTarget(state: MenuKeyState, dir: 1 | -1): MenuKeyState {
+  const n = state.filtered.targets.length;
   if (n === 0) return state;
-  const nextIdx = (((state.targetIndex + dir) % n) + n) % n;
+  const nextIdx = wrapIndex(state.targetIndex, dir, n);
   return { ...state, targetIndex: nextIdx };
 }
 
@@ -168,9 +176,9 @@ function activateCurrentTarget(
   state: MenuKeyState,
   items: readonly ContextMenuItem[],
 ): { state: MenuKeyState; effect?: MenuEffect } {
-  const filtered = filterMenu(items, state.query);
-  if (state.targetIndex < 0 || state.targetIndex >= filtered.targets.length) return { state };
-  const target = filtered.targets[state.targetIndex];
+  const { targets } = state.filtered;
+  if (state.targetIndex < 0 || state.targetIndex >= targets.length) return { state };
+  const target = targets[state.targetIndex];
   const item = itemAtPath(items, target.path);
   if (item && item.kind === 'action')
     return { state, effect: { type: 'select', path: target.path } };
@@ -195,9 +203,9 @@ export function menuKeyDown(
       case 'Escape':
         return { state: exitSearch(state), handled: true };
       case 'ArrowDown':
-        return { state: moveTarget(state, items, 1), handled: true };
+        return { state: moveTarget(state, 1), handled: true };
       case 'ArrowUp':
-        return { state: moveTarget(state, items, -1), handled: true };
+        return { state: moveTarget(state, -1), handled: true };
       case 'Enter': {
         const result = activateCurrentTarget(state, items);
         return { state: result.state, handled: true, effect: result.effect };
@@ -258,13 +266,8 @@ export function menuHover(state: MenuKeyState, path: number[]): MenuKeyState {
 }
 
 /** Mouse hover over a row while searching: sets the target, if it's one of the current matches. */
-export function menuSearchHover(
-  state: MenuKeyState,
-  path: number[],
-  items: readonly ContextMenuItem[],
-): MenuKeyState {
-  const filtered = filterMenu(items, state.query);
-  const idx = filtered.targets.findIndex((t) => pathsEqual(t.path, path));
+export function menuSearchHover(state: MenuKeyState, path: number[]): MenuKeyState {
+  const idx = state.filtered.targets.findIndex((t) => pathsEqual(t.path, path));
   if (idx === -1) return state;
   return { ...state, targetIndex: idx };
 }

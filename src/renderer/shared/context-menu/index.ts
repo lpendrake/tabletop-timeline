@@ -12,6 +12,10 @@ export type {
 } from './types';
 export { computeCaretPlacement } from './caret-position';
 export type { CaretPlacement, CaretSide } from './caret-position';
-export { isContextMenuOpen } from './context-menu-presence';
+export {
+  isContextMenuOpen,
+  onContextMenuOpenChange,
+  registerContextMenuOpen,
+} from './context-menu-presence';
 export { filterMenu, pickAutoTarget } from './menu-search';
 export type { FilterMenuResult, FilteredNode, MenuTarget } from './menu-search';

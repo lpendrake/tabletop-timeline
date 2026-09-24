@@ -12,7 +12,7 @@ import { computeSubmenuPosition } from './submenu-position';
 import type { SubmenuSide } from './submenu-position';
 import { computeCaretPlacement } from './caret-position';
 import { itemAtPath, isPathPrefix, pathsEqual } from './menu-navigation';
-import { filterMenu, type FilteredNode, type MenuTarget } from './menu-search';
+import type { FilteredNode } from './menu-search';
 import {
   initialMenuKeyStateFor,
   menuHover,
@@ -21,6 +21,7 @@ import {
   menuSearchHover,
   type MenuKeyState,
 } from './menu-keyboard';
+import { registerContextMenuOpen } from './context-menu-presence';
 import type {
   CaretAnchor,
   ContextMenuCloseReason,
@@ -54,7 +55,7 @@ export function ContextMenu({
   anchor,
 }: ContextMenuProps) {
   const [state, setState] = useState<MenuKeyState>(() => initialMenuKeyStateFor(items));
-  const { highlightPath, isSearching, query, targetIndex } = state;
+  const { highlightPath, isSearching, query, targetIndex, filtered } = state;
   const stateRef = useRef(state);
   stateRef.current = state;
   const inputRef = useRef<HTMLInputElement>(null);
@@ -64,17 +65,14 @@ export function ContextMenu({
     [highlightPath],
   );
 
-  const filtered = useMemo(
-    () =>
-      isSearching
-        ? filterMenu(items, query)
-        : { visible: [] as FilteredNode[], targets: [] as MenuTarget[] },
-    [items, query, isSearching],
-  );
-
   useEffect(() => {
     if (isSearching) inputRef.current?.focus({ preventScroll: true });
   }, [isSearching]);
+
+  // Reports this menu as open for the lifetime of the mount — covers both
+  // an in-tree `<ContextMenu>` and `showContextMenu`'s own root, so hosts
+  // (e.g. the peek stack) can subscribe instead of watching the DOM.
+  useEffect(() => registerContextMenuOpen(), []);
 
   const selectAction = useCallback(
     (item: ActionItem) => {
@@ -179,7 +177,7 @@ export function ContextMenu({
   }
 
   function handleSearchHover(path: number[]) {
-    setState((s) => menuSearchHover(s, path, items));
+    setState((s) => menuSearchHover(s, path));
   }
 
   function handleQueryChange(value: string) {

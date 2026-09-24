@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { filterMenu, pickAutoTarget } from '../menu-search';
+import { compareRanked } from '../../search/rank';
 import type { ContextMenuItem } from '../types';
 
 function formattingMenu(): ContextMenuItem[] {
@@ -88,6 +89,29 @@ describe('filterMenu', () => {
     const { targets } = filterMenu(items, 'head');
     expect(targets).toHaveLength(1);
     expect(targets[0].labels).toEqual(['H1']);
+  });
+
+  it('ordering unchanged (compareRanked): same order as sorting the raw ranks/indices directly', () => {
+    const items: ContextMenuItem[] = [
+      { kind: 'action', label: 'Blockquote', onSelect: vi.fn() },
+      { kind: 'action', label: 'Subheading', onSelect: vi.fn() },
+      { kind: 'action', label: 'Bold', onSelect: vi.fn() },
+      { kind: 'action', label: 'Heading 1', onSelect: vi.fn() },
+    ];
+    const { targets } = filterMenu(items, 'b');
+
+    // Reproduce the expected order by ranking/sorting independently with
+    // the shared `compareRanked` comparator `filterMenu` delegates to.
+    const expected = items
+      .map((item, index) => ({ label: (item as { label: string }).label, index }))
+      .filter((entry) => entry.label.toLowerCase().includes('b'))
+      .map((entry) => ({
+        ...entry,
+        rank: entry.label.toLowerCase().startsWith('b') ? (0 as const) : (2 as const),
+      }))
+      .sort(compareRanked);
+
+    expect(targets.map((t) => t.labels[0])).toEqual(expected.map((e) => e.label));
   });
 });
 

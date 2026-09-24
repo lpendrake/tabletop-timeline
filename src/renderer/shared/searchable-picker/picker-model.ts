@@ -5,6 +5,7 @@
  */
 import { matchPath } from '../search/path-match';
 import { compareRanked, type MatchRank } from '../search/rank';
+import { wrapIndex } from '../search/wrap-index';
 
 export interface PickerOption {
   id: string;
@@ -73,7 +74,5 @@ function searchOptions(options: readonly PickerOption[], query: string): PickerO
 
 /** Moves a highlighted index by `delta`, wrapping around `count` items. */
 export function moveHighlight(index: number, count: number, delta: 1 | -1): number {
-  if (count <= 0) return -1;
-  const next = (index + delta) % count;
-  return next < 0 ? next + count : next;
+  return wrapIndex(index, delta, count);
 }
