@@ -1,5 +1,6 @@
 import { useState, useReducer, useEffect, useCallback, useRef } from 'react';
 import { notesData } from '../data';
+import { createNote } from '../create-note';
 import { slugify } from '../domain/slugify';
 import { parseNotePath } from '../domain/open-note-by-path';
 import { suggestLinks as suggestLinksDomain } from '../../shared/suggest-links';
@@ -348,16 +349,15 @@ export function useNotesController({
     async ({ folder, title }: { folder: string; title: string }) => {
       const slug = slugify(title);
       if (!slug) return;
-      const filename = `${slug}.md`;
       setQuickAddOpen(false);
-      // Write frontmatter from the start so the entity-index watcher finds needsWrite:false
-      // and does not rewrite the file, which would create a race with our autosave.
-      const id = generateShortId();
-      const frontmatter = `id: ${id}\ntitle: ${title}`;
-      const body = `# ${title}\n\n`;
       try {
-        const fullPath = `${campaignPath}/notes/${folder}/${filename}`;
-        await notesData.saveNote(fullPath, joinFrontmatter(frontmatter, body));
+        // Write frontmatter from the start so the entity-index watcher finds needsWrite:false
+        // and does not rewrite the file, which would create a race with our autosave.
+        const { id, filename, frontmatter, body } = await createNote({
+          campaignPath,
+          folder,
+          title,
+        });
 
         setFolderFiles((prev) => {
           const existing = prev[folder] ?? [];

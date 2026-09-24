@@ -45,6 +45,10 @@ declare global {
       readDir: (path: string) => Promise<{ name: string; isDirectory: boolean; path: string }[]>;
       read: (path: string) => Promise<string | null>;
       write: (path: string, content: string) => Promise<boolean>;
+      writeNew: (
+        path: string,
+        content: string,
+      ) => Promise<{ ok: true } | { ok: false; reason: 'exists' | 'error'; message?: string }>;
       writeBuffer: (path: string, buffer: Uint8Array) => Promise<boolean>;
       delete: (path: string) => Promise<boolean>;
       trash: (path: string) => Promise<boolean>;
