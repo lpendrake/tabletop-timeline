@@ -68,4 +68,42 @@ describe('showContextMenu', () => {
     expect(document.body.querySelector('.context-menu')).toBeNull();
     expect(onSelect).not.toHaveBeenCalled();
   });
+
+  it('passes options through, and existing 3-arg calls still work', async () => {
+    // A plain 3-arg call (no options) must still work exactly as before.
+    let plainHandle: ReturnType<typeof showContextMenu>;
+    act(() => {
+      plainHandle = showContextMenu([{ kind: 'action', label: 'Plain', onSelect: vi.fn() }], 5, 5);
+    });
+    expect(document.body.querySelector('.context-menu')).not.toBeNull();
+    await act(async () => {
+      plainHandle!.close();
+    });
+    await flushMicrotasks();
+
+    const onSelect = vi.fn();
+    const restoreFocus = vi.fn();
+    const onClose = vi.fn();
+
+    act(() => {
+      showContextMenu([{ kind: 'action', label: 'Do it', onSelect }], 10, 10, {
+        restoreFocus,
+        onClose,
+        backspaceCloses: true,
+      });
+    });
+
+    const button = Array.from(
+      document.body.querySelectorAll<HTMLButtonElement>('button.context-menu-item'),
+    ).find((b) => b.textContent?.trim() === 'Do it');
+
+    await act(async () => {
+      fireEvent.click(button!);
+    });
+    await flushMicrotasks();
+
+    expect(restoreFocus).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledWith('select');
+  });
 });

@@ -66,12 +66,14 @@ describe('useContextMenuBehavior — Escape handling', () => {
     expect(documentCaptureListener).not.toHaveBeenCalled();
   });
 
-  it('does not call stopPropagation or onClose for non-Escape keys', () => {
+  it('does not call stopPropagation or onClose for a key the menu does not handle', () => {
     const onClose = vi.fn();
     renderMenu([{ kind: 'action', label: 'Item', onSelect: vi.fn() }], onClose);
 
+    // 'Tab' isn't one of the menu's keys (arrows, Enter, Escape, Backspace,
+    // or a single printable character), so it must fall through untouched.
     const event = new KeyboardEvent('keydown', {
-      key: 'Enter',
+      key: 'Tab',
       bubbles: true,
       cancelable: true,
     });

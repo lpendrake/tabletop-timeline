@@ -27,6 +27,12 @@ describe('rankMatch', () => {
     expect(rankMatch('Subheading', 'hea')).toBe(2);
     expect(rankMatch('Subheading', 'hea', ['heading'])).toBe(0);
   });
+
+  it('checks every occurrence, not just the first', () => {
+    // The first "head" (in "Unhead") is mid-word, but the second (in "head")
+    // sits right at a word boundary — the word-prefix match must win.
+    expect(rankMatch('Unhead head', 'head')).toBe(1);
+  });
 });
 
 describe('compareRanked', () => {

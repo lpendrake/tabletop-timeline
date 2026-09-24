@@ -43,10 +43,18 @@ export function rankMatch(
 function rankOne(lowerText: string, lowerQuery: string): MatchRank | null {
   if (lowerText.startsWith(lowerQuery)) return 0;
 
-  const index = lowerText.indexOf(lowerQuery);
+  let index = lowerText.indexOf(lowerQuery);
   if (index === -1) return null;
-  if (isWordBoundary(lowerText[index - 1])) return 1;
-  return 2;
+
+  // The first occurrence may be mid-word while a later one sits at a word
+  // boundary (e.g. "Unhead head" vs "head") — check every occurrence and
+  // keep the best rank found.
+  const best: MatchRank = 2;
+  while (index !== -1) {
+    if (isWordBoundary(lowerText[index - 1])) return 1;
+    index = lowerText.indexOf(lowerQuery, index + 1);
+  }
+  return best;
 }
 
 /**

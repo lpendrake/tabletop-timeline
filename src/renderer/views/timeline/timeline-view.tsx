@@ -28,6 +28,7 @@ import { usePreviewSize } from '../../timeline/interactions/usePreviewSize';
 import { useReschedule } from '../../timeline/interactions/useReschedule';
 import { useQuickAddZones } from '../../timeline/interactions/useQuickAddZones';
 import { useTimelineKeyboard } from '../../timeline/interactions/useTimelineKeyboard';
+import { isContextMenuFocused } from '../../shared/context-menu';
 import { useEventEditor } from '../../timeline/event-editor/useEventEditor';
 import { deriveFilename } from '../../timeline/event-editor/domain';
 import { EventEditorModal } from '../../timeline/event-editor/EventEditorModal';
@@ -717,7 +718,7 @@ export function TimelineView({
   filteredEventsRef.current = filteredEvents;
 
   useTimelineKeyboard({
-    isBlocked: () => !!(editor.editorMode || editor.newEventPrompt),
+    isBlocked: () => !!(editor.editorMode || editor.newEventPrompt) || isContextMenuFocused(),
     getView: () => viewRef.current,
     getSize: () => sizeRef.current,
     setView: setViewState,

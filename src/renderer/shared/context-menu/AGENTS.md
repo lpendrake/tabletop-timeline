@@ -1,25 +1,96 @@
 # `src/renderer/shared/context-menu/` — Data-Driven Context Menus (React)
 
 A single reusable context-menu system. Callers configure a menu by passing an
-item list (data), not markup. Replaces hand-rolled menus one at a time; the
-existing `event-context-menu.tsx` / `note-context-menu.tsx` still render their
-own markup and are migrated in a later ticket.
+item list (data), not markup. Every menu built on this — event card, note
+sidebar, timeline canvas, tag chip, session, wiki-link, editor — gets search
+and keyboard navigation for free, with no call-site changes.
+
+## Search and keyboard, built in
+
+- The root panel takes focus when it opens and looks exactly as before —
+  **no search row until the user types**.
+- Up/Down move a highlight (skipping separators, headers, disabled items;
+  wraps around); Right enters a submenu, Left leaves it; Enter activates the
+  highlighted row; mouse hover sets the same highlight, so mouse and
+  keyboard always agree.
+- Typing a printable character opens a search box above the first item and
+  filters the tree: matching actions stay, a submenu stays only if a
+  descendant matches (rendered expanded inline, indented, under its label),
+  everything else (separators/headers included) is hidden. Ranking is
+  `rankMatch` from `shared/search/rank.ts` — prefix, then word-prefix, then
+  substring, ties keep menu order. Action items can carry `keywords?:
+  string[]` searched alongside the label.
+- **Danger items are never the automatic target** — typing "de" and hitting
+  Enter can't fire a destructive action by accident. They're only reachable
+  by arrowing to them explicitly. Disabled items are never targets either,
+  and are hidden while searching.
+- Escape while searching closes the search (not the menu) and restores the
+  highlight from before the user started typing; a second Escape then closes
+  the menu. Backspacing the search box to empty does the same as Escape.
+  Escape with no search open closes the menu (`ContextMenuCloseReason`:
+  `'escape'`). Backspace with no search open only closes the menu when the
+  opener passed `backspaceCloses: true` (reason `'backspace'`); otherwise it
+  does nothing. An outside `mousedown` closes with reason `'outside'`, a
+  selection closes with reason `'select'`.
+- Closing a menu returns focus exactly where it was: the caller can pass
+  `restoreFocus?: () => void` (e.g. an editor host passes `() => view.focus()`
+  so a CodeMirror selection comes back); without it, whatever had
+  `document.activeElement` before the menu opened is refocused.
+  **Order on select is restoreFocus → onSelect → unmount/close** — so an
+  action that operates on e.g. an editor sees it focused again before it
+  runs. This holds for both `<ContextMenu>` and `showContextMenu`.
+- `anchor?: CaretAnchor` (`{ lineRect, prefer }`) positions the root panel
+  next to a text caret's line instead of a fixed x/y point, via
+  `computeCaretPlacement` in `caret-position.ts`. Placement is computed
+  **once, when the menu opens** (measured while hidden, like a submenu is),
+  so the chosen side never flips as the panel's height changes while
+  searching — it just grows/scrolls within the `maxHeight` picked at open.
+- `isContextMenuFocused(doc?)` (its own file, `is-context-menu-focused.ts`)
+  reports whether focus is currently inside any `.context-menu` panel — used
+  by hosts (e.g. the timeline's keyboard shortcuts) that must suspend their
+  own key handling while a menu is open.
 
 ## Files
 
 - `types.ts` — the `ContextMenuItem` union (`action` / `submenu` / `separator`
-  / `header`) and `ContextMenuVariant`. Recursive, no hardcoded depth limit.
-- `use-context-menu-behavior.ts` — viewport-clamp positioning + outside-click
-  / Escape close, for the root panel.
+  / `header`), `ContextMenuVariant`, `ContextMenuCloseReason` and
+  `CaretAnchor`. Recursive, no hardcoded depth limit.
+- `menu-navigation.ts` — pure highlight movement: next/prev enabled index at
+  a level (skipping separators/headers/disabled, with wraparound), plus path
+  helpers (`itemAtPath`, `itemsAtPath`, `isPathPrefix`) for walking into and
+  out of nested submenus by index path.
+- `menu-search.ts` — pure `filterMenu(items, query)` (visible tree + ordered
+  targets) and `pickAutoTarget(targets)` (best non-danger match). Uses
+  `rankMatch` from `shared/search/rank.ts`; no fuzzy matching.
+- `menu-keyboard.ts` — pure keyboard/search state machine (`MenuKeyState`,
+  `menuKeyDown`, `menuQueryChange`, `menuHover`, `menuSearchHover`,
+  `isPrintableKey`): every highlight move, submenu enter/leave, search
+  start/exit/retarget and target activation, plus the two side effects a
+  keystroke can request (`MenuEffect`: run an action, or close on
+  Backspace). `context-menu.tsx` holds this as one `useState<MenuKeyState>`
+  and only carries out the requested effect — it doesn't contain the logic.
+- `use-context-menu-behavior.ts` — the single outside-click / keyboard
+  listener for the root panel: viewport-clamp positioning (or, with
+  `anchor`, caret placement), closing on outside `mousedown` or Escape, and
+  focus capture/restore. All other keys (arrows, Enter, printable
+  characters, Backspace) are decided by the caller via `options.onKeyDown`
+  — this hook only owns the listener and the prevent/stop contract, not the
+  decision logic (kept in `menu-navigation.ts`/`menu-search.ts`).
 - `submenu-position.ts` — pure helper: parent row rect + panel size + viewport
   size → `{x, y}`. No DOM access; unit-testable in isolation.
-- `context-menu.tsx` — `<ContextMenu items x y onClose>`, the declarative
-  component. Renders rows recursively; a `submenu` row opens a child panel on
-  hover, positioned via `submenu-position.ts`.
-- `show.ts` — imperative `showContextMenu(items, x, y)` for callers outside a
-  React tree (e.g. a CodeMirror span's native `contextmenu` handler).
-- `context-menu.css` — panel, item, separator, header, disabled, and submenu
-  styles.
+- `caret-position.ts` — pure helper: line rect + popup size + viewport +
+  preferred side → `{left, top|bottom, maxHeight}`.
+- `context-menu.tsx` — `<ContextMenu items x y onClose restoreFocus
+  backspaceCloses anchor>`, the declarative component. Renders rows
+  recursively; a `submenu` row opens a child panel on hover, positioned via
+  `submenu-position.ts`. Wires the pure search/navigation helpers to React
+  state — it doesn't reimplement their logic.
+- `show.ts` — imperative `showContextMenu(items, x, y, options?)` for callers
+  outside a React tree (e.g. a CodeMirror span's native `contextmenu`
+  handler). `options` (`anchor`, `onClose`, `restoreFocus`, `backspaceCloses`)
+  is optional — existing 3-arg calls are unchanged.
+- `context-menu.css` — panel, item, separator, header, disabled, submenu and
+  search-row/highlight styles.
 
 ## When to use which entry point
 
