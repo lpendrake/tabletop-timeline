@@ -37,8 +37,7 @@ import { showLabelOverrideEditor } from '../../shared/components/show-label-over
 import { entityIndex as entityIndexStore } from '../../shared/entity-index';
 import { buildEntityLink } from '../../shared/entity-link';
 import { copyToClipboard } from '../../shared/clipboard';
-import { makeNewNoteMenuConfig } from '../../notes/editor-bindings';
-import { entityFromCreatedNote } from '../../notes/domain/entity-from-created-note';
+import { useNewNoteMenuConfig, entityFromCreatedNote, type CreatedNote } from '../../notes/public';
 import './EventEditorModal.css';
 
 function TagChipList({
@@ -154,23 +153,16 @@ export function EventEditorModal({
   const entityLabelMap = useMemo(() => buildEntityLabelMap(entityIndex), [entityIndex]);
   const entityTagLabelMap = useMemo(() => buildEntityTagLabelMap(entityIndex), [entityIndex]);
 
-  // A ref keeps `getExistingIds` reading the latest set without rebuilding
-  // `newNoteMenuConfig` on every entity-index update.
-  const knownIdsRef = useRef(knownIds);
-  knownIdsRef.current = knownIds;
-  const newNoteMenuConfig = useMemo(
-    () =>
-      makeNewNoteMenuConfig({
-        campaignPath,
-        getExistingIds: () => knownIdsRef.current,
-        onCreated: (note) => {
-          setEntityIndex((prev) =>
-            applyEntityDelta(prev, { op: 'add', entry: entityFromCreatedNote(note) }),
-          );
-        },
-      }),
-    [campaignPath],
-  );
+  const handleNewNoteCreated = useCallback((note: CreatedNote) => {
+    setEntityIndex((prev) =>
+      applyEntityDelta(prev, { op: 'add', entry: entityFromCreatedNote(note) }),
+    );
+  }, []);
+  const newNoteMenuConfig = useNewNoteMenuConfig({
+    campaignPath,
+    entityIndex,
+    onCreated: handleNewNoteCreated,
+  });
 
   // Refs for stable access inside async callbacks without needing deps
   const lastModifiedRef = useRef<string | null>(null);

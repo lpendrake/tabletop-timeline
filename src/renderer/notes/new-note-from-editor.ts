@@ -4,10 +4,11 @@ import { listNoteFolders } from './list-note-folders';
 import { loadLastNoteFolder, saveLastNoteFolder } from './last-note-folder';
 import { initialFolder } from './domain/new-note-form';
 import { showNewNoteDialog } from './show-new-note-dialog';
+import type { EntityIndexEntry } from '../../types/global';
 
 export interface RunNewNoteFromEditorOptions {
   campaignPath: string;
-  existingIds?: ReadonlySet<string>;
+  entityIndex?: readonly EntityIndexEntry[];
   onCreated?: (note: CreatedNote) => void;
 }
 
@@ -29,7 +30,7 @@ export async function runNewNoteFromEditor(
   ctx: EditorMenuContext,
   opts: RunNewNoteFromEditorOptions,
 ): Promise<CreatedNote | null> {
-  const { campaignPath, existingIds, onCreated } = opts;
+  const { campaignPath, entityIndex, onCreated } = opts;
 
   const folders = await listNoteFolders(campaignPath);
   const initial = initialFolder(folders, loadLastNoteFolder(campaignPath));
@@ -38,7 +39,7 @@ export async function runNewNoteFromEditor(
     initialTitle: titleSeedFromSelection(ctx.selectedText),
     folders,
     initialFolder: initial,
-    create: (input) => createNote({ ...input, campaignPath, existingIds }),
+    create: (input) => createNote({ ...input, campaignPath, entityIndex }),
   });
 
   if (!note) {

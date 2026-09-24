@@ -64,51 +64,6 @@ export function joinFrontmatter(frontmatter: string, body: string): string {
   return `---\n${frontmatter}\n---\n${body}`;
 }
 
-/**
- * Reads the id/title frontmatter fields from a raw file's content without
- * generating fallbacks — unlike `parseNote`, a missing id comes back as
- * `null` rather than a freshly generated one. Used when reporting on an
- * *existing* file rather than normalizing one that will be saved.
- *
- * Renderer-safe: parses the frontmatter block as plain text (via
- * `splitFrontmatter`) rather than using `gray-matter`, which needs Node's
- * `Buffer` — unavailable in the Electron renderer.
- */
-export function readFrontmatterFields(raw: string): { id: string | null; title: string | null } {
-  const normalized = raw.replace(/\r\n/g, '\n');
-  const { frontmatter } = splitFrontmatter(normalized);
-
-  let id: string | null = null;
-  let title: string | null = null;
-  let name: string | null = null;
-
-  for (const line of frontmatter.split('\n')) {
-    const match = /^([A-Za-z0-9_-]+):\s*(.*)$/.exec(line);
-    if (!match) continue;
-    const [, key, rawValue] = match;
-    const value = parseFrontmatterScalar(rawValue);
-    if (key === 'id') id = value;
-    else if (key === 'title') title = value;
-    else if (key === 'name') name = value;
-  }
-
-  return { id, title: title ?? name };
-}
-
-/** Parses a single YAML scalar value as it appears after `key:` on a frontmatter line. */
-function parseFrontmatterScalar(rawValue: string): string | null {
-  const trimmed = rawValue.trim();
-  if (trimmed === '') return null;
-
-  if (trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')) {
-    return trimmed.slice(1, -1).replace(/\\"/g, '"');
-  }
-  if (trimmed.length >= 2 && trimmed.startsWith("'") && trimmed.endsWith("'")) {
-    return trimmed.slice(1, -1);
-  }
-  return trimmed;
-}
-
 export function extractH1(body: string): string | null {
   const m = /^#\s+(.+)$/m.exec(body);
   return m ? m[1].trim() : null;

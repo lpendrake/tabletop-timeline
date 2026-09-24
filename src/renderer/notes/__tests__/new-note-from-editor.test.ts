@@ -63,12 +63,12 @@ describe('runNewNoteFromEditor', () => {
     expect(result?.id).toBe('abcd');
   });
 
-  it('wires a `create` callback through to createNote with the campaign path and existing ids', async () => {
+  it('wires a `create` callback through to createNote with the campaign path and entity index', async () => {
     vi.mocked(showNewNoteDialog).mockResolvedValue(null);
-    const existingIds = new Set(['a']);
+    const entityIndex = [{ id: 'a', path: 'notes/a.md', title: 'A', type: 'note' as const }];
 
     const ctx = makeCtx('');
-    await runNewNoteFromEditor(ctx, { campaignPath: CAMPAIGN, existingIds });
+    await runNewNoteFromEditor(ctx, { campaignPath: CAMPAIGN, entityIndex });
 
     const { create } = vi.mocked(showNewNoteDialog).mock.calls[0][0];
     vi.mocked(createNote).mockResolvedValue({ status: 'created', note: {} as never });
@@ -78,7 +78,7 @@ describe('runNewNoteFromEditor', () => {
       title: 'Bob',
       folder: 'npcs',
       campaignPath: CAMPAIGN,
-      existingIds,
+      entityIndex,
     });
   });
 

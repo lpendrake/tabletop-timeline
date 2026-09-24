@@ -7,8 +7,8 @@ import {
   makeImagePasteConfig,
   makeDropLinkConfig,
   makePeekWikiLinksConfig,
-  makeNewNoteMenuConfig,
 } from './editor-bindings';
+import { useNewNoteMenuConfig } from './hooks/use-new-note-menu-config';
 import { buildEntityLabelMap } from '../../shared/entity-labels';
 import { revealInExplorer } from '../shared/reveal-in-explorer';
 import { buildEntityLink, buildAssetLink } from '../shared/entity-link';
@@ -70,20 +70,11 @@ export function NotesApp({
   const dropLinkConfig = useMemo(() => makeDropLinkConfig(), []);
   const peekWikiLinksConfig = useMemo(() => makePeekWikiLinksConfig(), []);
 
-  // `knownIds` changes on every entity-index update; a ref keeps the menu
-  // config's `getExistingIds` reading the latest set without rebuilding it.
-  const knownIdsRef = useRef(knownIds);
-  knownIdsRef.current = knownIds;
-  const newNoteMenuConfig = useMemo(
-    () =>
-      makeNewNoteMenuConfig({
-        campaignPath,
-        getExistingIds: () => knownIdsRef.current,
-        onCreated: ctrl.handleNoteCreatedFromEditor,
-      }),
-
-    [campaignPath, ctrl.handleNoteCreatedFromEditor],
-  );
+  const newNoteMenuConfig = useNewNoteMenuConfig({
+    campaignPath,
+    entityIndex: ctrl.entityIndex,
+    onCreated: ctrl.handleNoteCreatedFromEditor,
+  });
 
   // Open a note from the search overlay, then scroll to the match position.
   // Both steps are sequenced here so the scroll happens only after the note's

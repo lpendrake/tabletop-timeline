@@ -9,6 +9,7 @@ import { notesData } from './data';
 import { openFromWikiLink, closeFromWikiLink } from '../peek/stack';
 import { runNewNoteFromEditor } from './new-note-from-editor';
 import type { CreatedNote } from './create-note';
+import type { EntityIndexEntry } from '../../types/global';
 
 interface SidebarDropPayload {
   folder: string;
@@ -75,7 +76,7 @@ export function makePeekWikiLinksConfig(): Pick<WikiLinksHostConfig, 'onHover' |
 
 export interface MakeNewNoteMenuConfigOptions {
   campaignPath: string;
-  getExistingIds?: () => ReadonlySet<string> | undefined;
+  getEntityIndex?: () => readonly EntityIndexEntry[] | undefined;
   onCreated?: (note: CreatedNote) => void;
 }
 
@@ -89,7 +90,7 @@ export interface MakeNewNoteMenuConfigOptions {
 export function makeNewNoteMenuConfig(opts: MakeNewNoteMenuConfigOptions): {
   extraItems: EditorMenuExtraItems;
 } {
-  const { campaignPath, getExistingIds, onCreated } = opts;
+  const { campaignPath, getEntityIndex, onCreated } = opts;
   return {
     extraItems: (ctx) => [
       {
@@ -99,7 +100,7 @@ export function makeNewNoteMenuConfig(opts: MakeNewNoteMenuConfigOptions): {
         onSelect: () => {
           void runNewNoteFromEditor(ctx, {
             campaignPath,
-            existingIds: getExistingIds?.(),
+            entityIndex: getEntityIndex?.(),
             onCreated,
           });
         },

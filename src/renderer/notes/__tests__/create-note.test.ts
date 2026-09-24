@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../data', () => ({
-  notesData: { createNoteFile: vi.fn(), saveNote: vi.fn(), readNote: vi.fn() },
+  notesData: { createNoteFile: vi.fn(), saveNote: vi.fn() },
 }));
 
 import { notesData } from '../data';
@@ -9,12 +9,10 @@ import { createNote } from '../create-note';
 
 const createNoteFile = notesData.createNoteFile as ReturnType<typeof vi.fn>;
 const saveNote = notesData.saveNote as ReturnType<typeof vi.fn>;
-const readNote = notesData.readNote as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   createNoteFile.mockReset();
   saveNote.mockReset();
-  readNote.mockReset();
 });
 
 const campaignPath = '/campaign';
@@ -36,11 +34,15 @@ describe('createNote', () => {
     );
   });
 
-  it('reports an existing file and never writes a numbered one', async () => {
+  it('reports an existing note using the entity index', async () => {
     createNoteFile.mockResolvedValueOnce({ ok: false, reason: 'exists' });
-    readNote.mockResolvedValueOnce('---\nid: xyz1\ntitle: Bob\n---\n# Bob\n\n');
 
-    const result = await createNote({ campaignPath, folder: 'Lore', title: 'Bob' });
+    const result = await createNote({
+      campaignPath,
+      folder: 'Lore',
+      title: 'Bob',
+      entityIndex: [{ id: 'xyz1', path: 'notes/Lore/bob.md', title: 'Bob', type: 'note' }],
+    });
 
     expect(createNoteFile).toHaveBeenCalledTimes(1);
     expect(saveNote).not.toHaveBeenCalled();
@@ -50,34 +52,15 @@ describe('createNote', () => {
     });
   });
 
-  it('existing note without an id still reports its path/title', async () => {
+  it("falls back to the filename when the existing note isn't indexed", async () => {
     createNoteFile.mockResolvedValueOnce({ ok: false, reason: 'exists' });
-    readNote.mockResolvedValueOnce('---\ntitle: Bob\n---\n# Bob\n\n');
 
     const result = await createNote({ campaignPath, folder: 'Lore', title: 'Bob' });
 
     expect(result).toEqual({
       status: 'exists',
-      existing: { path: 'Lore/bob.md', id: null, title: 'Bob' },
+      existing: { path: 'Lore/bob.md', id: null, title: 'bob' },
     });
-  });
-
-  it("reports the exists conflict even without Node's Buffer", async () => {
-    const original = globalThis.Buffer;
-    vi.stubGlobal('Buffer', undefined);
-    try {
-      createNoteFile.mockResolvedValueOnce({ ok: false, reason: 'exists' });
-      readNote.mockResolvedValueOnce('---\nid: xyz1\ntitle: Bob\n---\n# Bob\n\n');
-
-      const result = await createNote({ campaignPath, folder: 'Lore', title: 'Bob' });
-
-      expect(result).toEqual({
-        status: 'exists',
-        existing: { path: 'Lore/bob.md', id: 'xyz1', title: 'Bob' },
-      });
-    } finally {
-      vi.stubGlobal('Buffer', original);
-    }
   });
 
   it('throws on a non-exists write error', async () => {
@@ -87,7 +70,6 @@ describe('createNote', () => {
       'disk full',
     );
     expect(createNoteFile).toHaveBeenCalledTimes(1);
-    expect(readNote).not.toHaveBeenCalled();
   });
 
   it('writes to the notes root when folder is empty', async () => {

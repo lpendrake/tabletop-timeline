@@ -14,17 +14,12 @@ export interface CreatedNoteForSidebar {
   title: string;
 }
 
-export interface FolderFilesState {
-  folders: string[];
-  folderFiles: Record<string, NoteEntry[] | null>;
-}
-
 /**
- * Adds a freshly-created note to the sidebar's `folders`/`folderFiles`
- * state, the same way the entity-delta watcher listener inserts a file
- * under a nested folder (see `useNotesController.ts`'s `onEntityDelta`
- * handler): the top-level folder is the first path segment, and the note's
- * `path` within `folderFiles[topLevel]` is relative to that segment.
+ * Adds a freshly-created note to the sidebar's `folderFiles` state, the
+ * same way the entity-delta watcher listener inserts a file under a
+ * nested folder (see `useNotesController.ts`'s `onEntityDelta` handler):
+ * the top-level folder is the first path segment, and the note's `path`
+ * within `folderFiles[topLevel]` is relative to that segment.
  *
  * Returns `null` for a notes-root note (`folder === ''`): the sidebar has no
  * top-level bucket for root-level files, so there is nothing to add here —
@@ -32,9 +27,9 @@ export interface FolderFilesState {
  * watcher's entity-index delta reflects it.
  */
 export function addCreatedNoteToFolderFiles(
-  state: FolderFilesState,
+  folderFiles: Record<string, NoteEntry[] | null>,
   note: CreatedNoteForSidebar,
-): FolderFilesState | null {
+): Record<string, NoteEntry[] | null> | null {
   if (note.folder === '') return null;
 
   const segments = note.folder.split('/');
@@ -42,20 +37,26 @@ export function addCreatedNoteToFolderFiles(
   const relFolder = segments.slice(1).join('/');
   const relPath = relFolder ? `${relFolder}/${note.filename}` : note.filename;
 
-  const existing = state.folderFiles[topLevel] ?? [];
+  const existing = folderFiles[topLevel] ?? [];
   const withoutOld = existing.filter((e) => e.path !== relPath);
-  const folderFiles: Record<string, NoteEntry[] | null> = {
-    ...state.folderFiles,
+  return {
+    ...folderFiles,
     [topLevel]: [
       ...withoutOld,
       { id: note.id, path: relPath, title: note.title, kind: 'note' as const },
     ],
   };
-  const folders = state.folders.includes(topLevel)
-    ? state.folders
-    : [...state.folders, topLevel].sort();
+}
 
-  return { folders, folderFiles };
+/**
+ * Adds the created note's top-level folder to the sidebar's `folders` list
+ * (sorted) when it isn't already known. Returns `folders` unchanged for a
+ * notes-root note (`folder === ''`), which has no top-level folder row.
+ */
+export function addFolderForCreatedNote(folders: string[], note: CreatedNoteForSidebar): string[] {
+  if (note.folder === '') return folders;
+  const topLevel = note.folder.split('/')[0];
+  return folders.includes(topLevel) ? folders : [...folders, topLevel].sort();
 }
 
 /**

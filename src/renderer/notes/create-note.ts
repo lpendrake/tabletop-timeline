@@ -1,8 +1,9 @@
 import { notesData } from './data';
 import { slugify } from './domain/slugify';
-import { pickUnusedId } from './domain/unique-id';
-import { joinFrontmatter, readFrontmatterFields } from '../../shared/frontmatter';
+import { existingNoteFromIndex } from './domain/existing-note-from-index';
+import { joinFrontmatter } from '../../shared/frontmatter';
 import { generateShortId } from '../../shared/ids';
+import type { EntityIndexEntry } from '../../types/global';
 
 export interface CreatedNote {
   id: string;
@@ -30,7 +31,7 @@ export interface CreateNoteOptions {
   campaignPath: string;
   folder: string;
   title: string;
-  existingIds?: ReadonlySet<string>;
+  entityIndex?: readonly EntityIndexEntry[];
 }
 
 /**
@@ -45,7 +46,7 @@ export async function createNote({
   campaignPath,
   folder,
   title,
-  existingIds,
+  entityIndex,
 }: CreateNoteOptions): Promise<CreateNoteResult> {
   const trimmedTitle = title.trim();
   const slug = slugify(trimmedTitle);
@@ -53,7 +54,8 @@ export async function createNote({
     throw new Error('Title must contain letters or numbers');
   }
 
-  const id = pickUnusedId(generateShortId, existingIds);
+  const existingIds = entityIndex ? new Set(entityIndex.map((e) => e.id)) : undefined;
+  const id = generateShortId(existingIds);
   const frontmatter = `id: ${id}\ntitle: ${trimmedTitle}`;
   const body = `# ${trimmedTitle}\n\n`;
   const content = joinFrontmatter(frontmatter, body);
@@ -73,13 +75,15 @@ export async function createNote({
     throw new Error(result.message ?? 'Failed to create note');
   }
 
-  const raw = await notesData.readNote(fullPath);
-  const { id: existingId, title: existingTitle } = raw
-    ? readFrontmatterFields(raw)
-    : { id: null, title: null };
+  const notesRelativePath = `notes/${relativePath}`;
+  const { id: existingId, title: existingTitle } = existingNoteFromIndex(
+    entityIndex,
+    notesRelativePath,
+    filename,
+  );
 
   return {
     status: 'exists',
-    existing: { path: relativePath, id: existingId, title: existingTitle ?? filename },
+    existing: { path: relativePath, id: existingId, title: existingTitle },
   };
 }

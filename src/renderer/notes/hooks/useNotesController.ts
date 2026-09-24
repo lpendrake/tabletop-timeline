@@ -19,15 +19,16 @@ import {
   computeRenamedPath,
 } from '../domain/file-ops';
 import { tabsReducer, type TabsState } from '../domain/tabs-reducer';
-import { splitFrontmatter, joinFrontmatter } from '../../../shared/frontmatter';
-import { generateShortId } from '../../../shared/ids';
+import { splitFrontmatter } from '../../../shared/frontmatter';
 import { useSaveSync } from './useSaveSync';
 import { useFolderTree } from './useFolderTree';
 import {
   addCreatedNoteToFolderFiles,
+  addFolderForCreatedNote,
   folderPathsToOpenForCreatedNote,
 } from '../domain/created-note-state';
 import { entityFromCreatedNote } from '../domain/entity-from-created-note';
+import { createNoteInFolder } from '../create-note-in-folder';
 import type { CreatedNote } from '../create-note';
 import {
   tabKey,
@@ -346,14 +347,8 @@ export function useNotesController({
    * (the editor the user was typing in stays focused and in place).
    */
   const handleNoteCreatedFromEditor = useCallback((note: CreatedNote) => {
-    setFolderFiles((prevFolderFiles) => {
-      const next = addCreatedNoteToFolderFiles({ folders: [], folderFiles: prevFolderFiles }, note);
-      return next ? next.folderFiles : prevFolderFiles;
-    });
-    setFolders((prevFolders) => {
-      const next = addCreatedNoteToFolderFiles({ folders: prevFolders, folderFiles: {} }, note);
-      return next ? next.folders : prevFolders;
-    });
+    setFolderFiles((prev) => addCreatedNoteToFolderFiles(prev, note) ?? prev);
+    setFolders((prev) => addFolderForCreatedNote(prev, note));
     setOpenFolderPaths(
       (prev) => new Set([...prev, ...folderPathsToOpenForCreatedNote(note.folder)]),
     );
@@ -364,27 +359,28 @@ export function useNotesController({
 
   async function commitNewFileInFolder(ctx: { folder: string; subdir?: string }, name: string) {
     setCreatingIn(null);
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    const slug = slugify(trimmed);
-    const base = slug.endsWith('.md') ? slug : `${slug}.md`;
-    const filePath = ctx.subdir ? `${ctx.subdir}/${base}` : base;
     try {
-      // Write frontmatter from the start so the entity-index watcher finds needsWrite:false
-      // and does not rewrite the file, which would race with ensureLoaded's disk read.
-      const id = generateShortId();
-      const frontmatter = `id: ${id}\ntitle: ${trimmed}`;
-      const body = `# ${trimmed}\n\n`;
-      const fullPath = `${campaignPath}/notes/${ctx.folder}/${filePath}`;
-      await notesData.saveNote(fullPath, joinFrontmatter(frontmatter, body));
-
-      setFolderFiles((prev) => {
-        const existing = prev[ctx.folder] ?? [];
-        return {
-          ...prev,
-          [ctx.folder]: [...existing, { id, path: filePath, title: trimmed, kind: 'note' }],
-        };
+      const result = await createNoteInFolder({
+        campaignPath,
+        folder: ctx.folder,
+        subdir: ctx.subdir,
+        name,
+        entityIndex,
       });
+      if (!result) return;
+      if (result.status === 'exists') {
+        pushToast(result.message, true);
+        return;
+      }
+
+      const { note } = result;
+      setFolderFiles((prev) => addCreatedNoteToFolderFiles(prev, note) ?? prev);
+      setFolders((prev) => addFolderForCreatedNote(prev, note));
+      setEntityIndex((prev) =>
+        applyEntityDelta(prev, { op: 'add', entry: entityFromCreatedNote(note) }),
+      );
+
+      const filePath = ctx.subdir ? `${ctx.subdir}/${note.filename}` : note.filename;
       await openFile(ctx.folder, filePath);
     } catch (err) {
       pushToast(`Failed to create: ${String(err)}`, true);
