@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { moveHighlight, rankPickerOptions, type PickerOption } from './picker-model';
+import './searchable-picker.css';
 
 export interface SearchablePickerProps {
   options: readonly PickerOption[];

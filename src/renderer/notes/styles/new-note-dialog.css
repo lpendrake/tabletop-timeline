@@ -1,0 +1,101 @@
+/* ---- New Note dialog (imperative, opened from an editor context menu) ---- */
+.new-note-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 2100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.new-note-modal {
+  background: var(--theme-surface);
+  border: 1px solid var(--theme-border-strong);
+  border-radius: 6px;
+  width: min(420px, 92vw);
+}
+
+.new-note-content {
+  padding: 18px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.new-note-title {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--theme-accent-gold);
+}
+
+.new-note-field-label {
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--theme-text-muted);
+}
+
+.new-note-input {
+  background: var(--theme-background);
+  border: 1px solid var(--theme-border);
+  border-radius: 3px;
+  color: var(--theme-text-primary);
+  font-size: 13px;
+  padding: 6px 8px;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.new-note-input:focus {
+  border-color: var(--theme-accent-gold);
+}
+
+.new-note-error {
+  color: var(--theme-danger);
+  font-size: 12px;
+}
+
+.new-note-current-folder {
+  font-size: 12px;
+  color: var(--theme-text-secondary);
+  margin-top: 6px;
+}
+
+.new-note-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+.new-note-btn {
+  padding: 5px 14px;
+  border: 1px solid var(--theme-border);
+  border-radius: 2px;
+  background: var(--theme-surface);
+  color: var(--theme-text-secondary);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.new-note-btn:hover {
+  background: var(--theme-panel-accent);
+  color: var(--theme-text-primary);
+}
+
+.new-note-btn--primary {
+  background: var(--theme-panel-accent);
+  border-color: var(--theme-accent);
+  color: var(--theme-accent);
+  font-weight: 600;
+}
+
+.new-note-btn--primary:hover {
+  background: var(--theme-panel);
+  color: var(--theme-accent);
+}
