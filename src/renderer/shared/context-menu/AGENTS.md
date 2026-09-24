@@ -9,6 +9,12 @@ and keyboard navigation for free, with no call-site changes.
 
 - The root panel takes focus when it opens and looks exactly as before —
   **no search row until the user types**.
+- The menu opens with the first navigable item already highlighted (skipping
+  separators, headers, disabled items), preferring the first **non-danger**
+  one — a danger item like Delete is never pre-highlighted, and if every
+  navigable item is danger, nothing is. See `initialMenuKeyStateFor` in
+  `menu-keyboard.ts`. Escape/backspace-to-empty after searching restore this
+  same highlight (`preSearchHighlight`).
 - Up/Down move a highlight (skipping separators, headers, disabled items;
   wraps around); Right enters a submenu, Left leaves it; Enter activates the
   highlighted row; mouse hover sets the same highlight, so mouse and
@@ -45,10 +51,17 @@ and keyboard navigation for free, with no call-site changes.
   **once, when the menu opens** (measured while hidden, like a submenu is),
   so the chosen side never flips as the panel's height changes while
   searching — it just grows/scrolls within the `maxHeight` picked at open.
-- `isContextMenuFocused(doc?)` (its own file, `is-context-menu-focused.ts`)
-  reports whether focus is currently inside any `.context-menu` panel — used
-  by hosts (e.g. the timeline's keyboard shortcuts) that must suspend their
-  own key handling while a menu is open.
+- `isContextMenuOpen(doc?)` (its own file, `context-menu-presence.ts`) reports
+  whether any `.context-menu` panel is currently in the document — used by
+  hosts (e.g. the timeline's keyboard shortcuts, via `isBlocked` in
+  `timeline-view.tsx`) that must suspend their own key handling while a menu
+  is open. It's presence-based, not focus-based: while searching, focus sits
+  in the search `<input>`, and exiting search briefly unmounts it, so a
+  focus-only check could see focus fall to `<body>` for a tick and let a
+  window-capture listener registered before the menu's own (e.g. the
+  timeline's) act on the next keystroke. The menu also moves focus back to
+  its panel itself when search exits, so focus never actually falls to body
+  while it's open — `isContextMenuOpen` is the belt-and-suspenders check.
 
 ## Files
 

@@ -108,6 +108,74 @@ describe('ContextMenu — focus and search', () => {
     expect(input!.value).toBe('h');
   });
 
+  it('the first non-danger item is highlighted when the menu opens', () => {
+    const onSelectAlpha = vi.fn();
+    const onClose = renderMenu([
+      { kind: 'action', label: 'Alpha', onSelect: onSelectAlpha },
+      { kind: 'action', label: 'Beta', onSelect: vi.fn() },
+    ]);
+
+    const highlighted = container.querySelector('.context-menu-item--highlighted');
+    expect(highlighted?.textContent).toBe('Alpha');
+
+    pressKey('Enter');
+
+    expect(onSelectAlpha).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledWith('select');
+  });
+
+  it('a leading danger item is not pre-highlighted', () => {
+    renderMenu([
+      { kind: 'action', label: 'Delete', onSelect: vi.fn(), variant: 'danger' },
+      { kind: 'action', label: 'Edit', onSelect: vi.fn() },
+    ]);
+
+    const highlighted = container.querySelector('.context-menu-item--highlighted');
+    expect(highlighted?.textContent).toBe('Edit');
+  });
+
+  it('after Escape clears the search, focus is back on the menu and typing starts a new search', () => {
+    renderMenu([
+      { kind: 'action', label: 'Create event', onSelect: vi.fn() },
+      { kind: 'action', label: 'Create session', onSelect: vi.fn() },
+      { kind: 'action', label: 'Set now', onSelect: vi.fn() },
+    ]);
+
+    typeChar('x');
+    expect(searchInput()).not.toBeNull();
+
+    pressKey('Escape');
+    expect(searchInput()).toBeNull();
+    expect(panel().contains(document.activeElement)).toBe(true);
+
+    typeChar('a');
+
+    const input = searchInput();
+    expect(input).not.toBeNull();
+    expect(input!.value).toBe('a');
+    expect(panel().contains(document.activeElement)).toBe(true);
+  });
+
+  it('same after backspacing the search to empty', () => {
+    renderMenu([
+      { kind: 'action', label: 'Create event', onSelect: vi.fn() },
+      { kind: 'action', label: 'Create session', onSelect: vi.fn() },
+      { kind: 'action', label: 'Set now', onSelect: vi.fn() },
+    ]);
+
+    typeChar('x');
+    fireEvent.change(searchInput()!, { target: { value: '' } });
+    expect(searchInput()).toBeNull();
+    expect(panel().contains(document.activeElement)).toBe(true);
+
+    typeChar('d');
+
+    const input = searchInput();
+    expect(input).not.toBeNull();
+    expect(input!.value).toBe('d');
+    expect(panel().contains(document.activeElement)).toBe(true);
+  });
+
   it('typing shows the target echo with its path and Enter clicks it', () => {
     const onSelectHeading1 = vi.fn();
     const onClose = renderMenu(formattingMenu(onSelectHeading1));
@@ -177,9 +245,8 @@ describe('ContextMenu — focus and search', () => {
     ];
     const onClose = renderMenu(items);
 
+    // 'Alpha' is already highlighted on open; one Down moves to 'Beta'.
     pressKey('ArrowDown');
-    pressKey('ArrowDown');
-    // Highlight should now be on 'Beta'.
     let highlighted = container.querySelector('.context-menu-item--highlighted');
     expect(highlighted?.textContent).toBe('Beta');
 
@@ -204,7 +271,7 @@ describe('ContextMenu — focus and search', () => {
     ];
     renderMenu(items);
 
-    pressKey('ArrowDown');
+    // 'Alpha' is already highlighted on open.
     expect(container.querySelector('.context-menu-item--highlighted')?.textContent).toBe('Alpha');
 
     typeChar('a');
@@ -226,7 +293,7 @@ describe('ContextMenu — focus and search', () => {
     ];
     renderMenu(items);
 
-    pressKey('ArrowDown'); // Alpha
+    // 'Alpha' is already highlighted on open; one Down moves to 'More'.
     pressKey('ArrowDown'); // More
     expect(container.querySelector('.context-menu-item--highlighted')?.textContent).toContain(
       'More',

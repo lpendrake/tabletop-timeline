@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   initialMenuKeyState,
+  initialMenuKeyStateFor,
   isPrintableKey,
   menuKeyDown,
   menuQueryChange,
@@ -173,5 +174,41 @@ describe('menuKeyDown', () => {
     const result = menuKeyDown(initialMenuKeyState, key('Escape'), items, {});
     expect(result.handled).toBe(false);
     expect(result.effect).toBeUndefined();
+  });
+});
+
+describe('initialMenuKeyStateFor', () => {
+  it('initial state skips separators, headers and disabled items', () => {
+    const items: ContextMenuItem[] = [
+      { kind: 'header', label: 'Section' },
+      { kind: 'separator' },
+      { kind: 'action', label: 'A', onSelect: vi.fn(), disabled: true },
+      { kind: 'action', label: 'B', onSelect: vi.fn() },
+    ];
+    expect(initialMenuKeyStateFor(items).highlightPath).toEqual([3]);
+  });
+
+  it('prefers the first non-danger navigable item over a leading danger one', () => {
+    const items = formattingMenu(); // 'Copy', 'Delete' (danger), 'Details', …
+    expect(initialMenuKeyStateFor(items).highlightPath).toEqual([0]); // 'Copy'
+
+    const dangerFirst: ContextMenuItem[] = [
+      { kind: 'action', label: 'Delete', onSelect: vi.fn(), variant: 'danger' },
+      { kind: 'action', label: 'Edit', onSelect: vi.fn() },
+    ];
+    expect(initialMenuKeyStateFor(dangerFirst).highlightPath).toEqual([1]); // 'Edit'
+  });
+
+  it('highlights nothing when every navigable item is danger', () => {
+    const items: ContextMenuItem[] = [
+      { kind: 'action', label: 'Delete', onSelect: vi.fn(), variant: 'danger' },
+      { kind: 'action', label: 'Remove', onSelect: vi.fn(), variant: 'danger' },
+    ];
+    expect(initialMenuKeyStateFor(items).highlightPath).toBeNull();
+  });
+
+  it('highlights nothing when nothing is navigable', () => {
+    const items: ContextMenuItem[] = [{ kind: 'separator' }, { kind: 'header', label: 'X' }];
+    expect(initialMenuKeyStateFor(items).highlightPath).toBeNull();
   });
 });

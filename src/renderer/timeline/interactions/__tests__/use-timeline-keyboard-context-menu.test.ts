@@ -6,7 +6,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { createElement } from 'react';
 import { act } from 'react';
 import { useTimelineKeyboard, type TimelineKeyboardDeps } from '../useTimelineKeyboard';
-import { isContextMenuFocused } from '../../../shared/context-menu';
+import { isContextMenuOpen } from '../../../shared/context-menu';
 
 let container: HTMLDivElement;
 let root: Root;
@@ -29,7 +29,7 @@ function Harness({ deps }: { deps: TimelineKeyboardDeps }) {
 
 function makeDeps(overrides: Partial<TimelineKeyboardDeps> = {}): TimelineKeyboardDeps {
   return {
-    isBlocked: () => isContextMenuFocused(),
+    isBlocked: () => isContextMenuOpen(),
     getView: () => ({ centerSeconds: 0, secondsPerPixel: 60 }),
     getSize: () => ({ width: 1000, height: 600 }),
     setView: vi.fn(),
@@ -44,7 +44,7 @@ function makeDeps(overrides: Partial<TimelineKeyboardDeps> = {}): TimelineKeyboa
   };
 }
 
-describe('useTimelineKeyboard while a context menu is focused', () => {
+describe('useTimelineKeyboard while a context menu is open', () => {
   beforeEach(() => {
     setup();
   });
@@ -78,7 +78,33 @@ describe('useTimelineKeyboard while a context menu is focused', () => {
     menu.remove();
   });
 
-  it('still navigates when nothing inside a context menu has focus', () => {
+  it('ignores a keydown even when a .context-menu is present but focus sits on body', () => {
+    const setView = vi.fn();
+    const deps = makeDeps({ setView });
+    act(() => {
+      root.render(createElement(Harness, { deps }));
+    });
+
+    // A menu present in the document, but nothing inside it holds focus —
+    // e.g. right after Escape closed its search and before the panel
+    // reclaimed focus. The timeline must still ignore the key.
+    const menu = document.createElement('div');
+    menu.className = 'context-menu';
+    document.body.appendChild(menu);
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    expect(document.activeElement).toBe(document.body);
+
+    act(() => {
+      const event = new KeyboardEvent('keydown', { key: 'a', bubbles: true, cancelable: true });
+      window.dispatchEvent(event);
+    });
+
+    expect(setView).not.toHaveBeenCalled();
+
+    menu.remove();
+  });
+
+  it('still navigates when no context menu is present', () => {
     const setView = vi.fn();
     const deps = makeDeps({ setView });
     act(() => {

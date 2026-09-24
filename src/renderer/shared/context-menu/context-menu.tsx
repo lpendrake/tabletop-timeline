@@ -14,7 +14,7 @@ import { computeCaretPlacement } from './caret-position';
 import { itemAtPath, isPathPrefix, pathsEqual } from './menu-navigation';
 import { filterMenu, type FilteredNode, type MenuTarget } from './menu-search';
 import {
-  initialMenuKeyState,
+  initialMenuKeyStateFor,
   menuHover,
   menuKeyDown,
   menuQueryChange,
@@ -53,7 +53,7 @@ export function ContextMenu({
   backspaceCloses,
   anchor,
 }: ContextMenuProps) {
-  const [state, setState] = useState<MenuKeyState>(initialMenuKeyState);
+  const [state, setState] = useState<MenuKeyState>(() => initialMenuKeyStateFor(items));
   const { highlightPath, isSearching, query, targetIndex } = state;
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -114,6 +114,21 @@ export function ContextMenu({
   });
   const restoreFocusNowRef = useRef(restoreFocusNow);
   restoreFocusNowRef.current = restoreFocusNow;
+
+  // When search exits (Escape, or backspacing the query to empty) the search
+  // <input> unmounts. Without this, focus would fall to `<body>`, and a
+  // window-capture listener registered before this menu's own (e.g. the
+  // timeline's keyboard shortcuts) could see focus outside any
+  // `.context-menu` and act on the next keystroke instead of the menu
+  // starting a new search. Move focus back to the panel itself so it never
+  // falls to body while the menu is open.
+  const wasSearchingRef = useRef(isSearching);
+  useEffect(() => {
+    if (wasSearchingRef.current && !isSearching) {
+      menuRef.current?.focus({ preventScroll: true });
+    }
+    wasSearchingRef.current = isSearching;
+  }, [isSearching, menuRef]);
 
   const [anchorStyle, setAnchorStyle] = useState<{
     left: number;

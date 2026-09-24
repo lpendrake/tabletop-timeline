@@ -38,6 +38,22 @@ export function firstNavigableIndex(items: readonly ContextMenuItem[]): number |
   return nextNavigableIndex(items, -1, 1);
 }
 
+function isDanger(item: ContextMenuItem): boolean {
+  return (item.kind === 'action' || item.kind === 'submenu') && item.variant === 'danger';
+}
+
+/**
+ * The first navigable index in `items` that isn't a danger item (e.g. a
+ * "Delete" action), or `null` if every navigable item is danger. Used to
+ * pick the highlight a menu opens with — a danger item should never be
+ * pre-highlighted, the same way it's never the automatic search target (see
+ * `pickAutoTarget` in `menu-search.ts`).
+ */
+export function firstNonDangerNavigableIndex(items: readonly ContextMenuItem[]): number | null {
+  const index = items.findIndex((item) => isNavigable(item) && !isDanger(item));
+  return index === -1 ? null : index;
+}
+
 /**
  * Walks `path` (a chain of indices, each expected to land on a `submenu`
  * item except possibly the last) and returns the `ContextMenuItem[]` living

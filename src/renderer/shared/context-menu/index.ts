@@ -12,6 +12,6 @@ export type {
 } from './types';
 export { computeCaretPlacement } from './caret-position';
 export type { CaretPlacement, CaretSide } from './caret-position';
-export { isContextMenuFocused } from './is-context-menu-focused';
+export { isContextMenuOpen } from './context-menu-presence';
 export { filterMenu, pickAutoTarget } from './menu-search';
 export type { FilterMenuResult, FilteredNode, MenuTarget } from './menu-search';

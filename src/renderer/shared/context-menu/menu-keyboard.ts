@@ -7,6 +7,7 @@
  */
 import {
   firstNavigableIndex,
+  firstNonDangerNavigableIndex,
   itemAtPath,
   itemsAtPath,
   nextNavigableIndex,
@@ -30,6 +31,19 @@ export const initialMenuKeyState: MenuKeyState = {
   targetIndex: -1,
   preSearchHighlight: null,
 };
+
+/**
+ * The state a menu opens with: the first non-danger navigable top-level item
+ * (skipping separators, headers, disabled items) is already highlighted, so
+ * Enter immediately activates it and Down moves to the next one. A danger
+ * item (e.g. "Delete") is never pre-highlighted; if every navigable item is
+ * danger, nothing is highlighted. This is also what Escape/backspace-to-empty
+ * restore after a search, via `preSearchHighlight`.
+ */
+export function initialMenuKeyStateFor(items: readonly ContextMenuItem[]): MenuKeyState {
+  const index = firstNonDangerNavigableIndex(items);
+  return { ...initialMenuKeyState, highlightPath: index === null ? null : [index] };
+}
 
 /** A plain description of a keydown — whatever fields the caller reads off the DOM event. */
 export interface KeyInput {
