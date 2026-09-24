@@ -78,4 +78,27 @@ describe('shouldOpenSlashMenu', () => {
     const pos = state.doc.toString().indexOf('a ') + 2;
     expect(shouldOpenSlashMenu(state, pos)).toBe(false);
   });
+
+  it('does not open inside an @ link query', () => {
+    const state = makeState('@cap /');
+    expect(shouldOpenSlashMenu(state, state.doc.length)).toBe(false);
+  });
+
+  it('does not open inside a [[ link query', () => {
+    const state = makeState('[[cap /');
+    expect(shouldOpenSlashMenu(state, state.doc.length)).toBe(false);
+  });
+
+  it('opens after a completed link', () => {
+    const closedBrackets = makeState('[[abcd]] ');
+    expect(shouldOpenSlashMenu(closedBrackets, closedBrackets.doc.length)).toBe(true);
+
+    // An `@` query has no closing delimiter, so per WIKI_LINK_QUERY_RE a
+    // trailing space (and anything after it, short of `]`, a newline, `|`,
+    // or another `@`) is still "inside" the query — matching how the wiki
+    // link completion source itself treats it (it would still offer
+    // suggestions here). The slash menu stays closed for consistency.
+    const openAtQuery = makeState('@done ');
+    expect(shouldOpenSlashMenu(openAtQuery, openAtQuery.doc.length)).toBe(false);
+  });
 });

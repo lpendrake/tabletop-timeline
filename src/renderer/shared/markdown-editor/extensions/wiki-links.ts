@@ -31,6 +31,7 @@ import {
   resetLocalLabelChange,
   resolveDisplayLabel,
 } from './wiki-link-context-menu';
+import { WIKI_LINK_QUERY_RE } from './wiki-link-query';
 
 export type WikiLinkStatus = 'resolved' | 'loading' | 'missing' | 'unresolved';
 
@@ -87,9 +88,6 @@ export const entityLabelMapField = StateField.define<Map<string, string>>({
     return value;
   },
 });
-
-// Matches [[query or @query at end of line (@ is an alias trigger; [[ still works)
-const WIKI_LINK_QUERY_RE = /(?:\[\[|@)[^\]\n|@]*$/;
 
 export interface TriggerMatch {
   prefixLen: number;
