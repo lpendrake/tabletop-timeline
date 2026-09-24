@@ -155,18 +155,11 @@ function hoveredElement(): Element | null {
  * close. Without this, a peek whose hover-out was suppressed while the menu
  * was open (see `scheduleClose`) would stay open indefinitely until the next
  * unrelated mouse movement happened to cross a element boundary.
- *
- * Calls `startCloseTimer` directly rather than `scheduleClose` — the
- * subscription that calls this already knows (from the registry, not a DOM
- * query) that the last menu just closed, and a closing `<ContextMenu>`'s
- * `.context-menu` node can still be attached for a tick after its unmount
- * effect cleanup (this function's caller) runs; `scheduleClose`'s
- * `isContextMenuOpen` guard would see that lingering node and wrongly skip.
  */
 function recheckAfterMenuCloses() {
   if (stack.length === 0) return;
   if (isLive(hoveredElement())) return;
-  startCloseTimer();
+  scheduleClose();
 }
 
 function handleOver(e: MouseEvent) {

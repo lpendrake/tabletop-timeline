@@ -61,14 +61,11 @@ export function onContextMenuOpenChange(listener: Listener): () => void {
 }
 
 /**
- * Reports whether any context menu is currently open. Backed primarily by
- * the mount/unmount registry above; also true when a `.context-menu` panel
- * is found in `doc` even if it wasn't registered (e.g. a panel mounted
- * outside `<ContextMenu>`'s own lifecycle), so callers that still probe the
- * DOM directly keep working unchanged.
+ * Reports whether any context menu is currently open, as tracked by the
+ * mount/unmount registry above.
  */
-export function isContextMenuOpen(doc: Document = document): boolean {
-  return openCount > 0 || doc.querySelector('.context-menu') !== null;
+export function isContextMenuOpen(): boolean {
+  return openCount > 0;
 }
 
 /** Test-only: resets the registry between test files/cases. */

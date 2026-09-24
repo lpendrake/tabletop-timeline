@@ -6,7 +6,11 @@ import { createRoot, type Root } from 'react-dom/client';
 import { createElement } from 'react';
 import { act } from 'react';
 import { useTimelineKeyboard, type TimelineKeyboardDeps } from '../useTimelineKeyboard';
-import { isContextMenuOpen } from '../../../shared/context-menu';
+import {
+  isContextMenuOpen,
+  registerContextMenuOpen,
+  _resetContextMenuPresenceForTests,
+} from '../../../shared/context-menu';
 
 let container: HTMLDivElement;
 let root: Root;
@@ -51,6 +55,7 @@ describe('useTimelineKeyboard while a context menu is open', () => {
 
   afterEach(() => {
     teardown();
+    _resetContextMenuPresenceForTests();
   });
 
   it('ignores a keydown whose target is inside a focused .context-menu panel', () => {
@@ -60,6 +65,7 @@ describe('useTimelineKeyboard while a context menu is open', () => {
       root.render(createElement(Harness, { deps }));
     });
 
+    const unregister = registerContextMenuOpen();
     const menu = document.createElement('div');
     menu.className = 'context-menu';
     menu.tabIndex = -1;
@@ -75,6 +81,7 @@ describe('useTimelineKeyboard while a context menu is open', () => {
 
     expect(setView).not.toHaveBeenCalled();
 
+    unregister();
     menu.remove();
   });
 
@@ -88,6 +95,7 @@ describe('useTimelineKeyboard while a context menu is open', () => {
     // A menu present in the document, but nothing inside it holds focus —
     // e.g. right after Escape closed its search and before the panel
     // reclaimed focus. The timeline must still ignore the key.
+    const unregister = registerContextMenuOpen();
     const menu = document.createElement('div');
     menu.className = 'context-menu';
     document.body.appendChild(menu);
@@ -101,6 +109,7 @@ describe('useTimelineKeyboard while a context menu is open', () => {
 
     expect(setView).not.toHaveBeenCalled();
 
+    unregister();
     menu.remove();
   });
 

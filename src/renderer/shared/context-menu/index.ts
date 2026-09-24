@@ -16,6 +16,7 @@ export {
   isContextMenuOpen,
   onContextMenuOpenChange,
   registerContextMenuOpen,
+  _resetContextMenuPresenceForTests,
 } from './context-menu-presence';
 export { filterMenu, pickAutoTarget } from './menu-search';
 export type { FilterMenuResult, FilteredNode, MenuTarget } from './menu-search';
