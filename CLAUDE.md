@@ -25,9 +25,7 @@ Before doing anything else, fetch the **body** of the issue via the GitHub MCP t
 
 **Images in issues:** `github.com/user-attachments` URLs require a two-step fetch. Call `WebFetch` on the URL — it will return a 302 redirect to a signed S3 URL. Call `WebFetch` again on that S3 URL; the image is downloaded and the path is reported in the result. Then use `Read` on that path to view the image. Do not give up after the first redirect — the image is always retrievable this way.
 
-### 2. Orchestrate it
-
-All issue-driven work uses the `orchestrate` skill (`.claude/skills/orchestrate/SKILL.md`) on Opus: it plans, delegates to sub-agents, reviews every diff, and ships one PR. Issues carry no oversight label, and none is needed.
+### 2. Sub-agent planning
 
 !Important! When asking a sub-agent to plan for you do not do research first, let it do its own research, else you pollute its views.
 Once it has a plan for you and has highlighted files, look into what it has guided you towards.
