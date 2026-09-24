@@ -529,6 +529,84 @@ describe('MAX_DEPTH cap', () => {
   });
 });
 
+describe('context menu suppresses hover-out close', () => {
+  function addContextMenu(): HTMLDivElement {
+    const menu = document.createElement('div');
+    menu.className = 'context-menu';
+    document.body.appendChild(menu);
+    return menu;
+  }
+
+  async function flushMicrotasks() {
+    await Promise.resolve();
+    await Promise.resolve();
+  }
+
+  it('a peek stays open while a context menu opened from it is open', async () => {
+    const handle = setupMock();
+    const link = makeLinkEl();
+    hover(link);
+    vi.advanceTimersByTime(150);
+
+    // Right-clicking the link opened a context menu above the peek; the
+    // pointer then moves off the link and onto the menu, firing a document
+    // `mouseout` whose `relatedTarget` sits inside `.context-menu`.
+    const menu = addContextMenu();
+    await flushMicrotasks(); // let the MutationObserver register the open menu
+    unhover(link, menu);
+
+    vi.advanceTimersByTime(1000);
+    expect(handle.close).not.toHaveBeenCalled();
+  });
+
+  it('after the menu closes, moving away closes the peek as usual', async () => {
+    const handle = setupMock();
+    const link = makeLinkEl();
+    hover(link);
+    vi.advanceTimersByTime(150);
+
+    const menu = addContextMenu();
+    await flushMicrotasks();
+    unhover(link, menu);
+    vi.advanceTimersByTime(1000);
+    expect(handle.close).not.toHaveBeenCalled();
+
+    // The menu closes (e.g. an item was selected, or Escape/outside click).
+    menu.remove();
+    await flushMicrotasks();
+
+    // Normal hover-out rules resume: moving away from the link now starts
+    // the usual close timer.
+    unhover(link, document.body);
+    vi.advanceTimersByTime(249);
+    expect(handle.close).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(handle.close).toHaveBeenCalled();
+  });
+
+  it('closeFromWikiLink (CM6 hover-end path) is also suppressed while any context menu is open', async () => {
+    const handle = setupMock();
+    const link = makeLinkEl();
+    hover(link);
+    vi.advanceTimersByTime(150);
+
+    // A context menu opened from anywhere (not necessarily via the plain
+    // mouseover/mouseout path) must still suppress the close — the
+    // suppression lives in `scheduleClose` itself, not just in `isLive`.
+    const menu = addContextMenu();
+    await flushMicrotasks();
+
+    closeFromWikiLink(document.body);
+    vi.advanceTimersByTime(1000);
+    expect(handle.close).not.toHaveBeenCalled();
+
+    menu.remove();
+    await flushMicrotasks();
+    vi.advanceTimersByTime(250);
+    expect(handle.close).toHaveBeenCalled();
+  });
+});
+
 describe('entity label delta push', () => {
   it('calls updateLabels on stacked handles when a delta arrives', () => {
     const handle = setupMock();
