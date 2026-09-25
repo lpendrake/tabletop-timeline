@@ -36,8 +36,13 @@ import { imageDecorations, type ImageDecorationsOptions } from './extensions/ima
 import { dropLink, type DropLinkConfig } from './extensions/drop-link';
 import { editorContextMenu, type EditorMenuExtraItems } from './extensions/editor-context-menu';
 import { relationshipDirectives, setDirectiveContext } from './extensions/relationship-directives';
+import {
+  relationshipBubble,
+  type RelationshipBubbleHostContext,
+} from './extensions/relationship-bubble-view-plugin';
 import { formattingKeymap } from './commands';
 import type { TrackLibrary, Role } from '../../../shared/relationships';
+import type { PickerOption } from '../searchable-picker';
 
 /**
  * Pairs an EditorState with the Compartment instance embedded in it.
@@ -65,7 +70,30 @@ export interface RelationshipDirectivesHostConfig {
   library: TrackLibrary;
   defaultReason: string;
   onOpenNote?: (id: string) => void;
+  /**
+   * Hook point for a host that wants to handle field-editing itself instead
+   * of the built-in fill-in bubble. Omit it — the common case — and clicks
+   * open the bubble directly.
+   */
   onEditField?: (target: { from: number; ordinal: number }, role: Role) => void;
+  /** Data and callbacks the built-in fill-in bubble needs. Omit to still get a bubble with no note/option pickers wired up. */
+  bubbles?: {
+    noteOptions: () => PickerOption[];
+    defaultHolderId?: () => string | null;
+    currentNoteId?: () => string | null;
+    onHolderChosenWithoutDefault?: (id: string) => void;
+    createOption?: (
+      trackId: string,
+      label: string,
+      mutual: boolean,
+    ) => Promise<{ key: string } | null>;
+    heldOptions?: (q: {
+      trackId: string;
+      holder: string | null;
+      observer: string | null;
+      anchor: number;
+    }) => string[];
+  };
 }
 
 export interface MarkdownEditorProps {
@@ -114,6 +142,23 @@ export interface MarkdownEditorProps {
    * Omit (or pass `undefined`) to keep the default behaviour of caret at 0.
    */
   initialCursor?: number;
+}
+
+const EMPTY_LIBRARY: TrackLibrary = { custom: [], optionAdditions: {} };
+
+function makeBubbleHostContext(
+  config: RelationshipDirectivesHostConfig | undefined,
+): RelationshipBubbleHostContext {
+  return {
+    library: config?.library ?? EMPTY_LIBRARY,
+    defaultReason: config?.defaultReason ?? 'Unspecified',
+    noteOptions: () => config?.bubbles?.noteOptions() ?? [],
+    defaultHolderId: () => config?.bubbles?.defaultHolderId?.() ?? null,
+    currentNoteId: () => config?.bubbles?.currentNoteId?.() ?? null,
+    onHolderChosenWithoutDefault: config?.bubbles?.onHolderChosenWithoutDefault,
+    createOption: config?.bubbles?.createOption,
+    heldOptions: config?.bubbles?.heldOptions,
+  };
 }
 
 export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
@@ -180,10 +225,14 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       relationshipDirectives({
         readOnly: readOnlyRef.current,
         onOpenNote: (id) => relationshipDirectivesRef.current?.onOpenNote?.(id),
-        onEditField: (target, role) =>
-          relationshipDirectivesRef.current?.onEditField?.(target, role),
+        onEditField: relationshipDirectivesRef.current?.onEditField
+          ? (target, role) => relationshipDirectivesRef.current?.onEditField?.(target, role)
+          : undefined,
       }),
     ];
+    if (!readOnlyRef.current) {
+      exts.push(relationshipBubble(() => makeBubbleHostContext(relationshipDirectivesRef.current)));
+    }
     return exts;
   }
 

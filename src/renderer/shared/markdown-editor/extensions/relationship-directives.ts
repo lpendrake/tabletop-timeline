@@ -19,7 +19,6 @@ import {
 import {
   Decoration,
   EditorView,
-  ViewPlugin,
   WidgetType,
   keymap,
   type Command,
@@ -36,10 +35,16 @@ import {
   type TrackLibrary,
 } from '../../../../shared/relationships';
 import { entityLabelMapField, setEntityLabels } from './wiki-links';
+import { openDirectiveBubble } from './relationship-bubble-state';
 
 export interface RelationshipDirectivesConfig {
   readOnly?: boolean;
   onOpenNote?: (id: string) => void;
+  /**
+   * Hook point for a host that wants to handle field-editing itself. Omit
+   * it (the common case) and a click/Enter opens the built-in fill-in
+   * bubble directly (see `relationship-bubble-state.ts`'s `openDirectiveBubble`).
+   */
   onEditField?: (target: { from: number; ordinal: number }, role: Role) => void;
 }
 
@@ -125,11 +130,33 @@ function labelForNoteFrom(state: EditorState): (id: string) => string {
   return (id: string) => map.get(id) ?? id;
 }
 
+/**
+ * Resolves the directive CURRENTLY at `root`'s document position, via
+ * CodeMirror's own DOM→position mapping (`view.posAtDOM`) — never a
+ * captured `from`/`to` number, and never a `data-*` attribute. This is
+ * robust across CodeMirror reusing a widget's DOM node for a content-equal
+ * rebuild (see `DirectiveWidget.eq`): `posAtDOM` always reflects the LIVE
+ * view, regardless of which widget object happened to render that node. A
+ * detached or repositioned-away root (stale — the doc changed since it was
+ * built) resolves to `null` and every handler below just does nothing.
+ */
+function currentDirectiveAt(view: EditorView, root: HTMLElement): ParsedDirective | null {
+  if (!root.isConnected) return null;
+  let pos: number;
+  try {
+    pos = view.posAtDOM(root);
+  } catch {
+    return null;
+  }
+  return directivesIn(view.state).find((d) => d.from === pos) ?? null;
+}
+
 class DirectiveWidget extends WidgetType {
   constructor(
     readonly directive: ParsedDirective,
     readonly built: DirectiveView,
     readonly readOnly: boolean,
+    readonly config: RelationshipDirectivesConfig,
   ) {
     super();
   }
@@ -144,13 +171,20 @@ class DirectiveWidget extends WidgetType {
     );
   }
 
-  override toDOM(): HTMLElement {
+  private openField(view: EditorView, root: HTMLElement, role: Role): void {
+    const directive = currentDirectiveAt(view, root);
+    if (!directive) return;
+    if (this.config.onEditField) {
+      this.config.onEditField({ from: directive.from, ordinal: directive.ordinal }, role);
+    } else {
+      openDirectiveBubble(view, directive.from, role);
+    }
+  }
+
+  override toDOM(view: EditorView): HTMLElement {
     const root = document.createElement('span');
     root.className =
       this.built.kind === 'error' ? 'cm-directive cm-directive-error' : 'cm-directive';
-    root.dataset.from = String(this.directive.from);
-    root.dataset.to = String(this.directive.to);
-    root.dataset.ordinal = String(this.directive.ordinal);
 
     if (this.built.kind === 'error') {
       root.title = this.built.title;
@@ -161,7 +195,7 @@ class DirectiveWidget extends WidgetType {
           root.appendChild(document.createTextNode(part.text));
           continue;
         }
-        root.appendChild(this.buildValueSpan(part));
+        root.appendChild(this.buildValueSpan(part, view, root));
       }
     }
 
@@ -171,18 +205,71 @@ class DirectiveWidget extends WidgetType {
       cross.setAttribute('aria-hidden', 'true');
       // The '×' glyph is drawn via CSS `content` (see `directiveTheme`), not
       // as text content, so it never appears in the block's `textContent` —
-      // that must stay exactly the readable sentence.
-      root.dataset.crossEnd = 'end';
+      // that must stay exactly the readable sentence. `crossSide` below is
+      // ephemeral hover UI state held in this closure, written out only as a
+      // CSS class on `cross` — never read back from the DOM.
+      let crossSide: 'start' | 'end' = 'end';
+      const onMove = (event: MouseEvent) => {
+        const rects = Array.from(root.getClientRects());
+        const rect =
+          rects.find((r) => event.clientY >= r.top && event.clientY <= r.bottom) ??
+          rects[rects.length - 1];
+        if (!rect || rect.width === 0) return;
+
+        const fraction = (event.clientX - rect.left) / rect.width;
+        const next = crossEnd(fraction, crossSide);
+        if (next === crossSide) return;
+
+        crossSide = next;
+        cross.classList.toggle('cm-directive-cross-start', next === 'start');
+        cross.classList.toggle('cm-directive-cross-end', next === 'end');
+      };
+      root.addEventListener('mousemove', onMove);
+      root.addEventListener('mouseleave', () => {
+        crossSide = 'end';
+        cross.classList.remove('cm-directive-cross-start');
+        cross.classList.add('cm-directive-cross-end');
+      });
+      cross.addEventListener('click', (event) => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const directive = currentDirectiveAt(view, root);
+        if (!directive) return;
+        view.dispatch({
+          changes: { from: directive.from, to: directive.to, insert: '' },
+          userEvent: 'delete.directive',
+        });
+      });
       root.appendChild(cross);
     }
+
+    // Wording click: opens the first blank to edit. Value/cross clicks
+    // above call stopPropagation so this only fires for genuine wording
+    // clicks (or a click anywhere else in the block when it has no values).
+    root.addEventListener('click', (event) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (this.readOnly || this.config.readOnly) return;
+      if (this.built.kind !== 'sentence') return;
+      const role = firstEditRole(this.built.parts);
+      if (role) this.openField(view, root, role);
+    });
+
+    root.addEventListener('contextmenu', (event) => {
+      const directive = currentDirectiveAt(view, root);
+      if (!directive) return;
+      event.preventDefault();
+      view.dispatch({ selection: { anchor: directive.from, head: directive.to } });
+    });
 
     return root;
   }
 
-  private buildValueSpan(part: ValuePart): HTMLElement {
+  private buildValueSpan(part: ValuePart, view: EditorView, root: HTMLElement): HTMLElement {
     const span = document.createElement('span');
-    span.dataset.role = part.role;
-    const classes = ['cm-directive-value'];
+    const classes = ['cm-directive-value', `cm-directive-value-role-${part.role}`];
     if (part.problem) {
       classes.push('cm-directive-value-error');
       span.title = part.problem.message;
@@ -190,11 +277,24 @@ class DirectiveWidget extends WidgetType {
       classes.push('cm-directive-value-attention');
     }
     if ((part.role === 'holder' || part.role === 'observer') && part.noteId) {
-      span.dataset.noteId = part.noteId;
       classes.push('cm-directive-value-note');
     }
     span.className = classes.join(' ');
     span.textContent = part.display;
+
+    span.addEventListener('click', (event) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const modified = event.ctrlKey || event.metaKey;
+      if (modified && part.noteId) {
+        this.config.onOpenNote?.(part.noteId);
+        return;
+      }
+      if (modified || this.readOnly || this.config.readOnly) return;
+      this.openField(view, root, part.role);
+    });
+
     return span;
   }
 
@@ -214,120 +314,10 @@ function buildDecorations(state: EditorState, config: RelationshipDirectivesConf
     builder.add(
       d.from,
       d.to,
-      Decoration.replace({ widget: new DirectiveWidget(d, built, readOnly) }),
+      Decoration.replace({ widget: new DirectiveWidget(d, built, readOnly, config) }),
     );
   }
   return builder.finish();
-}
-
-function makeDirectiveClickHandler(config: RelationshipDirectivesConfig): Extension {
-  return EditorView.domEventHandlers({
-    click(event, view) {
-      if (event.button !== 0) return false;
-      const target = event.target as HTMLElement;
-      const block = target.closest<HTMLElement>('.cm-directive');
-      if (!block) return false;
-
-      const from = Number(block.dataset.from);
-      const to = Number(block.dataset.to);
-      const ordinal = Number(block.dataset.ordinal);
-      const modified = event.ctrlKey || event.metaKey;
-
-      const cross = target.closest<HTMLElement>('.cm-directive-cross');
-      if (cross && !config.readOnly) {
-        event.preventDefault();
-        event.stopPropagation();
-        view.dispatch({ changes: { from, to, insert: '' }, userEvent: 'delete.directive' });
-        return true;
-      }
-
-      const valueEl = target.closest<HTMLElement>('.cm-directive-value');
-      if (valueEl) {
-        const noteId = valueEl.dataset.noteId;
-        event.preventDefault();
-        event.stopPropagation();
-        if (modified && noteId) {
-          config.onOpenNote?.(noteId);
-          return true;
-        }
-        if (!modified && !config.readOnly) {
-          const role = valueEl.dataset.role as Role;
-          config.onEditField?.({ from, ordinal }, role);
-        }
-        return true;
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-      if (!config.readOnly) {
-        const directive = directivesIn(view.state).find((d) => d.from === from);
-        if (directive) {
-          const { library, defaultReason } = view.state.field(directiveContextField);
-          const built = buildDirectiveView(
-            directive,
-            library,
-            defaultReason,
-            labelForNoteFrom(view.state),
-          );
-          if (built.kind === 'sentence') {
-            const role = firstEditRole(built.parts);
-            if (role) config.onEditField?.({ from, ordinal }, role);
-          }
-        }
-      }
-      return true;
-    },
-  });
-}
-
-function makeDirectiveContextMenuHandler(): Extension {
-  return EditorView.domEventHandlers({
-    contextmenu(event, view) {
-      const target = event.target as HTMLElement;
-      const block = target.closest<HTMLElement>('.cm-directive');
-      if (!block) return false;
-      const from = Number(block.dataset.from);
-      const to = Number(block.dataset.to);
-      if (Number.isNaN(from) || Number.isNaN(to)) return false;
-      view.dispatch({ selection: { anchor: from, head: to } });
-      return false;
-    },
-  });
-}
-
-function makeDirectiveHoverPlugin(): Extension {
-  return ViewPlugin.fromClass(
-    class {
-      private readonly onMove = (event: MouseEvent) => {
-        const target = (event.target as HTMLElement)?.closest?.<HTMLElement>('.cm-directive');
-        const cross = target?.querySelector<HTMLElement>('.cm-directive-cross');
-        if (!target || !cross) return;
-
-        const rects = Array.from(target.getClientRects());
-        const rect =
-          rects.find((r) => event.clientY >= r.top && event.clientY <= r.bottom) ??
-          rects[rects.length - 1];
-        if (!rect || rect.width === 0) return;
-
-        const fraction = (event.clientX - rect.left) / rect.width;
-        const previous = (target.dataset.crossEnd as 'start' | 'end') ?? 'end';
-        const next = crossEnd(fraction, previous);
-        if (next === previous) return;
-
-        target.dataset.crossEnd = next;
-        cross.classList.toggle('cm-directive-cross-start', next === 'start');
-        cross.classList.toggle('cm-directive-cross-end', next === 'end');
-      };
-
-      constructor(readonly view: EditorView) {
-        view.dom.addEventListener('mousemove', this.onMove);
-      }
-
-      destroy() {
-        this.view.dom.removeEventListener('mousemove', this.onMove);
-      }
-    },
-  );
 }
 
 /**
@@ -390,7 +380,13 @@ function makeDirectiveEnterKeymap(config: RelationshipDirectivesConfig): Extensi
     );
     if (built.kind === 'sentence') {
       const role = firstEditRole(built.parts);
-      if (role) config.onEditField?.({ from: directive.from, ordinal: directive.ordinal }, role);
+      if (role) {
+        if (config.onEditField) {
+          config.onEditField({ from: directive.from, ordinal: directive.ordinal }, role);
+        } else {
+          openDirectiveBubble(view, directive.from, role);
+        }
+      }
     }
     return true;
   };
@@ -491,9 +487,6 @@ export function relationshipDirectives(config: RelationshipDirectivesConfig = {}
     field,
     EditorView.atomicRanges.of((view) => view.state.field(field)),
     directiveTheme,
-    makeDirectiveClickHandler(config),
-    makeDirectiveContextMenuHandler(),
-    makeDirectiveHoverPlugin(),
     makeDirectiveDeleteKeymap(),
     makeDirectiveEnterKeymap(config),
   ];

@@ -179,6 +179,33 @@ describe('relationship directives — readable rendering', () => {
   });
 });
 
+describe('relationship directives — DOM is not a data source', () => {
+  it('block click handlers use editor state, not DOM attributes', () => {
+    const onEditField = vi.fn();
+    const setup = track(
+      makeView(`before ${UNFINISHED_CHANGE_DIRECTIVE}`, { onEditField }, { labels: LABELS }),
+    );
+    const { view } = setup;
+    const el = block(view);
+
+    // None of the old data-* identity attributes are present anywhere in the block.
+    expect(el.outerHTML).not.toContain('data-from');
+    expect(el.outerHTML).not.toContain('data-to');
+    expect(el.outerHTML).not.toContain('data-ordinal');
+    expect(el.outerHTML).not.toContain('data-role');
+    expect(el.outerHTML).not.toContain('data-note-id');
+
+    // Insert text above the directive — its position shifts — then click still
+    // routes correctly, because the widget re-resolves its own current range
+    // from editor state rather than trusting numbers captured at render time.
+    view.dispatch({ changes: { from: 0, insert: 'more ' } });
+    const shiftedFrom = 'more before '.length;
+    const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
+    fireClick(holderValue);
+    expect(onEditField).toHaveBeenCalledWith({ from: shiftedFrom, ordinal: 0 }, 'holder');
+  });
+});
+
 describe('relationship directives — deletion', () => {
   it('Backspace after a block selects it, a second Backspace deletes it; Ctrl+Z restores', () => {
     const original = `${FULL_CHANGE_DIRECTIVE} tail`;
@@ -275,7 +302,7 @@ describe('relationship directives — editing callbacks', () => {
     const setup = track(makeView(UNFINISHED_CHANGE_DIRECTIVE, { onEditField }, { labels: LABELS }));
     const { view } = setup;
 
-    const holderValue = block(view).querySelector<HTMLElement>('[data-role="holder"]')!;
+    const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
     fireClick(holderValue);
     expect(onEditField).toHaveBeenCalledWith({ from: 0, ordinal: 0 }, 'holder');
 
@@ -291,7 +318,7 @@ describe('relationship directives — editing callbacks', () => {
       makeView(FULL_CHANGE_DIRECTIVE, { onOpenNote, onEditField }, { labels: LABELS }),
     );
     const { view } = setup;
-    const holderValue = block(view).querySelector<HTMLElement>('[data-role="holder"]')!;
+    const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
 
     fireClick(holderValue);
     expect(onOpenNote).not.toHaveBeenCalled();
@@ -305,7 +332,9 @@ describe('relationship directives — editing callbacks', () => {
 
   it('unfinished blanks show their prompt with the attention class', () => {
     const setup = track(makeView(UNFINISHED_CHANGE_DIRECTIVE, {}, { labels: LABELS }));
-    const amountValue = block(setup.view).querySelector<HTMLElement>('[data-role="amount"]')!;
+    const amountValue = block(setup.view).querySelector<HTMLElement>(
+      '.cm-directive-value-role-amount',
+    )!;
     expect(amountValue.classList.contains('cm-directive-value-attention')).toBe(true);
     expect(amountValue.textContent).toBe('Reputation change');
   });
@@ -314,14 +343,16 @@ describe('relationship directives — editing callbacks', () => {
     const withHost = track(
       makeView(EMPTY_REASON_DIRECTIVE, {}, { labels: LABELS, defaultReason: 'Battle of Dawn' }),
     );
-    const reasonValue = block(withHost.view).querySelector<HTMLElement>('[data-role="reason"]')!;
+    const reasonValue = block(withHost.view).querySelector<HTMLElement>(
+      '.cm-directive-value-role-reason',
+    )!;
     expect(reasonValue.textContent).toBe('Battle of Dawn');
 
     const withoutHost = track(
       makeView(EMPTY_REASON_DIRECTIVE, {}, { labels: LABELS, dispatchContext: false }),
     );
     const defaultReasonValue = block(withoutHost.view).querySelector<HTMLElement>(
-      '[data-role="reason"]',
+      '.cm-directive-value-role-reason',
     )!;
     expect(defaultReasonValue.textContent).toBe('Unspecified');
   });
@@ -342,7 +373,7 @@ describe('relationship directives — errors', () => {
     expect(el.classList.contains('cm-directive-error')).toBe(false);
     expect(el.textContent).toContain('is now boss with');
 
-    const optionValue = el.querySelector<HTMLElement>('[data-role="option"]')!;
+    const optionValue = el.querySelector<HTMLElement>('.cm-directive-value-role-option')!;
     expect(optionValue.classList.contains('cm-directive-value-error')).toBe(true);
     expect(optionValue.title).toBe('Unknown option "boss" for Relationship tags');
   });
@@ -373,7 +404,7 @@ describe('relationship directives — read-only', () => {
     const el = block(setup.view);
     expect(el.querySelector('.cm-directive-cross')).toBeNull();
 
-    const holderValue = el.querySelector<HTMLElement>('[data-role="holder"]')!;
+    const holderValue = el.querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
     fireClick(holderValue, { ctrlKey: true });
     expect(onOpenNote).toHaveBeenCalledWith('c3d4');
   });

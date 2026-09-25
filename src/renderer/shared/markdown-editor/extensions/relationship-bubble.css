@@ -1,0 +1,119 @@
+/* ---- Relationship directive fill-in bubble ---- */
+.relationship-bubble-host {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 2100;
+}
+
+.relationship-bubble {
+  position: fixed;
+  min-width: 200px;
+  max-width: 320px;
+  background: var(--theme-panel);
+  border: 1px solid var(--theme-border-strong);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.35);
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--theme-text-primary);
+}
+
+.relationship-bubble-prompt {
+  color: var(--theme-text-secondary);
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+
+.relationship-bubble-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.relationship-bubble-input {
+  background: var(--theme-surface);
+  border: 1px solid var(--theme-border);
+  border-radius: 4px;
+  padding: 5px 8px;
+  color: var(--theme-text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.relationship-bubble-input:focus {
+  border-color: var(--theme-border-strong);
+}
+
+.relationship-bubble-message {
+  color: var(--theme-danger);
+  font-size: 12px;
+}
+
+.relationship-bubble-list {
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--theme-border);
+  border-radius: 4px;
+}
+
+.relationship-bubble-row {
+  padding: 5px 8px;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.relationship-bubble-row:hover,
+.relationship-bubble-row.is-highlighted {
+  background: var(--theme-background);
+  border-left-color: var(--theme-accent-gold);
+}
+
+.relationship-bubble-empty {
+  padding: 8px;
+  color: var(--theme-text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.relationship-bubble-create-row {
+  color: var(--theme-accent-gold);
+  font-style: italic;
+}
+
+.relationship-bubble-mutual-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-style: normal;
+  font-size: 12px;
+  color: var(--theme-text-secondary);
+}
+
+.relationship-bubble-tail {
+  position: absolute;
+  left: 16px;
+  width: 10px;
+  height: 10px;
+  background: var(--theme-panel);
+  border: 1px solid var(--theme-border-strong);
+  transform: rotate(45deg);
+}
+
+.relationship-bubble-tail-above {
+  bottom: -6px;
+  border-top: none;
+  border-left: none;
+}
+
+.relationship-bubble-tail-below {
+  top: -6px;
+  border-bottom: none;
+  border-right: none;
+}
