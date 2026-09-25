@@ -1,6 +1,7 @@
 import type { EntityIndexEntry } from '../../../../types/global';
 import type { PickerOption } from '../../../shared/searchable-picker';
 import { effectiveLinkLabel } from '../../../../shared/entity-labels';
+import { resolveEntityLabel } from '../../../relationships/domain/label-for';
 
 /** Notes (not events or assets) from the entity index, as picker options. */
 export function notesToPickerOptions(entityIndex: readonly EntityIndexEntry[]): PickerOption[] {
@@ -9,12 +10,11 @@ export function notesToPickerOptions(entityIndex: readonly EntityIndexEntry[]): 
     .map((e) => ({ id: e.id, path: e.path, label: effectiveLinkLabel(e) }));
 }
 
-/** The current holder's display label, or null when unset or not found. */
+/** The current holder's display label, or null when unset. */
 export function holderLabel(
   entityIndex: readonly EntityIndexEntry[],
   holderId: string | null,
 ): string | null {
   if (!holderId) return null;
-  const entry = entityIndex.find((e) => e.id === holderId);
-  return entry ? effectiveLinkLabel(entry) : holderId;
+  return resolveEntityLabel(holderId, new Map(), entityIndex);
 }

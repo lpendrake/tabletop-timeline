@@ -5,6 +5,7 @@ import type { Ledger } from '../../../shared/relationships';
 import { effectiveLinkLabel } from '../../../shared/entity-labels';
 import { relationshipsData } from '../data';
 import { useRelationshipLibrary } from './use-relationship-library';
+import { resolveEntityLabel } from '../domain/label-for';
 import {
   buildRelationshipEditorConfig,
   makeHeldOptionsResolver,
@@ -68,12 +69,9 @@ export function useRelationshipEditorConfig(
   const optsRef = useRef(opts);
   optsRef.current = opts;
 
-  const labelFor = (id: string): string => {
-    const entry = entityIndexRef.current.find((e) => e.id === id);
-    return entry ? effectiveLinkLabel(entry) : id;
-  };
-
   return useMemo(() => {
+    const labelFor = (id: string): string =>
+      resolveEntityLabel(id, new Map(), entityIndexRef.current);
     const heldOptions = makeHeldOptionsResolver({
       library,
       getLedgers: () => ledgersRef.current,
