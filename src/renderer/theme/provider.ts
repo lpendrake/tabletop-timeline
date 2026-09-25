@@ -85,9 +85,6 @@ function applyCssVars(theme: Theme): void {
     'directive-border': theme.editor.directiveBorder,
     'directive-hover': theme.editor.directiveHover,
     'directive-value-highlight': theme.editor.directiveValueHighlight,
-    'directive-attention': theme.editor.directiveAttention,
-    'directive-error': theme.editor.directiveError,
-    'directive-delete': theme.editor.directiveDelete,
   };
 
   for (const [key, value] of Object.entries(directiveMap)) {
@@ -106,7 +103,6 @@ function applyCssVars(theme: Theme): void {
     'relationships-row-hover': theme.relationships.rowHover,
     'relationships-drop-indicator': theme.relationships.dropIndicator,
     'relationships-step-set-break': theme.relationships.stepSetBreak,
-    'relationships-error-text': theme.relationships.errorText,
   };
 
   for (const [key, value] of Object.entries(relationshipsMap)) {

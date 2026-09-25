@@ -98,6 +98,7 @@ Event body markdown.
 
 Must contain a h1 title as it drives the title field of the file, which in turn dictates the file name, and tag and link labels
 Wiki links here drive the `id:XXXX` entity tags automatically.
+This includes the holder/observer `[[id]]` values inside relationship directives (`{{trackId.action ...}}`): they intentionally feed `extractWikiLinkIds` → `syncEntityTags` too, so an event is tagged with every note whose relationship it changes (epic #261 — filtering the timeline by, say, the Party finds every event that changed the Party's relationships, not just events that mention it in prose).
 ```
 
 `epochSeconds` is an integer count of seconds since the active calendar's epoch (Golarion epoch = 0000-01-01 midnight). Older files may also carry a legacy `date` string; the app reads it as a fallback but no longer writes it.

@@ -81,9 +81,6 @@ export const lightfinder: Theme = {
     directiveBorder: '#8c7848',
     directiveHover: '#e8dcb4',
     directiveValueHighlight: '#c4d3a6',
-    directiveAttention: '#a06a18',
-    directiveError: '#80281a',
-    directiveDelete: '#80281a',
   },
 
   bootstrap: {
@@ -118,6 +115,5 @@ export const lightfinder: Theme = {
     rowHover: '#e8dcb4',
     dropIndicator: '#8a5e10',
     stepSetBreak: '#8c7848',
-    errorText: '#923222',
   },
 };

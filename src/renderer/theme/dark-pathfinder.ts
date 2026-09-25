@@ -79,9 +79,6 @@ export const darkPathfinder: Theme = {
     directiveBorder: '#5a4530',
     directiveHover: '#3a3d2a',
     directiveValueHighlight: '#3a4d35',
-    directiveAttention: '#f59e0b',
-    directiveError: '#c06040',
-    directiveDelete: '#c06040',
   },
 
   bootstrap: {
@@ -116,6 +113,5 @@ export const darkPathfinder: Theme = {
     rowHover: '#3a3d2a',
     dropIndicator: '#c9a860',
     stepSetBreak: '#5a4530',
-    errorText: '#c84848',
   },
 };

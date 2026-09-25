@@ -136,7 +136,7 @@
 }
 
 .rel-track-error {
-  color: var(--theme-relationships-error-text);
+  color: var(--theme-danger);
   font-size: 13px;
 }
 
@@ -269,7 +269,7 @@
 }
 
 .rel-step-problem {
-  color: var(--theme-relationships-error-text);
+  color: var(--theme-danger);
 }
 
 .rel-step-loading {
@@ -295,7 +295,7 @@
 }
 
 .rel-problems-title {
-  color: var(--theme-relationships-error-text);
+  color: var(--theme-danger);
   font-size: 14px;
   margin: 0 0 8px 0;
 }
@@ -321,6 +321,6 @@
 }
 
 .rel-problem-messages {
-  color: var(--theme-relationships-error-text);
+  color: var(--theme-danger);
   flex: 1;
 }

@@ -63,9 +63,6 @@ export interface Theme {
     directiveBorder: string;
     directiveHover: string;
     directiveValueHighlight: string;
-    directiveAttention: string;
-    directiveError: string;
-    directiveDelete: string;
   };
 
   bootstrap: {
@@ -100,7 +97,6 @@ export interface Theme {
     rowHover: string;
     dropIndicator: string;
     stepSetBreak: string;
-    errorText: string;
   };
 }
 

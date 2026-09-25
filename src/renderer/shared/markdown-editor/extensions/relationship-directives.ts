@@ -457,7 +457,7 @@ const directiveTheme = EditorView.theme({
     backgroundColor: 'var(--theme-directive-hover)',
   },
   '.cm-directive-error': {
-    borderColor: 'var(--theme-directive-error)',
+    borderColor: 'var(--theme-danger)',
   },
   '.cm-directive-value': {
     borderRadius: '3px',
@@ -470,12 +470,12 @@ const directiveTheme = EditorView.theme({
     fontWeight: '600',
   },
   '.cm-directive-value-attention': {
-    color: 'var(--theme-directive-attention)',
+    color: 'var(--theme-warning)',
     fontStyle: 'italic',
   },
   '.cm-directive-value-error': {
-    color: 'var(--theme-directive-error)',
-    textDecoration: 'underline wavy var(--theme-directive-error)',
+    color: 'var(--theme-danger)',
+    textDecoration: 'underline wavy var(--theme-danger)',
   },
   '.cm-directive-cross': {
     position: 'absolute',
@@ -486,7 +486,7 @@ const directiveTheme = EditorView.theme({
     lineHeight: '14px',
     textAlign: 'center',
     borderRadius: '50%',
-    backgroundColor: 'var(--theme-directive-delete)',
+    backgroundColor: 'var(--theme-danger)',
     color: 'var(--theme-background)',
     fontSize: '10px',
     opacity: '0',
