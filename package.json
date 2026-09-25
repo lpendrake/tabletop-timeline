@@ -1,7 +1,7 @@
 {
   "name": "tabletop-timeline",
   "private": true,
-  "version": "0.1.0-alpha.7",
+  "version": "0.0.0-dev",
   "type": "module",
   "main": "dist/main/index.js",
   "scripts": {
@@ -36,7 +36,7 @@
         "provider": "github",
         "owner": "lpendrake",
         "repo": "tabletop-timeline",
-        "releaseType": "prerelease"
+        "releaseType": "draft"
       }
     ],
     "directories": {
