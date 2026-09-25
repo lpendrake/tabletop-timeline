@@ -15,10 +15,13 @@ export function RelationshipsList({ state, onOpenById, onOpenEvent }: Relationsh
 
   return (
     <div className="rel-list">
-      {state.rows.map((outer) => (
+      {state.rows.map((outer, index) => (
         <OuterRow
           key={outer.key}
           row={outer}
+          mode={state.mode}
+          isFirst={index === 0}
+          isLast={index === state.rows.length - 1}
           now={state.now}
           cache={state.cache}
           labelFor={state.labelFor}
@@ -32,6 +35,14 @@ export function RelationshipsList({ state, onOpenById, onOpenEvent }: Relationsh
           entityIndex={state.entityIndex}
           onOpenById={onOpenById}
           onOpenEvent={onOpenEvent}
+          onMoveToTop={state.moveRowToTop}
+          onMoveUp={state.moveRowUp}
+          onMoveDown={state.moveRowDown}
+          onDrop={(dragged, position, targetId) =>
+            position === 'before'
+              ? state.moveRowBefore(dragged, targetId)
+              : state.moveRowAfter(dragged, targetId)
+          }
         />
       ))}
       <ProblemsList

@@ -20,6 +20,7 @@ const state = vi.hoisted(() => ({
   getDirectivesSpy: vi.fn(),
   getAllLedgersSpy: vi.fn(),
   onChangedCb: null as ((data: { paths: string[] }) => void) | null,
+  showContextMenuSpy: vi.fn(),
 }));
 
 vi.mock('../../../relationships/data', () => ({
@@ -59,6 +60,17 @@ vi.mock('../../../peek/stack', () => ({
   openFromWikiLink: vi.fn(),
   closeFromWikiLink: vi.fn(),
 }));
+
+vi.mock('../../../shared/context-menu', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../shared/context-menu')>();
+  return {
+    ...actual,
+    showContextMenu: (...args: Parameters<typeof actual.showContextMenu>) => {
+      state.showContextMenuSpy(...args);
+      return { close: () => {} };
+    },
+  };
+});
 
 // ---- Imports after mocks ----
 
@@ -151,6 +163,37 @@ function resetFixtures() {
   state.getDirectivesSpy.mockClear();
   state.getAllLedgersSpy.mockClear();
   state.onChangedCb = null;
+  state.showContextMenuSpy.mockClear();
+}
+
+// ---- window.fsApi (used directly by view-order-data.ts, the relationships
+// view's own order/collapse-state persistence layer) ----
+
+const fsApi = {
+  readSpy: vi.fn().mockResolvedValue(null),
+  writeSpy: vi.fn().mockResolvedValue(true),
+  mkdirSpy: vi.fn().mockResolvedValue(true),
+};
+
+function setupFsApi() {
+  fsApi.readSpy = vi.fn().mockResolvedValue(null);
+  fsApi.writeSpy = vi.fn().mockResolvedValue(true);
+  fsApi.mkdirSpy = vi.fn().mockResolvedValue(true);
+  Object.defineProperty(window, 'fsApi', {
+    configurable: true,
+    value: {
+      read: (path: string) => fsApi.readSpy(path),
+      write: (path: string, content: string) => fsApi.writeSpy(path, content),
+      mkdir: (path: string) => fsApi.mkdirSpy(path),
+    },
+  });
+}
+
+/** Waits out the view-order save debounce (300ms) plus a little slack. */
+async function flushSaveDebounce() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 350));
+  });
 }
 
 // ---- Test harness ----
@@ -161,6 +204,7 @@ let footerSlot: HTMLDivElement;
 
 function setup() {
   resetFixtures();
+  setupFsApi();
   container = document.createElement('div');
   document.body.appendChild(container);
   footerSlot = document.createElement('div');
@@ -232,6 +276,51 @@ function findTrackRow(inner: HTMLElement, trackName: string): HTMLElement {
 
 function expandToggle(el: HTMLElement) {
   fireEvent.click(el.querySelector('.rel-expand-toggle')!);
+}
+
+function dragHandle(row: HTMLElement): HTMLElement {
+  return row.querySelector('.rel-drag-handle') as HTMLElement;
+}
+
+/** A minimal DataTransfer stand-in: happy-dom's own is incomplete for our purposes. */
+function makeDataTransfer() {
+  const store = new Map<string, string>();
+  return {
+    setData: (type: string, value: string) => store.set(type.toLowerCase(), value),
+    getData: (type: string) => store.get(type.toLowerCase()) ?? '',
+    get types() {
+      return Array.from(store.keys());
+    },
+    dropEffect: 'none',
+    effectAllowed: 'none',
+  };
+}
+
+/**
+ * happy-dom's `DragEvent` doesn't extend `MouseEvent` (no `clientY`), so
+ * `fireEvent.dragOver(el, { clientY })` silently drops it. Build plain
+ * `Event`s instead and attach `dataTransfer`/`clientY` as own properties —
+ * our handlers only duck-type on them, same as real drag events.
+ */
+function makeDragEvent(type: string, dataTransfer: unknown, clientY?: number): Event {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'dataTransfer', { value: dataTransfer, configurable: true });
+  if (clientY !== undefined) {
+    Object.defineProperty(event, 'clientY', { value: clientY, configurable: true });
+  }
+  return event;
+}
+
+/** Drags `source`'s handle onto `target`, landing "before" or "after" it. */
+function dragRowOnto(source: HTMLElement, target: HTMLElement, position: 'before' | 'after') {
+  const dataTransfer = makeDataTransfer();
+  const rect = { top: 100, left: 0, right: 100, bottom: 120, height: 20, width: 100 };
+  target.getBoundingClientRect = () => rect as DOMRect;
+  const clientY = position === 'before' ? rect.top + 2 : rect.top + rect.height - 2;
+
+  fireEvent(dragHandle(source), makeDragEvent('dragstart', dataTransfer));
+  fireEvent(target, makeDragEvent('dragover', dataTransfer, clientY));
+  fireEvent(target, makeDragEvent('drop', dataTransfer, clientY));
 }
 
 /** The "Group by …" footer button portals into `footerSlot`, not `container`. */
@@ -442,5 +531,103 @@ describe('RelationshipsView', () => {
     for (const label of buttonLabels) {
       expect(label).not.toMatch(/save|edit|delete|adjust|set value/i);
     }
+  });
+
+  function outerLabels(): (string | null)[] {
+    return Array.from(container.querySelectorAll('.rel-outer-label')).map((el) => el.textContent);
+  }
+
+  it('a relationship absent from the file still renders', async () => {
+    // Holder-mode top level only lists 'cccc' (Mira); aaaa/bbbb are unlisted.
+    fsApi.readSpy.mockResolvedValue(
+      JSON.stringify({
+        version: 1,
+        holder: { order: { '': ['cccc'] }, expanded: { outer: [], inner: [], track: [] } },
+        observer: { order: {}, expanded: { outer: [], inner: [], track: [] } },
+      }),
+    );
+    renderView();
+    await flush();
+
+    // All three holders still render: the listed one first, the rest appended alphabetically.
+    expect(outerLabels()).toEqual(['Mira', 'Anna', 'Zara']);
+  });
+
+  it('order is stored per grouping mode', async () => {
+    renderView();
+    await flush();
+
+    // Reorder the two observer-mode outer rows (Anna, Mira).
+    fireEvent.click(groupByToggle());
+    await flush();
+    expect(outerLabels()).toEqual(['Anna', 'Mira']);
+
+    dragRowOnto(findOuterRow('Mira'), findOuterRow('Anna'), 'before');
+    await flush();
+    expect(outerLabels()).toEqual(['Mira', 'Anna']);
+
+    // Holder mode (3 outer rows: Anna, Mira, Zara) is unaffected.
+    fireEvent.click(groupByToggle());
+    await flush();
+    expect(outerLabels()).toEqual(['Anna', 'Mira', 'Zara']);
+
+    await flushSaveDebounce();
+    const [, content] = fsApi.writeSpy.mock.calls.at(-1)!;
+    const saved = JSON.parse(content);
+    expect(saved.observer.order['']).toEqual(['cccc', 'bbbb']); // Mira, Anna
+    expect(saved.holder.order['']).toBeUndefined();
+  });
+
+  it('context menu offers move to top/up/down and disables inapplicable items', async () => {
+    renderView();
+    await flush();
+
+    // Anna is first alphabetically: "move to top"/"move up" are inapplicable.
+    fireEvent.contextMenu(findOuterRow('Anna'), { clientX: 5, clientY: 5 });
+    expect(state.showContextMenuSpy).toHaveBeenCalledTimes(1);
+    const firstItems = state.showContextMenuSpy.mock.calls[0][0] as Array<{
+      label: string;
+      disabled?: boolean;
+      onSelect: () => void;
+    }>;
+    const firstByLabel = Object.fromEntries(firstItems.map((i) => [i.label, i]));
+    expect(firstByLabel['Move to top'].disabled).toBe(true);
+    expect(firstByLabel['Move up'].disabled).toBe(true);
+    expect(firstByLabel['Move down'].disabled).toBe(false);
+
+    state.showContextMenuSpy.mockClear();
+
+    // Zara is last alphabetically: "move down" is inapplicable.
+    fireEvent.contextMenu(findOuterRow('Zara'), { clientX: 5, clientY: 5 });
+    const lastItems = state.showContextMenuSpy.mock.calls[0][0] as Array<{
+      label: string;
+      disabled?: boolean;
+      onSelect: () => void;
+    }>;
+    const lastByLabel = Object.fromEntries(lastItems.map((i) => [i.label, i]));
+    expect(lastByLabel['Move down'].disabled).toBe(true);
+    expect(lastByLabel['Move to top'].disabled).toBe(false);
+
+    // Selecting an enabled item actually reorders the rows.
+    act(() => lastByLabel['Move to top'].onSelect());
+    await flush();
+    expect(outerLabels()).toEqual(['Zara', 'Anna', 'Mira']);
+  });
+
+  it('dragging a row onto the gap before another moves it there and saves', async () => {
+    renderView();
+    await flush();
+    expect(outerLabels()).toEqual(['Anna', 'Mira', 'Zara']);
+
+    dragRowOnto(findOuterRow('Zara'), findOuterRow('Anna'), 'before');
+    await flush();
+    expect(outerLabels()).toEqual(['Zara', 'Anna', 'Mira']);
+
+    await flushSaveDebounce();
+    expect(fsApi.mkdirSpy).toHaveBeenCalledWith('/campaign/relationships');
+    const [path, content] = fsApi.writeSpy.mock.calls.at(-1)!;
+    expect(path).toBe('/campaign/relationships/view-order.json');
+    const saved = JSON.parse(content);
+    expect(saved.holder.order['']).toEqual(['aaaa', 'bbbb', 'cccc']); // Zara, Anna, Mira
   });
 });

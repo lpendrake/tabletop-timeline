@@ -37,6 +37,7 @@
 }
 
 .rel-outer-row {
+  position: relative;
   border-bottom: 1px solid var(--theme-border);
   padding: 4px 0;
 }
@@ -48,6 +49,40 @@
   gap: 6px;
   padding: 4px 0;
   border-radius: 4px;
+}
+
+.rel-drag-handle {
+  cursor: grab;
+  color: var(--theme-text-muted);
+  font-size: 13px;
+  line-height: 1;
+  flex: none;
+  width: 14px;
+  text-align: center;
+  user-select: none;
+}
+
+.rel-drag-handle:active {
+  cursor: grabbing;
+}
+
+.rel-drop-indicator {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--theme-relationships-drop-indicator);
+  pointer-events: none;
+}
+
+.rel-outer-row > .rel-drop-indicator:first-child,
+.rel-inner-row > .rel-drop-indicator:first-child {
+  top: 0;
+}
+
+.rel-outer-row > .rel-drop-indicator:last-child,
+.rel-inner-row > .rel-drop-indicator:last-child {
+  bottom: 0;
 }
 
 .rel-outer-header:hover,
@@ -71,6 +106,7 @@
 }
 
 .rel-inner-row {
+  position: relative;
   padding: 2px 0;
 }
 

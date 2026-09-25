@@ -38,3 +38,33 @@ export { buildStepSentence, isEventPath } from './step-sentence';
 
 export type { StepOpenTarget } from './step-open-target';
 export { resolveStepOpenTarget } from './step-open-target';
+
+export type {
+  RowLevel,
+  ViewOrderModeState,
+  ViewOrder,
+  RowDragPayload,
+  DropTarget,
+} from './view-order';
+export {
+  TOP_LEVEL_PARENT_KEY,
+  defaultViewOrder,
+  parseViewOrder,
+  serialiseViewOrder,
+  applyOrder,
+  moveToTop,
+  moveUp,
+  moveDown,
+  moveBefore,
+  moveAfter,
+  dropPosition,
+  canDrop,
+  expandedIdsForMode,
+  flatKeysFromExpandedIds,
+} from './view-order';
+
+export { applyViewOrderToRows } from './apply-view-order';
+
+export { withoutPaths } from './directives-cache';
+
+export { resolveEntityLabel, UNKNOWN_ENTITY_LABEL } from './label-for';
