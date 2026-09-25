@@ -25,7 +25,6 @@ import {
   type DecorationSet,
 } from '@codemirror/view';
 import {
-  parseDirectives,
   interpretDirective,
   readableParts,
   resolveTrack,
@@ -36,19 +35,22 @@ import {
   type Role,
   type TrackLibrary,
 } from '../../../../shared/relationships';
+import { UNKNOWN_ENTITY_LABEL } from '../../../../shared/entity-labels';
 import { entityLabelMapField, setEntityLabels } from './wiki-links';
 import { openDirectiveBubble } from './relationship-bubble-state';
 import { firstOf } from './relationship-bubble-logic';
+import { parsedDirectivesField, directivesIn } from './parsed-directives';
 
 export interface RelationshipDirectivesConfig {
   readOnly?: boolean;
   onOpenNote?: (id: string) => void;
   /**
-   * Hook point for a host that wants to handle field-editing itself. Omit
-   * it (the common case) and a click/Enter opens the built-in fill-in
-   * bubble directly (see `relationship-bubble-state.ts`'s `openDirectiveBubble`).
+   * Whether this document is a note (undated) or an event. A note has no
+   * order, so Change/Shift (`adjust`) and Remove are rejected there — see
+   * `src/shared/relationships/AGENTS.md`'s notes-vs-events invariant.
+   * Defaults to `'event'` (the permissive context) when omitted.
    */
-  onEditField?: (target: { from: number; ordinal: number }, role: Role) => void;
+  place?: 'note' | 'event';
 }
 
 interface DirectiveContext {
@@ -96,26 +98,18 @@ export function crossEnd(fraction: number, previous: 'start' | 'end'): 'start' |
   return previous;
 }
 
-function resolveDirectiveTrack(id: string, library: TrackLibrary) {
-  return resolveTrack(id, library);
-}
-
 /** Interprets a directive against the library and produces its display view. */
 function buildDirectiveView(
   d: ParsedDirective,
   library: TrackLibrary,
   defaultReason: string,
   labelForNote: (id: string) => string,
+  place: 'note' | 'event',
 ): DirectiveView {
-  const track = resolveDirectiveTrack(d.trackId, library);
+  const track = resolveTrack(d.trackId, library);
   const interpreted = interpretDirective(d, {
-    resolveTrack: (id) => resolveDirectiveTrack(id, library),
-    // This preview doesn't yet know whether its host document is a note or
-    // an event (that wiring is out of scope here — see AGENTS.md's
-    // notes-vs-events invariant, enforced for real by the main store, which
-    // does know); default to the permissive event context so existing
-    // editor behaviour is unaffected.
-    undated: false,
+    resolveTrack: (id) => resolveTrack(id, library),
+    undated: place === 'note',
   });
 
   if (interpreted.status === 'invalid') {
@@ -130,13 +124,9 @@ function buildDirectiveView(
   return { kind: 'sentence', parts };
 }
 
-function directivesIn(state: EditorState): ParsedDirective[] {
-  return parseDirectives(state.doc.toString()).directives;
-}
-
 function labelForNoteFrom(state: EditorState): (id: string) => string {
   const map = state.field(entityLabelMapField, false) ?? new Map<string, string>();
-  return (id: string) => map.get(id) ?? id;
+  return (id: string) => map.get(id) ?? UNKNOWN_ENTITY_LABEL;
 }
 
 /**
@@ -222,11 +212,7 @@ class DirectiveWidget extends WidgetType {
   private openField(view: EditorView, root: HTMLElement, role: Role): void {
     const directive = currentDirectiveAt(view, root);
     if (!directive) return;
-    if (this.config.onEditField) {
-      this.config.onEditField({ from: directive.from, ordinal: directive.ordinal }, role);
-    } else {
-      openDirectiveBubble(view, directive.from, role);
-    }
+    openDirectiveBubble(view, directive.from, role);
   }
 
   override toDOM(view: EditorView): HTMLElement {
@@ -373,10 +359,11 @@ function buildDecorations(state: EditorState, config: RelationshipDirectivesConf
   const { library, defaultReason } = state.field(directiveContextField);
   const labelForNote = labelForNoteFrom(state);
   const readOnly = Boolean(state.readOnly) || Boolean(config.readOnly);
+  const place = config.place ?? 'event';
 
   const builder = new RangeSetBuilder<Decoration>();
   for (const d of directivesIn(state)) {
-    const built = buildDirectiveView(d, library, defaultReason, labelForNote);
+    const built = buildDirectiveView(d, library, defaultReason, labelForNote, place);
     builder.add(
       d.from,
       d.to,
@@ -443,16 +430,11 @@ function makeDirectiveEnterKeymap(config: RelationshipDirectivesConfig): Extensi
       library,
       defaultReason,
       labelForNoteFrom(view.state),
+      config.place ?? 'event',
     );
     if (built.kind === 'sentence') {
       const role = firstEditRole(built.parts);
-      if (role) {
-        if (config.onEditField) {
-          config.onEditField({ from: directive.from, ordinal: directive.ordinal }, role);
-        } else {
-          openDirectiveBubble(view, directive.from, role);
-        }
-      }
+      if (role) openDirectiveBubble(view, directive.from, role);
     }
     return true;
   };
@@ -550,6 +532,7 @@ export function relationshipDirectives(config: RelationshipDirectivesConfig = {}
     // Included so `state.field(entityLabelMapField)` resolves even when this
     // extension is used without `wikiLinks()` in the same editor.
     entityLabelMapField,
+    parsedDirectivesField,
     field,
     EditorView.atomicRanges.of((view) => view.state.field(field)),
     directiveTheme,

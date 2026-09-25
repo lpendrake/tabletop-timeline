@@ -14,7 +14,10 @@ import {
 } from '../relationship-bubble-view-plugin';
 import { bubbleStateField, insertDirective } from '../relationship-bubble-state';
 import { serialiseTemplate } from '../../../../../shared/relationships/directives/index';
-import { pf2eReputationSpec } from '../../../../../shared/relationships/system/index';
+import {
+  pf2eReputationSpec,
+  relationshipTagsSpec,
+} from '../../../../../shared/relationships/system/index';
 
 /** Waits for the microtask + rAF the bubble uses to reposition/focus after opening. */
 async function flushBubbleOpen(): Promise<void> {
@@ -141,6 +144,95 @@ describe('relationship bubble — full mount', () => {
       fireEvent.keyDown(el, { key: 'z', ctrlKey: true });
     });
     expect(view.state.doc.toString()).toBe(docBefore);
+  });
+});
+
+describe('relationship bubble — async heldOptions', () => {
+  const LOSES_TEMPLATE = relationshipTagsSpec.actions.find((a) => a.key === 'loses')!.template;
+  const LOSES_DIRECTIVE = serialiseTemplate('tg01', 'loses', LOSES_TEMPLATE, {
+    holder: '[[c3d4]]',
+    observer: '[[a1b2]]',
+    reason: 'a falling out',
+  });
+
+  function optionField(): HTMLElement {
+    return document.querySelector('.relationship-bubble-field')!;
+  }
+
+  it('shows a loading state until heldOptions resolves, then only the held options', async () => {
+    let resolveFn: (keys: string[]) => void = () => {};
+    const heldOptions = () =>
+      new Promise<string[]>((resolve) => {
+        resolveFn = resolve;
+      });
+    const setup = track(makeView(LOSES_DIRECTIVE, { heldOptions }));
+    const { view } = setup;
+    const optionValue = view.dom.querySelector<HTMLElement>('.cm-directive-value-role-option')!;
+
+    act(() => {
+      optionValue.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }),
+      );
+    });
+    await flushBubbleOpen();
+
+    expect(optionField().textContent).toBe('Loading…');
+    expect(document.querySelectorAll('.searchable-picker-row').length).toBe(0);
+
+    await act(async () => {
+      resolveFn(['hates']);
+      await Promise.resolve();
+    });
+
+    const rows = Array.from(document.querySelectorAll('.searchable-picker-row'));
+    expect(rows.map((r) => r.textContent)).toEqual(['hates']);
+  });
+
+  it('ignores a stale response once a newer request supersedes it', async () => {
+    const resolvers: Array<(keys: string[]) => void> = [];
+    const calls: Array<{ holder: string | null; observer: string | null }> = [];
+    const heldOptions = (q: { holder: string | null; observer: string | null }) => {
+      calls.push(q);
+      return new Promise<string[]>((resolve) => {
+        resolvers.push(resolve);
+      });
+    };
+    const setup = track(makeView(`x ${LOSES_DIRECTIVE}`, { heldOptions }));
+    const { view } = setup;
+    const optionValue = view.dom.querySelector<HTMLElement>('.cm-directive-value-role-option')!;
+
+    act(() => {
+      optionValue.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }),
+      );
+    });
+    await flushBubbleOpen();
+    expect(calls.length).toBe(1);
+
+    // Edit the document above the directive (its anchor shifts, but the
+    // bubble stays open on the same blank) before the first request
+    // resolves — a fresh sync() asks again, bumping the token.
+    act(() => {
+      view.dispatch({ changes: { from: 0, insert: 'more ' } });
+    });
+    await flushBubbleOpen();
+    expect(calls.length).toBe(2);
+
+    // The FIRST (now-stale) request resolves after the second one started.
+    await act(async () => {
+      resolvers[0](['stale-result']);
+      await Promise.resolve();
+    });
+
+    // Still loading — the stale response must not have been applied.
+    expect(optionField().textContent).toBe('Loading…');
+
+    await act(async () => {
+      resolvers[1](['hates']);
+      await Promise.resolve();
+    });
+    const rows = Array.from(document.querySelectorAll('.searchable-picker-row'));
+    expect(rows.map((r) => r.textContent)).toEqual(['hates']);
   });
 });
 

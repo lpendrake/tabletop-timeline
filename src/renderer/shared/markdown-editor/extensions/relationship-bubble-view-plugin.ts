@@ -10,7 +10,6 @@ import { createRoot, type Root } from 'react-dom/client';
 import { EditorView, ViewPlugin, ViewUpdate } from '@codemirror/view';
 import type { Extension } from '@codemirror/state';
 import {
-  parseDirectives,
   resolveTrack,
   roleValue,
   noteIdOf,
@@ -24,26 +23,44 @@ import type { PickerOption } from '../../searchable-picker';
 import { computeCaretPlacement } from '../../context-menu/caret-position';
 import { getCaretRect, type CaretRect } from './editor-context-menu';
 import { getDirectiveRoleElement } from './relationship-directives';
-import { computeTailOffset } from './relationship-bubble-logic';
+import { computeTailOffset, type BubbleCommitDirection } from './relationship-bubble-logic';
 import {
   bubbleStateField,
   commitBubbleField,
   closeDirectiveBubble,
 } from './relationship-bubble-state';
-import {
-  RelationshipBubble,
-  type BubbleCommitDirection,
-  type RelationshipBubbleProps,
-} from './relationship-bubble';
+import { directivesIn, parsedDirectivesField } from './parsed-directives';
+import { RelationshipBubble, type RelationshipBubbleProps } from './relationship-bubble';
 
 /** Default tail offset used for the initial hidden measuring paint, before any geometry is known. */
 const DEFAULT_TAIL_OFFSET = 16;
 
 const RECENT_NOTES_LIMIT = 5;
 
-export interface RelationshipBubbleHostContext {
-  library: TrackLibrary;
-  defaultReason: string;
+/**
+ * The query the bubble sends to the host's `heldOptions` resolver: which
+ * (track, holder, observer) ledger to fold, the blank's directive anchor
+ * (to exclude that directive's own delta from the fold), and the buffer's
+ * current text (the host has no other way to locate the directive — it
+ * never reads the editor's state directly).
+ */
+export interface HeldOptionsQuery {
+  trackId: string;
+  holder: string | null;
+  observer: string | null;
+  anchor: number;
+  doc: string;
+}
+
+/**
+ * The bubble-specific slice of host data/callbacks — everything
+ * `markdown-editor.tsx`'s `RelationshipDirectivesHostConfig.bubbles` also
+ * declares, so the two types are defined here once and referenced by both
+ * (`RelationshipBubbleHostContext` below adds `library`/`defaultReason`,
+ * which `relationship-directives.ts` already carries at the top level of
+ * its own config).
+ */
+export interface RelationshipBubbleOptions {
   noteOptions: () => readonly PickerOption[];
   defaultHolderId?: () => string | null;
   currentNoteId?: () => string | null;
@@ -53,12 +70,20 @@ export interface RelationshipBubbleHostContext {
     label: string,
     mutual: boolean,
   ) => Promise<{ key: string } | null>;
-  heldOptions?: (q: {
-    trackId: string;
-    holder: string | null;
-    observer: string | null;
-    anchor: number;
-  }) => string[];
+  /**
+   * Resolves which of a categorical track's options are currently held on
+   * the (holder, observer) ledger — used by the "remove" bubble's option
+   * picker. Async so a host can look this up via IO (the main-process
+   * ledger store); the bubble shows a loading state until it resolves and
+   * ignores a response that's no longer for the currently-open blank (see
+   * `RelationshipBubblePlugin`'s `heldOptionsToken`).
+   */
+  heldOptions?: (q: HeldOptionsQuery) => Promise<string[]>;
+}
+
+export interface RelationshipBubbleHostContext extends RelationshipBubbleOptions {
+  library: TrackLibrary;
+  defaultReason: string;
 }
 
 function noteIdFor(d: ParsedDirective, role: Role): string | null {
@@ -71,6 +96,11 @@ class RelationshipBubblePlugin {
   private host: HTMLDivElement | null = null;
   private root: Root | null = null;
   private recentNoteIds: string[] = [];
+
+  /** Bumped on every `heldOptions` request; a response is discarded once it no longer matches. */
+  private heldOptionsToken = 0;
+  private heldOptionsPendingKey: string | null = null;
+  private heldOptionsCache: { key: string; keys: string[] } | null = null;
 
   constructor(
     readonly view: EditorView,
@@ -126,9 +156,7 @@ class RelationshipBubblePlugin {
       return;
     }
 
-    const directive = parseDirectives(this.view.state.doc.toString()).directives.find(
-      (d) => d.from === state.anchor,
-    );
+    const directive = directivesIn(this.view.state).find((d) => d.from === state.anchor);
     if (!directive) {
       this.unmount();
       return;
@@ -157,6 +185,40 @@ class RelationshipBubblePlugin {
     });
   }
 
+  /**
+   * Resolves `heldOptionKeys`/`heldOptionsLoading` for the "remove" option
+   * bubble: returns the cached result for this exact (track, holder,
+   * observer, anchor) query when there is one, otherwise kicks off (at
+   * most one in flight per key) an async fetch via the host's
+   * `heldOptions` and reports loading until it resolves. A response is
+   * applied only while `heldOptionsToken` still matches the request that
+   * produced it — a later call (a different blank, a doc edit) bumps the
+   * token first, so a stale response is silently dropped instead of
+   * clobbering newer state.
+   */
+  private heldOptionsFor(
+    ctx: RelationshipBubbleHostContext,
+    q: Omit<HeldOptionsQuery, 'doc'>,
+  ): { keys: string[] | null; loading: boolean } {
+    if (!ctx.heldOptions) return { keys: null, loading: false };
+    const key = JSON.stringify(q);
+    if (this.heldOptionsCache?.key === key) {
+      return { keys: this.heldOptionsCache.keys, loading: false };
+    }
+    if (this.heldOptionsPendingKey !== key) {
+      this.heldOptionsPendingKey = key;
+      const token = ++this.heldOptionsToken;
+      const doc = this.view.state.doc.toString();
+      void ctx.heldOptions({ ...q, doc }).then((keys) => {
+        if (token !== this.heldOptionsToken) return; // stale — a newer request has since superseded this one
+        this.heldOptionsCache = { key, keys };
+        if (this.heldOptionsPendingKey === key) this.heldOptionsPendingKey = null;
+        this.sync();
+      });
+    }
+    return { keys: null, loading: true };
+  }
+
   private baseProps(anchor: number, role: Role, directive: ParsedDirective): BaseProps {
     const ctx = this.getContext();
     const track = resolveTrack(directive.trackId, ctx.library);
@@ -166,15 +228,15 @@ class RelationshipBubblePlugin {
 
     const holderId = noteIdFor(directive, 'holder');
     const observerId = noteIdFor(directive, 'observer');
-    const heldOptionKeys =
-      role === 'option' && action?.kind === 'remove' && ctx.heldOptions
-        ? ctx.heldOptions({
+    const { keys: heldOptionKeys, loading: heldOptionsLoading } =
+      role === 'option' && action?.kind === 'remove'
+        ? this.heldOptionsFor(ctx, {
             trackId: directive.trackId,
             holder: holderId,
             observer: observerId,
             anchor,
           })
-        : null;
+        : { keys: null, loading: false };
 
     return {
       role,
@@ -188,6 +250,7 @@ class RelationshipBubblePlugin {
       defaultHolderId: ctx.defaultHolderId?.() ?? null,
       currentNoteId: ctx.currentNoteId?.() ?? null,
       heldOptionKeys,
+      heldOptionsLoading,
       onHolderChosenWithoutDefault: ctx.onHolderChosenWithoutDefault,
       createOption: ctx.createOption,
       onCommit: (v: string, direction: BubbleCommitDirection) =>
@@ -299,6 +362,11 @@ class RelationshipBubblePlugin {
  */
 export function relationshipBubble(getContext: () => RelationshipBubbleHostContext): Extension {
   return [
+    // Included so `directivesIn`/`state.field(parsedDirectivesField)` resolve
+    // even when this extension is mounted standalone (e.g. a test) without
+    // `relationshipDirectives()` in the same editor — CodeMirror dedupes an
+    // identical StateField extension, so this is a no-op when both are present.
+    parsedDirectivesField,
     bubbleStateField,
     ViewPlugin.define((view) => new RelationshipBubblePlugin(view, getContext)),
   ];

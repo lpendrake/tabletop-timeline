@@ -20,8 +20,8 @@ import {
   keymap,
   type DecorationSet,
 } from '@codemirror/view';
-import { parseDirectives } from '../../../../shared/relationships';
 import { makePointerGuard } from './pointer-guard';
+import { parsedDirectivesField, directiveRanges } from './parsed-directives';
 import { showContextMenu, type ContextMenuItem } from '../../context-menu';
 import '../../context-menu/context-menu.css';
 import { copyToClipboard } from '../../clipboard';
@@ -146,6 +146,7 @@ export function wikiLinks(config: WikiLinksConfig = {}): Extension {
   return [
     knownIdsField,
     entityLabelMapField,
+    parsedDirectivesField,
     field,
     makeWikiLinkPointerGuard(config),
     wikiLinkEditKeymap(config),
@@ -407,17 +408,6 @@ function makeWikiLinkPointerGuard(config: WikiLinksConfig): Extension {
   ];
 }
 
-/**
- * The source ranges of every relationship directive (`{{trackId.action ...}}`)
- * in the document. Defined here — rather than imported from
- * `relationship-directives.ts` — to avoid a circular import (that extension
- * imports `entityLabelMapField` from this file); it reads only the shared,
- * host-agnostic parser, never the directive-rendering extension itself.
- */
-export function directiveRanges(text: string): { from: number; to: number }[] {
-  return parseDirectives(text).directives.map((d) => ({ from: d.from, to: d.to }));
-}
-
 function isWithinDirective(
   range: { from: number; to: number },
   directives: { from: number; to: number }[],
@@ -435,7 +425,7 @@ export function buildDecorations(state: EditorState, _config: WikiLinksConfig): 
   // A directive's own {{...}} body can contain [[id]] role values (e.g.
   // {holder:[[c3d4]]}) — those are rendered as part of the directive's form
   // block, never as an independent wiki-link decoration.
-  const directives = directiveRanges(doc.toString());
+  const directives = directiveRanges(state);
 
   for (let i = 1; i <= doc.lines; i++) {
     const line = doc.line(i);

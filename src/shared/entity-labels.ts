@@ -1,5 +1,12 @@
 import type { EntityIndexEntry, EntityIndexDelta } from '../types/global';
 
+/**
+ * Neutral fallback shown in place of a raw entity id when no label is
+ * available for it (missing from a label map and not in the entity index).
+ * Raw ids must never reach the screen — see `src/renderer/relationships/domain/label-for.ts`.
+ */
+export const UNKNOWN_ENTITY_LABEL = 'Unknown note';
+
 export function effectiveTagLabel(entry: EntityIndexEntry): string {
   return entry.tagLabelOverride ?? entry.title;
 }

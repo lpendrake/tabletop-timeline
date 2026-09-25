@@ -33,13 +33,32 @@ empty-query view.
 
 ## Key handling contract
 
-- `ArrowUp` / `ArrowDown` move the highlight (via `moveHighlight`), wrapping.
-- `Enter` picks the highlighted option; does nothing when there are no
-  results. Calls `preventDefault()` + `stopPropagation()`.
+- `ArrowUp` / `ArrowDown` move the highlight (via `moveHighlight`), wrapping
+  across the ranked results **and** the create row when one is shown (see
+  below) — `rowCount = results.length + (createRow?.show ? 1 : 0)`.
+- `Enter` picks the highlighted option (or calls `createRow.onPick()` when
+  the create row is highlighted); does nothing when there are no results and
+  no create row. Calls `preventDefault()` + `stopPropagation()`.
 - `Escape` calls `onCancel`, with `preventDefault()` + `stopPropagation()` so
   a surrounding modal doesn't also close on the same key event.
 - Mouse hover highlights a row; `mousedown` (not `click`) on a row picks it,
   with `preventDefault()` so the input keeps focus.
+
+## Create row
+
+`createRow?: { show, render, onPick }` appends one extra, keyboard-reachable
+row after the ranked results — e.g. a "Create …" action for an unmatched
+query. It's a full participant in the same highlight/Arrow/Enter/mousedown
+handling as every other row, not a separate listbox: a caller that
+reimplements its own list on top of `picker-model.ts` to get a create row
+(the old approach) ends up recomputing its ranked list fresh on every render
+instead of via `useMemo`, so a highlight-only re-render (e.g. pressing
+`ArrowDown`) recomputes a new array reference, re-triggers the
+initial-highlight effect, and snaps the highlight back — that bug is what
+this slot exists to avoid. `render()` is called fresh on every render so it
+can read the caller's own query/checkbox state; `onQueryChange` reports the
+raw query text back to the caller for that purpose (e.g. deciding `show` via
+`shouldOfferCreateOption`).
 
 ## Don't
 

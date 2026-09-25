@@ -43,3 +43,11 @@
   font-size: 13px;
   text-align: center;
 }
+.searchable-picker-create-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--theme-accent-gold);
+  font-style: italic;
+}

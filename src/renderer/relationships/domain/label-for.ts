@@ -6,10 +6,10 @@
  * no IO, no React.
  */
 
-import { effectiveLinkLabel } from '../../../shared/entity-labels';
+import { effectiveLinkLabel, UNKNOWN_ENTITY_LABEL } from '../../../shared/entity-labels';
 import type { EntityIndexEntry } from '../../../types/global';
 
-export const UNKNOWN_ENTITY_LABEL = 'Unknown note';
+export { UNKNOWN_ENTITY_LABEL };
 
 export function resolveEntityLabel(
   id: string,

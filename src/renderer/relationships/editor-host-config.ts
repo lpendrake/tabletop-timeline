@@ -44,8 +44,6 @@ export interface HeldOptionsDeps {
   library: TrackLibrary;
   /** Snapshot of every ledger, refreshed by the caller on `relationshipsData.onChanged`. */
   getLedgers: () => readonly Ledger[];
-  /** The current editor buffer's full text, to locate the directive being edited. */
-  getDocText: () => string;
   /** Campaign-relative path of the note/event currently open, or null if unsaved. */
   currentPath: () => string | null;
   /** The point in in-game time the directive is declared at: an event's date, or null for a note (undated baseline). */
@@ -54,12 +52,15 @@ export interface HeldOptionsDeps {
 
 /**
  * Builds the bubble's `heldOptions` resolver: looks up the (holder,
- * observer, track) ledger, locates the directive being edited in the
- * current buffer to exclude it from the fold, and delegates to the pure
- * `heldOptionsAt`.
+ * observer, track) ledger, locates the directive being edited (in the
+ * buffer text the bubble itself supplies) to exclude it from the fold, and
+ * delegates to the pure `heldOptionsAt`. Async to match
+ * `RelationshipBubbleOptions.heldOptions` — this host has no IO of its own
+ * to await, but the contract is async so a host that does (a main-process
+ * ledger store) can implement it the same way.
  */
 export function makeHeldOptionsResolver(deps: HeldOptionsDeps): HeldOptionsResolver {
-  return ({ trackId, holder, observer, anchor }) => {
+  return async ({ trackId, holder, observer, anchor, doc }) => {
     if (!holder || !observer) return [];
     const track = resolveTrack(trackId, deps.library);
     if (!track) return [];
@@ -72,9 +73,7 @@ export function makeHeldOptionsResolver(deps: HeldOptionsDeps): HeldOptionsResol
     const path = deps.currentPath();
     let exclude: HeldOptionsExclude | undefined;
     if (path) {
-      const directive = parseDirectives(deps.getDocText()).directives.find(
-        (d) => d.from === anchor,
-      );
+      const directive = parseDirectives(doc).directives.find((d) => d.from === anchor);
       if (directive) exclude = { path, ordinal: directive.ordinal };
     }
 
@@ -87,12 +86,15 @@ export type HeldOptionsResolver = (q: {
   holder: string | null;
   observer: string | null;
   anchor: number;
-}) => string[];
+  doc: string;
+}) => Promise<string[]>;
 
 export interface RelationshipEditorConfigDeps {
   library: TrackLibrary;
   defaultReason: string;
   onOpenNote?: (id: string) => void;
+  /** Whether this host is a note (undated) or an event. Defaults to `'event'` when omitted — see `RelationshipDirectivesHostConfig.place`. */
+  place?: 'note' | 'event';
   noteOptions: () => readonly PickerOption[];
   defaultHolderId: () => string | null;
   currentNoteId: () => string | null;
@@ -108,6 +110,7 @@ export function buildRelationshipEditorConfig(
     library: deps.library,
     defaultReason: deps.defaultReason,
     onOpenNote: deps.onOpenNote,
+    place: deps.place,
     bubbles: {
       noteOptions: () => deps.noteOptions() as PickerOption[],
       defaultHolderId: deps.defaultHolderId,

@@ -95,6 +95,7 @@ export function NotesApp({
     entityIndex: ctrl.entityIndex,
     defaultReason: NOTE_DEFAULT_REASON,
     onOpenNote: ctrl.handleOpenLink,
+    place: 'note',
     currentNoteId: () =>
       ctrl.activeTab
         ? findEntityIdByNotePath(ctrl.entityIndex, ctrl.activeTab.folder, ctrl.activeTab.path)

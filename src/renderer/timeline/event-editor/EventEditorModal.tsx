@@ -189,6 +189,7 @@ export function EventEditorModal({
     entityIndex,
     defaultReason: eventRelationshipDefaultReason(buffer),
     onOpenNote: onOpenById,
+    place: 'event',
     currentPath: () => (filenameRef.current ? `timeline/${filenameRef.current}` : null),
     at: () => {
       const cal = CalendarProvider.get();

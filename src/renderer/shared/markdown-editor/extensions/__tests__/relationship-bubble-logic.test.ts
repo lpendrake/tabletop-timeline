@@ -14,6 +14,10 @@ import {
   filterHeldOptions,
   computeTailOffset,
   TAIL_EDGE_INSET,
+  shouldNotifyHolderChosen,
+  buildNotePickerRecents,
+  prefillNoteValue,
+  pickForTab,
 } from '../relationship-bubble-logic';
 import {
   parseDirectives,
@@ -158,6 +162,66 @@ describe('option create-row + held-options filtering (pure)', () => {
     expect(filterHeldOptions(options, ['hates'])).toEqual([{ id: 'hates', path: 'hates' }]);
     expect(filterHeldOptions(options, null)).toEqual(options);
     expect(filterHeldOptions(options, [])).toEqual([]);
+  });
+});
+
+describe('shouldNotifyHolderChosen (pure)', () => {
+  it('only notifies for the holder role, and only when no default holder is set', () => {
+    expect(shouldNotifyHolderChosen('holder', null)).toBe(true);
+    expect(shouldNotifyHolderChosen('holder', 'c3d4')).toBe(false);
+    expect(shouldNotifyHolderChosen('observer', null)).toBe(false);
+  });
+});
+
+describe('buildNotePickerRecents (pure)', () => {
+  it('pins the current note to the front when not already present', () => {
+    expect(buildNotePickerRecents(['a1', 'b2'], 'c3')).toEqual(['c3', 'a1', 'b2']);
+  });
+
+  it('leaves recents untouched when the current note is already there', () => {
+    expect(buildNotePickerRecents(['a1', 'b2'], 'a1')).toEqual(['a1', 'b2']);
+  });
+
+  it('leaves recents untouched when there is no current note', () => {
+    expect(buildNotePickerRecents(['a1', 'b2'], null)).toEqual(['a1', 'b2']);
+  });
+});
+
+describe('prefillNoteValue (pure)', () => {
+  it('extracts a bare id from a [[id]] value', () => {
+    expect(prefillNoteValue('observer', '[[a1b2]]', null)).toBe('a1b2');
+  });
+
+  it('falls back to the default holder only for an empty holder blank', () => {
+    expect(prefillNoteValue('holder', '', 'c3d4')).toBe('c3d4');
+    expect(prefillNoteValue('observer', '', 'c3d4')).toBeUndefined();
+  });
+
+  it('an already-filled holder keeps its own value over the default', () => {
+    expect(prefillNoteValue('holder', '[[a1b2]]', 'c3d4')).toBe('a1b2');
+  });
+});
+
+describe('pickForTab (pure)', () => {
+  const options = [
+    { id: 'a1', path: 'npcs/mira', label: 'Mira' },
+    { id: 'c3', path: 'factions/party', label: 'The Party' },
+  ];
+
+  it('picks the top ranked match for a non-empty query', () => {
+    expect(pickForTab(options, 'mira', undefined, null)?.id).toBe('a1');
+  });
+
+  it('an empty query keeps the current value when it still ranks', () => {
+    expect(pickForTab(options, '', undefined, 'c3')?.id).toBe('c3');
+  });
+
+  it('falls back to the top result when the current value no longer ranks', () => {
+    expect(pickForTab(options, '', undefined, 'zzz')?.id).toBe('a1');
+  });
+
+  it('returns null when there are no options at all', () => {
+    expect(pickForTab([], '', undefined, null)).toBeNull();
   });
 });
 

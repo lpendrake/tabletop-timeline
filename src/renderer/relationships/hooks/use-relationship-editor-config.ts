@@ -18,6 +18,8 @@ export interface UseRelationshipEditorConfigOptions {
   /** Event editor: the event's current title (follows renames). Notes: 'Unspecified'. */
   defaultReason: string;
   onOpenNote?: (id: string) => void;
+  /** Whether this host is a note (undated) or an event. Defaults to `'event'` when omitted. */
+  place?: 'note' | 'event';
   /** The open note's entity id, for the "already linked" recent-notes ordering. Omit in the event editor. */
   currentNoteId?: () => string | null;
   /** Campaign-relative path of the note/event currently open, or null if unsaved. Used to exclude the directive being edited from `heldOptions`. */
@@ -75,7 +77,6 @@ export function useRelationshipEditorConfig(
     const heldOptions = makeHeldOptionsResolver({
       library,
       getLedgers: () => ledgersRef.current,
-      getDocText: () => optsRef.current.getDocText(),
       currentPath: () => optsRef.current.currentPath(),
       at: () => optsRef.current.at(),
     });
@@ -84,6 +85,7 @@ export function useRelationshipEditorConfig(
       library,
       defaultReason: opts.defaultReason,
       onOpenNote: opts.onOpenNote,
+      place: opts.place,
       noteOptions: () =>
         entityIndexRef.current
           .filter((e) => e.type === 'note')
@@ -93,5 +95,5 @@ export function useRelationshipEditorConfig(
       onHolderChosenWithoutDefault: makeHolderChosenHandler(opts.confirm, labelFor),
       heldOptions,
     });
-  }, [library, opts.defaultReason, opts.onOpenNote, opts.confirm, defaultHolderId]);
+  }, [library, opts.defaultReason, opts.onOpenNote, opts.place, opts.confirm, defaultHolderId]);
 }

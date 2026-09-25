@@ -11,6 +11,7 @@ import {
   getDirectiveRoleElement,
   type RelationshipDirectivesConfig,
 } from '../relationship-directives';
+import { bubbleStateField, closeBubbleEffect } from '../relationship-bubble-state';
 import { wikiLinks, setEntityLabels, type WikiLinksConfig } from '../wiki-links';
 import { serialiseTemplate } from '../../../../../shared/relationships/directives/index';
 import {
@@ -76,7 +77,7 @@ function makeView(
   } = {},
 ): Setup {
   const { defaultReason, labels, readOnly, withWikiLinks, dispatchContext = true } = options;
-  const extensions = [history(), relationshipDirectives(config)];
+  const extensions = [history(), relationshipDirectives(config), bubbleStateField];
   if (withWikiLinks) extensions.push(wikiLinks(withWikiLinks));
   if (readOnly) extensions.push(EditorState.readOnly.of(true));
 
@@ -182,10 +183,7 @@ describe('relationship directives — readable rendering', () => {
 
 describe('relationship directives — DOM is not a data source', () => {
   it('block click handlers use editor state, not DOM attributes', () => {
-    const onEditField = vi.fn();
-    const setup = track(
-      makeView(`before ${UNFINISHED_CHANGE_DIRECTIVE}`, { onEditField }, { labels: LABELS }),
-    );
+    const setup = track(makeView(`before ${UNFINISHED_CHANGE_DIRECTIVE}`, {}, { labels: LABELS }));
     const { view } = setup;
     const el = block(view);
 
@@ -203,7 +201,7 @@ describe('relationship directives — DOM is not a data source', () => {
     const shiftedFrom = 'more before '.length;
     const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
     fireClick(holderValue);
-    expect(onEditField).toHaveBeenCalledWith({ from: shiftedFrom, ordinal: 0 }, 'holder');
+    expect(view.state.field(bubbleStateField)).toEqual({ anchor: shiftedFrom, role: 'holder' });
   });
 });
 
@@ -298,37 +296,33 @@ describe('firstEditRole (pure)', () => {
 });
 
 describe('relationship directives — editing callbacks', () => {
-  it('clicking a value calls onEditField with its role; clicking wording targets the first empty blank', () => {
-    const onEditField = vi.fn();
-    const setup = track(makeView(UNFINISHED_CHANGE_DIRECTIVE, { onEditField }, { labels: LABELS }));
+  it('clicking a value opens the bubble on its role; clicking wording targets the first empty blank', () => {
+    const setup = track(makeView(UNFINISHED_CHANGE_DIRECTIVE, {}, { labels: LABELS }));
     const { view } = setup;
 
     const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
     fireClick(holderValue);
-    expect(onEditField).toHaveBeenCalledWith({ from: 0, ordinal: 0 }, 'holder');
+    expect(view.state.field(bubbleStateField)).toEqual({ anchor: 0, role: 'holder' });
 
-    onEditField.mockClear();
+    view.dispatch({ effects: closeBubbleEffect.of(null) });
     fireClick(block(view));
-    expect(onEditField).toHaveBeenCalledWith({ from: 0, ordinal: 0 }, 'amount');
+    expect(view.state.field(bubbleStateField)).toEqual({ anchor: 0, role: 'amount' });
   });
 
-  it('Ctrl+click on a holder calls onOpenNote; plain click does not', () => {
+  it('Ctrl+click on a holder calls onOpenNote; plain click opens the bubble instead', () => {
     const onOpenNote = vi.fn();
-    const onEditField = vi.fn();
-    const setup = track(
-      makeView(FULL_CHANGE_DIRECTIVE, { onOpenNote, onEditField }, { labels: LABELS }),
-    );
+    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, { onOpenNote }, { labels: LABELS }));
     const { view } = setup;
     const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
 
     fireClick(holderValue);
     expect(onOpenNote).not.toHaveBeenCalled();
-    expect(onEditField).toHaveBeenCalledWith({ from: 0, ordinal: 0 }, 'holder');
+    expect(view.state.field(bubbleStateField)).toEqual({ anchor: 0, role: 'holder' });
 
-    onEditField.mockClear();
+    view.dispatch({ effects: closeBubbleEffect.of(null) });
     fireClick(holderValue, { ctrlKey: true });
     expect(onOpenNote).toHaveBeenCalledWith('c3d4');
-    expect(onEditField).not.toHaveBeenCalled();
+    expect(view.state.field(bubbleStateField)).toBeNull();
   });
 
   it('unfinished blanks show their prompt with the attention class', () => {

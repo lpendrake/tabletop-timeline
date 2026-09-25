@@ -15,6 +15,11 @@ export type { DropLinkConfig, DropInsert } from './extensions/drop-link';
 export type { ImageDecorationsOptions } from './extensions/image-decorations';
 export type { MarkdownLinkClickConfig } from './extensions/markdown-link-click';
 export type { RelationshipDirectivesConfig } from './extensions/relationship-directives';
+export type {
+  RelationshipBubbleHostContext,
+  RelationshipBubbleOptions,
+  HeldOptionsQuery,
+} from './extensions/relationship-bubble-view-plugin';
 export { buildEditorMenuItems } from './extensions/editor-context-menu';
 export type {
   EditorMenuContext,

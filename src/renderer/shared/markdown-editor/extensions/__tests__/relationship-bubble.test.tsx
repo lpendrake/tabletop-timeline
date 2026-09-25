@@ -46,6 +46,7 @@ function baseProps(overrides: Partial<RelationshipBubbleProps> = {}): Relationsh
     defaultHolderId: null,
     currentNoteId: null,
     heldOptionKeys: null,
+    heldOptionsLoading: false,
     onCommit: vi.fn(),
     onClose: vi.fn(),
     style: {},
@@ -266,9 +267,10 @@ describe('option field — create row and held-options filtering', () => {
       }),
     );
     fireEvent.change(input(), { target: { value: 'rivals' } });
-    const createRow = container.querySelector('.relationship-bubble-create-row')!;
+    const createRow = container.querySelector('.searchable-picker-create-row')!;
     expect(createRow).not.toBeNull();
     expect(createRow.textContent).toContain('Create');
+    expect(createRow.textContent).toContain('Symmetrical');
 
     const checkbox = createRow.querySelector('input[type="checkbox"]') as HTMLInputElement;
     fireEvent.click(checkbox);
@@ -292,7 +294,7 @@ describe('option field — create row and held-options filtering', () => {
         heldOptionKeys: ['hates'],
       }),
     );
-    const rows = Array.from(container.querySelectorAll('.relationship-bubble-row')).map(
+    const rows = Array.from(container.querySelectorAll('.searchable-picker-row')).map(
       (r) => r.textContent,
     );
     expect(rows).toEqual(['hates']);
@@ -301,10 +303,53 @@ describe('option field — create row and held-options filtering', () => {
   it('shows every option when the host gives no held-options list', () => {
     tracked();
     render(baseProps({ role: 'option', value: '', track: OPTIONS_TRACK, heldOptionKeys: null }));
-    const rows = Array.from(container.querySelectorAll('.relationship-bubble-row'));
+    const rows = Array.from(container.querySelectorAll('.searchable-picker-row'));
     expect(rows.length).toBe(
       OPTIONS_TRACK.kind === 'categorical' ? OPTIONS_TRACK.options.length : 0,
     );
+  });
+
+  it('shows a loading state and no options while heldOptions is resolving', () => {
+    tracked();
+    render(
+      baseProps({
+        role: 'option',
+        value: '',
+        track: OPTIONS_TRACK,
+        heldOptionKeys: null,
+        heldOptionsLoading: true,
+      }),
+    );
+    expect(container.querySelector('.relationship-bubble-loading')?.textContent).toBe('Loading…');
+    expect(container.querySelectorAll('.searchable-picker-row').length).toBe(0);
+  });
+
+  it('ArrowDown/Up move freely while editing an existing option — no snap-back', () => {
+    tracked();
+    const onCommit = vi.fn();
+    render(
+      baseProps({
+        role: 'option',
+        value: 'hates',
+        track: OPTIONS_TRACK,
+        heldOptionKeys: null,
+        onCommit,
+      }),
+    );
+    const rowText = () =>
+      Array.from(container.querySelectorAll('.searchable-picker-row.is-highlighted')).map(
+        (r) => r.textContent,
+      );
+    const highlightedBefore = rowText();
+    expect(highlightedBefore).toEqual(['hates']);
+
+    fireEvent.keyDown(input(), { key: 'ArrowDown' });
+    const highlightedAfter = rowText();
+    expect(highlightedAfter).not.toEqual(highlightedBefore);
+
+    fireEvent.keyDown(input(), { key: 'Enter' });
+    expect(onCommit).toHaveBeenCalledWith(expect.any(String), 'advance');
+    expect(onCommit).not.toHaveBeenCalledWith('hates', 'advance');
   });
 });
 

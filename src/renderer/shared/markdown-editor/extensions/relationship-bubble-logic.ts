@@ -6,8 +6,11 @@
  * mounting a view (see CLAUDE.md — no business logic inside hooks/components).
  */
 import type { ParsedDirective, Role, ResolvedTrack } from '../../../../shared/relationships';
-import { validateRoleValue } from '../../../../shared/relationships';
-import type { PickerOption } from '../../searchable-picker';
+import { validateRoleValue, noteIdOf } from '../../../../shared/relationships';
+import { rankPickerOptions, type PickerOption } from '../../searchable-picker';
+
+/** How a bubble field commit should move the bubble: to the next/previous blank, or hop over a filled one. */
+export type BubbleCommitDirection = 'advance' | 'back' | 'hop-next' | 'hop-prev';
 
 /** The role tokens of a directive, in document order (= template order at fill time). */
 export function blankRoles(d: ParsedDirective): Role[] {
@@ -145,6 +148,54 @@ export function filterHeldOptions(
   if (heldKeys === null) return [...options];
   const held = new Set(heldKeys);
   return options.filter((o) => held.has(o.id));
+}
+
+/** Whether picking a note for `role` should notify the host it chose a holder before any default holder was set. */
+export function shouldNotifyHolderChosen(role: Role, defaultHolderId: string | null): boolean {
+  return role === 'holder' && !defaultHolderId;
+}
+
+/** Recent note ids for a holder/observer picker: `currentNoteId` pinned to the front if not already present. */
+export function buildNotePickerRecents(
+  recentNoteIds: readonly string[],
+  currentNoteId: string | null,
+): string[] {
+  const recents = [...recentNoteIds];
+  if (currentNoteId && !recents.includes(currentNoteId)) recents.unshift(currentNoteId);
+  return recents;
+}
+
+/**
+ * The value a holder/observer picker should show pre-filled: the directive's
+ * current value (a bare id extracted from its `[[id]]` form), or — for an
+ * empty holder blank only — the host's default holder.
+ */
+export function prefillNoteValue(
+  role: Role,
+  value: string,
+  defaultHolderId: string | null,
+): string | undefined {
+  const currentId = noteIdOf(value) ?? (value || undefined);
+  return role === 'holder' && !currentId ? (defaultHolderId ?? undefined) : currentId;
+}
+
+/**
+ * The option Tab should commit for a picker-backed field: the query's top
+ * ranked match, or (an empty query) the currently-selected value if it still
+ * ranks among the recents/options shown.
+ */
+export function pickForTab(
+  options: readonly PickerOption[],
+  query: string,
+  recentIds: readonly string[] | undefined,
+  value: string | null | undefined,
+): PickerOption | null {
+  const ranked = rankPickerOptions(options, query, recentIds);
+  if (!query.trim() && value) {
+    const matched = ranked.find((o) => o.id === value);
+    if (matched) return matched;
+  }
+  return ranked[0] ?? null;
 }
 
 /** Minimum distance kept between the bubble's tail and either of its own edges. */

@@ -39,11 +39,11 @@ import { relationshipDirectives, setDirectiveContext } from './extensions/relati
 import {
   relationshipBubble,
   type RelationshipBubbleHostContext,
+  type RelationshipBubbleOptions,
 } from './extensions/relationship-bubble-view-plugin';
 import { formattingKeymap } from './commands';
 import { EMPTY_TRACK_LIBRARY, NOTE_DEFAULT_REASON } from '../../../shared/relationships';
-import type { TrackLibrary, Role } from '../../../shared/relationships';
-import type { PickerOption } from '../searchable-picker';
+import type { TrackLibrary } from '../../../shared/relationships';
 
 /**
  * Pairs an EditorState with the Compartment instance embedded in it.
@@ -72,29 +72,14 @@ export interface RelationshipDirectivesHostConfig {
   defaultReason: string;
   onOpenNote?: (id: string) => void;
   /**
-   * Hook point for a host that wants to handle field-editing itself instead
-   * of the built-in fill-in bubble. Omit it — the common case — and clicks
-   * open the bubble directly.
+   * Whether this document is a note (undated) or an event. Passed through
+   * to `interpretDirective` as `undated: place === 'note'` — a note may only
+   * Set/Add, never Change/Shift/Remove (see `src/shared/relationships/AGENTS.md`).
+   * Defaults to `'event'` (the permissive context) when omitted.
    */
-  onEditField?: (target: { from: number; ordinal: number }, role: Role) => void;
+  place?: 'note' | 'event';
   /** Data and callbacks the built-in fill-in bubble needs. Omit to still get a bubble with no note/option pickers wired up. */
-  bubbles?: {
-    noteOptions: () => PickerOption[];
-    defaultHolderId?: () => string | null;
-    currentNoteId?: () => string | null;
-    onHolderChosenWithoutDefault?: (id: string) => void;
-    createOption?: (
-      trackId: string,
-      label: string,
-      mutual: boolean,
-    ) => Promise<{ key: string } | null>;
-    heldOptions?: (q: {
-      trackId: string;
-      holder: string | null;
-      observer: string | null;
-      anchor: number;
-    }) => string[];
-  };
+  bubbles?: RelationshipBubbleOptions;
 }
 
 export interface MarkdownEditorProps {
@@ -224,9 +209,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       relationshipDirectives({
         readOnly: readOnlyRef.current,
         onOpenNote: (id) => relationshipDirectivesRef.current?.onOpenNote?.(id),
-        onEditField: relationshipDirectivesRef.current?.onEditField
-          ? (target, role) => relationshipDirectivesRef.current?.onEditField?.(target, role)
-          : undefined,
+        place: relationshipDirectivesRef.current?.place,
       }),
     ];
     if (!readOnlyRef.current) {

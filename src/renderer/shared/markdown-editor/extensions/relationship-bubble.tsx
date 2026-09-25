@@ -1,29 +1,24 @@
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { sanitiseValue, type Role, type ResolvedTrack } from '../../../../shared/relationships';
+import { SearchablePicker, type PickerOption } from '../../searchable-picker';
 import {
-  noteIdOf,
-  sanitiseValue,
-  type Role,
-  type ResolvedTrack,
-} from '../../../../shared/relationships';
-import {
-  SearchablePicker,
-  moveHighlight,
-  rankPickerOptions,
-  type PickerOption,
-} from '../../searchable-picker';
-import {
+  buildNotePickerRecents,
   decideBubbleKey,
   filterHeldOptions,
+  pickForTab,
+  prefillNoteValue,
+  shouldNotifyHolderChosen,
   shouldOfferCreateOption,
   stepAmount,
   stepNumericValue,
   validateAmount,
   validateNumericValue,
+  type BubbleCommitDirection,
   type BubbleKeyAction,
 } from './relationship-bubble-logic';
 import './relationship-bubble.css';
 
-export type BubbleCommitDirection = 'advance' | 'back' | 'hop-next' | 'hop-prev';
+export type { BubbleCommitDirection };
 
 export interface RelationshipBubbleProps {
   role: Role;
@@ -37,6 +32,8 @@ export interface RelationshipBubbleProps {
   defaultHolderId: string | null;
   currentNoteId: string | null;
   heldOptionKeys: string[] | null;
+  /** True while an async `heldOptions` lookup for this exact blank is in flight — see `relationship-bubble-view-plugin.ts`. */
+  heldOptionsLoading: boolean;
   onHolderChosenWithoutDefault?: (id: string) => void;
   createOption?: (
     trackId: string,
@@ -271,7 +268,11 @@ function ReasonField({
   );
 }
 
-/** Shared Tab/Shift-Tab handling for picker-backed fields (SearchablePicker owns Enter/Up/Down/Escape). */
+/**
+ * Shared Tab/Shift-Tab handling for picker-backed fields (SearchablePicker
+ * owns Enter/Up/Down/Escape). Which option Tab commits is decided by the
+ * pure `pickForTab` — this only wires the DOM event to it.
+ */
 function usePickerTabHandler(
   options: readonly PickerOption[],
   recentIds: readonly string[] | undefined,
@@ -283,13 +284,7 @@ function usePickerTabHandler(
     e.preventDefault();
     e.stopPropagation();
     const target = e.target as HTMLInputElement;
-    const query = target.value ?? '';
-    const ranked = rankPickerOptions(options, query, recentIds);
-    let picked = ranked[0];
-    if (!query.trim() && value) {
-      const matched = ranked.find((o) => o.id === value);
-      if (matched) picked = matched;
-    }
+    const picked = pickForTab(options, target.value ?? '', recentIds, value);
     if (picked) onCommit(picked.id, e.shiftKey ? 'back' : 'advance');
   };
 }
@@ -309,16 +304,15 @@ function NotePickerField(props: RelationshipBubbleProps) {
   const ref = useRef<HTMLInputElement>(null);
   useBubbleFocus(ref, visible);
 
-  const recents = [...recentNoteIds];
-  if (currentNoteId && !recents.includes(currentNoteId)) recents.unshift(currentNoteId);
+  const recents = buildNotePickerRecents(recentNoteIds, currentNoteId);
+  const prefilled = prefillNoteValue(role, value, defaultHolderId);
 
-  const currentId = noteIdOf(value) ?? (value || undefined);
-  const prefilled = role === 'holder' && !currentId ? (defaultHolderId ?? undefined) : currentId;
+  function commitPick(id: string, direction: BubbleCommitDirection): void {
+    if (shouldNotifyHolderChosen(role, defaultHolderId)) props.onHolderChosenWithoutDefault?.(id);
+    onCommit(id, direction);
+  }
 
-  const handleTab = usePickerTabHandler(noteOptions, recents, prefilled, (v, dir) => {
-    if (role === 'holder' && !defaultHolderId) props.onHolderChosenWithoutDefault?.(v);
-    onCommit(v, dir);
-  });
+  const handleTab = usePickerTabHandler(noteOptions, recents, prefilled, commitPick);
 
   return (
     <div className="relationship-bubble-field" onKeyDownCapture={handleTab}>
@@ -330,11 +324,7 @@ function NotePickerField(props: RelationshipBubbleProps) {
         placeholder={role === 'holder' ? 'Holder…' : 'Observer…'}
         ariaLabel={role}
         onCancel={onClose}
-        onPick={(option) => {
-          if (role === 'holder' && !defaultHolderId)
-            props.onHolderChosenWithoutDefault?.(option.id);
-          onCommit(option.id, 'advance');
-        }}
+        onPick={(option) => commitPick(option.id, 'advance')}
       />
     </div>
   );
@@ -370,17 +360,25 @@ function RungField(
 }
 
 /**
- * Options need a "Create …" row unknown queries don't get elsewhere, so this
- * field builds its own minimal list (via the same pure `picker-model.ts`
- * helpers `SearchablePicker` uses) instead of `SearchablePicker` itself,
- * which has no room for that row.
+ * An unmatched query offers a "Create …" row via `SearchablePicker`'s
+ * `createRow` slot — see that component's AGENTS.md for why this must not
+ * go back to a separate, unmemoized listbox reimplementation.
  */
 function OptionField(
   props: RelationshipBubbleProps & { track: Extract<ResolvedTrack, { kind: 'categorical' }> },
 ) {
-  const { value, track, trackId, heldOptionKeys, createOption, onCommit, onClose, visible } = props;
+  const {
+    value,
+    track,
+    trackId,
+    heldOptionKeys,
+    heldOptionsLoading,
+    createOption,
+    onCommit,
+    onClose,
+    visible,
+  } = props;
   const [query, setQuery] = useState('');
-  const [highlight, setHighlight] = useState(0);
   const [mutual, setMutual] = useState(false);
   const [creating, setCreating] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
@@ -392,18 +390,9 @@ function OptionField(
     label: o.label,
   }));
   const options = filterHeldOptions(allOptions, heldOptionKeys);
-  const ranked = rankPickerOptions(options, query);
   const offerCreate = Boolean(createOption) && shouldOfferCreateOption(query, options);
-  const rowCount = ranked.length + (offerCreate ? 1 : 0);
 
-  useEffect(() => {
-    if (!query.trim() && value) {
-      const index = ranked.findIndex((o) => o.id === value);
-      if (index >= 0) setHighlight(index);
-    }
-    // Only on the initial (empty-query) result set — mirrors SearchablePicker's own behaviour.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ranked]);
+  const handleTab = usePickerTabHandler(options, undefined, value || null, onCommit);
 
   async function doCreate() {
     if (!createOption || creating) return;
@@ -416,107 +405,51 @@ function OptionField(
     }
   }
 
-  function pickHighlighted(direction: BubbleCommitDirection) {
-    if (offerCreate && highlight === ranked.length) {
-      void doCreate();
-      return;
-    }
-    const picked = ranked[highlight];
-    if (picked) onCommit(picked.id, direction);
-  }
-
-  function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setHighlight((h) => moveHighlight(h, rowCount, 1));
-      return;
-    }
-    if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setHighlight((h) => moveHighlight(h, rowCount, -1));
-      return;
-    }
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      onClose();
-      return;
-    }
-    const el = ref.current;
-    const action = decideBubbleKey(e.key, {
-      shiftKey: e.shiftKey,
-      ...(el ? inputBounds(el) : { atStart: false, atEnd: false }),
-    });
-    if (action.type === 'advance' || action.type === 'back') {
-      e.preventDefault();
-      pickHighlighted(action.type);
-    } else if (action.type === 'hop-next' || action.type === 'hop-prev') {
-      e.preventDefault();
-      pickHighlighted(action.type);
-    }
+  if (heldOptionsLoading) {
+    return (
+      <div className="relationship-bubble-field">
+        <div className="relationship-bubble-loading">Loading…</div>
+      </div>
+    );
   }
 
   return (
-    <div className="relationship-bubble-field">
-      <input
-        ref={ref}
-        className="relationship-bubble-input"
-        type="text"
+    <div className="relationship-bubble-field" onKeyDownCapture={handleTab}>
+      <SearchablePicker
+        options={options}
+        value={value || null}
+        inputRef={ref}
         placeholder="Choose an option…"
-        aria-label="option"
-        value={query}
-        onChange={(e) => {
-          setQuery(e.target.value);
-          setHighlight(0);
-        }}
-        onKeyDown={handleKeyDown}
+        ariaLabel="option"
+        emptyText="No matching option"
+        onQueryChange={setQuery}
+        onCancel={onClose}
+        onPick={(option) => onCommit(option.id, 'advance')}
+        createRow={
+          createOption
+            ? {
+                show: offerCreate,
+                render: () => (
+                  <>
+                    <span>Create &quot;{query.trim()}&quot;</span>
+                    <label
+                      className="relationship-bubble-mutual-label"
+                      onMouseDown={(e) => e.stopPropagation()}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={mutual}
+                        onChange={(e) => setMutual(e.target.checked)}
+                      />
+                      Symmetrical
+                    </label>
+                  </>
+                ),
+                onPick: () => void doCreate(),
+              }
+            : undefined
+        }
       />
-      <div className="relationship-bubble-list" role="listbox">
-        {ranked.map((option, index) => (
-          <div
-            key={option.id}
-            role="option"
-            aria-selected={index === highlight}
-            className={`relationship-bubble-row${index === highlight ? ' is-highlighted' : ''}`}
-            onMouseEnter={() => setHighlight(index)}
-            onMouseDown={(e) => {
-              e.preventDefault();
-              onCommit(option.id, 'advance');
-            }}
-          >
-            {option.label ?? option.path}
-          </div>
-        ))}
-        {offerCreate && (
-          <div
-            role="option"
-            aria-selected={highlight === ranked.length}
-            className={`relationship-bubble-row relationship-bubble-create-row${
-              highlight === ranked.length ? ' is-highlighted' : ''
-            }`}
-            onMouseEnter={() => setHighlight(ranked.length)}
-            onMouseDown={(e) => {
-              e.preventDefault();
-              void doCreate();
-            }}
-          >
-            <span>Create &quot;{query.trim()}&quot;</span>
-            <label
-              className="relationship-bubble-mutual-label"
-              onMouseDown={(e) => e.stopPropagation()}
-            >
-              <input
-                type="checkbox"
-                checked={mutual}
-                onChange={(e) => setMutual(e.target.checked)}
-              />
-              Mutual
-            </label>
-          </div>
-        )}
-        {ranked.length === 0 && !offerCreate && (
-          <div className="relationship-bubble-empty">No matching option</div>
-        )}
-      </div>
     </div>
   );
 }

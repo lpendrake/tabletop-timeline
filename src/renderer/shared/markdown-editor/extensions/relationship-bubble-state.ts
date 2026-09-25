@@ -16,7 +16,13 @@ import {
   type ParsedDirective,
   type Role,
 } from '../../../../shared/relationships';
-import { firstBlankRole, nextBlankRole, previousBlankRole } from './relationship-bubble-logic';
+import {
+  firstBlankRole,
+  nextBlankRole,
+  previousBlankRole,
+  type BubbleCommitDirection,
+} from './relationship-bubble-logic';
+import { directivesIn } from './parsed-directives';
 
 export interface BubbleAnchor {
   /** The directive's `from` at the time the bubble was opened — mapped on every change. */
@@ -28,7 +34,7 @@ export const openBubbleEffect = StateEffect.define<BubbleAnchor>();
 export const closeBubbleEffect = StateEffect.define<null>();
 
 function directiveAt(state: EditorState, anchor: number): ParsedDirective | null {
-  return parseDirectives(state.doc.toString()).directives.find((d) => d.from === anchor) ?? null;
+  return directivesIn(state).find((d) => d.from === anchor) ?? null;
 }
 
 export const bubbleStateField = StateField.define<BubbleAnchor | null>({
@@ -91,7 +97,6 @@ export function insertDirective(view: EditorView, from: number, to: number, text
   });
 }
 
-export type BubbleCommitDirection = 'advance' | 'back' | 'hop-next' | 'hop-prev';
 export type BubbleCommitOutcome = 'moved' | 'stayed' | 'closed' | 'failed';
 
 /**

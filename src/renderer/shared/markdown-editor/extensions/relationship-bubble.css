@@ -52,39 +52,11 @@
   font-size: 12px;
 }
 
-.relationship-bubble-list {
-  max-height: 220px;
-  overflow-y: auto;
-  border: 1px solid var(--theme-border);
-  border-radius: 4px;
-}
-
-.relationship-bubble-row {
-  padding: 5px 8px;
-  cursor: pointer;
-  border-left: 2px solid transparent;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.relationship-bubble-row:hover,
-.relationship-bubble-row.is-highlighted {
-  background: var(--theme-background);
-  border-left-color: var(--theme-accent-gold);
-}
-
-.relationship-bubble-empty {
+.relationship-bubble-loading {
   padding: 8px;
   color: var(--theme-text-muted);
   font-size: 12px;
   text-align: center;
-}
-
-.relationship-bubble-create-row {
-  color: var(--theme-accent-gold);
-  font-style: italic;
 }
 
 .relationship-bubble-mutual-label {

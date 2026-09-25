@@ -56,7 +56,7 @@ describe('makeHeldOptionsResolver', () => {
     return { holder: 'h1', observer: 'o1', track: trackId, deltas };
   }
 
-  it('resolves held options for the (holder, observer, track) ledger as of the given point', () => {
+  it('resolves held options for the (holder, observer, track) ledger as of the given point', async () => {
     const deltas: Ledger['deltas'] = [
       { op: 'add', key: 'member', at: null, declaredIn: { path: 'notes/a.md', ordinal: 0 } },
       { op: 'add', key: 'employee', at: null, declaredIn: { path: 'notes/a.md', ordinal: 1 } },
@@ -64,23 +64,23 @@ describe('makeHeldOptionsResolver', () => {
     const resolver = makeHeldOptionsResolver({
       library: LIBRARY,
       getLedgers: () => [ledger(deltas)],
-      getDocText: () => '',
       currentPath: () => null,
       at: () => null,
     });
 
-    const result = resolver({ trackId, holder: 'h1', observer: 'o1', anchor: 0 });
+    const result = await resolver({ trackId, holder: 'h1', observer: 'o1', anchor: 0, doc: '' });
     expect(result).toEqual(['member', 'employee']);
   });
 
-  it('returns empty when holder or observer is missing', () => {
+  it('returns empty when holder or observer is missing', async () => {
     const resolver = makeHeldOptionsResolver({
       library: LIBRARY,
       getLedgers: () => [],
-      getDocText: () => '',
       currentPath: () => null,
       at: () => null,
     });
-    expect(resolver({ trackId, holder: null, observer: 'o1', anchor: 0 })).toEqual([]);
+    expect(await resolver({ trackId, holder: null, observer: 'o1', anchor: 0, doc: '' })).toEqual(
+      [],
+    );
   });
 });
