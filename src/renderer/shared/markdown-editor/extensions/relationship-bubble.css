@@ -97,8 +97,9 @@
 }
 
 .relationship-bubble-tail {
+  /* Horizontal position (`left`) is set inline, per-render — see
+     `computeTailOffset` — so it can point at the blank being edited. */
   position: absolute;
-  left: 16px;
   width: 10px;
   height: 10px;
   background: var(--theme-panel);

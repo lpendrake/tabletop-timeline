@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { noteIdOf, type Role, type ResolvedTrack } from '../../../../shared/relationships';
 import {
   SearchablePicker,
@@ -43,6 +43,18 @@ export interface RelationshipBubbleProps {
   onClose: () => void;
   style: React.CSSProperties;
   tailSide: 'above' | 'below';
+  /**
+   * False for the initial hidden measuring pass (see
+   * `relationship-bubble-view-plugin.ts`'s `render`), true once
+   * repositioned and shown. Fields use this — not a plain mount-time
+   * `autoFocus` — to grab focus, since the same box (and often the same
+   * field instance) is repainted hidden-then-visible on every open AND on
+   * every role switch; a hidden element can't take real focus, so waiting
+   * for `visible` to flip true is what makes the focus land reliably.
+   */
+  visible: boolean;
+  /** Horizontal offset (px) of the tail from the bubble's own left edge — see `computeTailOffset`. */
+  tailOffset: number;
 }
 
 function inputBounds(el: HTMLInputElement): { atStart: boolean; atEnd: boolean } {
@@ -53,18 +65,45 @@ function inputBounds(el: HTMLInputElement): { atStart: boolean; atEnd: boolean }
 }
 
 /**
+ * Focuses `ref`'s element once the bubble is `visible`, with a
+ * `requestAnimationFrame` follow-up in case something else (CodeMirror
+ * regaining focus after the dispatch that opened the bubble, a menu's own
+ * `restoreFocus`) steals it back in between. No-op while hidden — a
+ * `visibility: hidden` element can't take real browser focus, so this
+ * waits for the visible pass instead of racing it.
+ */
+function useBubbleFocus<T extends HTMLElement>(
+  ref: React.RefObject<T | null>,
+  visible: boolean,
+): void {
+  useLayoutEffect(() => {
+    if (!visible) return undefined;
+    const el = ref.current;
+    if (!el) return undefined;
+    el.focus();
+    const raf = requestAnimationFrame(() => {
+      if (document.activeElement !== el) el.focus();
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [visible, ref]);
+}
+
+/**
  * The bubble's own floating box: tail pointing at its blank, mounted by
  * `relationship-bubble-view-plugin.ts` outside `view.dom`. Renders only —
  * every decision (advance/back/hop, validation, stepping, the Create-row
  * check) is a pure function from `relationship-bubble-logic.ts`.
  */
 export function RelationshipBubble(props: RelationshipBubbleProps) {
-  const { style, tailSide } = props;
+  const { style, tailSide, tailOffset } = props;
   return (
     <div className="relationship-bubble" style={style}>
       <div className="relationship-bubble-prompt">{props.prompt}</div>
       <Field {...props} />
-      <div className={`relationship-bubble-tail relationship-bubble-tail-${tailSide}`} />
+      <div
+        className={`relationship-bubble-tail relationship-bubble-tail-${tailSide}`}
+        style={{ left: tailOffset }}
+      />
     </div>
   );
 }
@@ -104,10 +143,11 @@ interface NumberFieldProps extends RelationshipBubbleProps {
   step: (raw: string, dir: 1 | -1) => string;
 }
 
-function NumberField({ value, onCommit, onClose, validate, step }: NumberFieldProps) {
+function NumberField({ value, onCommit, onClose, validate, step, visible }: NumberFieldProps) {
   const [text, setText] = useState(value);
   const [error, setError] = useState<string | null>(null);
   const ref = useRef<HTMLInputElement>(null);
+  useBubbleFocus(ref, visible);
 
   function commit(direction: BubbleCommitDirection) {
     const result = validate(text);
@@ -165,7 +205,6 @@ function NumberField({ value, onCommit, onClose, validate, step }: NumberFieldPr
         className="relationship-bubble-input"
         type="text"
         inputMode="decimal"
-        autoFocus
         value={text}
         onChange={(e) => {
           setText(e.target.value);
@@ -178,9 +217,16 @@ function NumberField({ value, onCommit, onClose, validate, step }: NumberFieldPr
   );
 }
 
-function ReasonField({ value, defaultReason, onCommit, onClose }: RelationshipBubbleProps) {
+function ReasonField({
+  value,
+  defaultReason,
+  onCommit,
+  onClose,
+  visible,
+}: RelationshipBubbleProps) {
   const [text, setText] = useState(value);
   const ref = useRef<HTMLInputElement>(null);
+  useBubbleFocus(ref, visible);
 
   function commit(direction: BubbleCommitDirection) {
     onCommit(sanitiseFreeText(text), direction);
@@ -210,7 +256,6 @@ function ReasonField({ value, defaultReason, onCommit, onClose }: RelationshipBu
         ref={ref}
         className="relationship-bubble-input"
         type="text"
-        autoFocus
         placeholder={defaultReason}
         value={text}
         onChange={(e) => setText(e.target.value)}
@@ -253,7 +298,10 @@ function NotePickerField(props: RelationshipBubbleProps) {
     role,
     onCommit,
     onClose,
+    visible,
   } = props;
+  const ref = useRef<HTMLInputElement>(null);
+  useBubbleFocus(ref, visible);
 
   const recents = [...recentNoteIds];
   if (currentNoteId && !recents.includes(currentNoteId)) recents.unshift(currentNoteId);
@@ -272,7 +320,7 @@ function NotePickerField(props: RelationshipBubbleProps) {
         options={noteOptions}
         recentIds={recents}
         value={prefilled ?? null}
-        autoFocus
+        inputRef={ref}
         placeholder={role === 'holder' ? 'Holder…' : 'Observer…'}
         ariaLabel={role}
         onCancel={onClose}
@@ -287,7 +335,9 @@ function NotePickerField(props: RelationshipBubbleProps) {
 }
 
 function RungField(props: RelationshipBubbleProps & { track: ResolvedTrack }) {
-  const { value, track, onCommit, onClose } = props;
+  const { value, track, onCommit, onClose, visible } = props;
+  const ref = useRef<HTMLInputElement>(null);
+  useBubbleFocus(ref, visible);
   const positions = track.positions as { key: string; label: string }[];
   const options: PickerOption[] = positions.map((p) => ({
     id: p.key,
@@ -302,7 +352,7 @@ function RungField(props: RelationshipBubbleProps & { track: ResolvedTrack }) {
       <SearchablePicker
         options={options}
         value={value || null}
-        autoFocus
+        inputRef={ref}
         placeholder="Choose a level…"
         ariaLabel="value"
         onCancel={onClose}
@@ -319,12 +369,13 @@ function RungField(props: RelationshipBubbleProps & { track: ResolvedTrack }) {
  * which has no room for that row.
  */
 function OptionField(props: RelationshipBubbleProps & { track: ResolvedTrack }) {
-  const { value, track, trackId, heldOptionKeys, createOption, onCommit, onClose } = props;
+  const { value, track, trackId, heldOptionKeys, createOption, onCommit, onClose, visible } = props;
   const [query, setQuery] = useState('');
   const [highlight, setHighlight] = useState(0);
   const [mutual, setMutual] = useState(false);
   const [creating, setCreating] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
+  useBubbleFocus(ref, visible);
 
   const allOptions: PickerOption[] = (
     (track.spec as { options?: { key: string; label: string }[] }).options ?? []
@@ -399,7 +450,6 @@ function OptionField(props: RelationshipBubbleProps & { track: ResolvedTrack }) 
         ref={ref}
         className="relationship-bubble-input"
         type="text"
-        autoFocus
         placeholder="Choose an option…"
         aria-label="option"
         value={query}

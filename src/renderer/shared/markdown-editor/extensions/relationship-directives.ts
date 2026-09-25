@@ -151,7 +151,46 @@ function currentDirectiveAt(view: EditorView, root: HTMLElement): ParsedDirectiv
   return directivesIn(view.state).find((d) => d.from === pos) ?? null;
 }
 
+/**
+ * Live registry of each currently-mounted directive block's blank spans, by
+ * the directive's `from` and then by role — populated by `DirectiveWidget`
+ * itself at `toDOM` time and cleared on `destroy`. This is what
+ * `relationship-bubble-view-plugin.ts` reads to find a blank's rendered rect
+ * for the fill-in bubble's tail: a direct reference to the actual span held
+ * by its own widget instance, never a `querySelector`/`data-*` lookup (see
+ * this file's own `currentDirectiveAt` and the module AGENTS.md for why
+ * directive data is never read back from the DOM). Keyed by identity on
+ * cleanup, so an old widget's `destroy` can never clobber a newer widget's
+ * entry for the same (possibly reused) `from` position.
+ *
+ * Scoped per `EditorView` (outer `WeakMap`) because several editors can be
+ * mounted at once over the SAME document (e.g. an editor modal and the
+ * read-only preview behind it), and a directive at a given `from` can exist
+ * identically in more than one of them. Without this scoping, a lookup from
+ * one editor could return another editor's element (anchoring the bubble
+ * tail in the wrong DOM tree), and one editor's widget `destroy()` could
+ * race and clobber another editor's registration for the same `from`.
+ */
+const roleElementRegistry = new WeakMap<EditorView, Map<number, Map<Role, HTMLElement>>>();
+
+/** The blank's rendered element for `role` on the directive at `from` within `view`, if currently mounted. */
+export function getDirectiveRoleElement(
+  view: EditorView,
+  from: number,
+  role: Role,
+): HTMLElement | null {
+  return roleElementRegistry.get(view)?.get(from)?.get(role) ?? null;
+}
+
 class DirectiveWidget extends WidgetType {
+  private readonly roleElements = new Map<Role, HTMLElement>();
+  /**
+   * Captured in `toDOM` so `destroy` — which CodeMirror calls without
+   * passing the view — can identity-check and clean up this widget's own
+   * entry in `roleElementRegistry` for the correct view.
+   */
+  private mountedView: EditorView | null = null;
+
   constructor(
     readonly directive: ParsedDirective,
     readonly built: DirectiveView,
@@ -264,7 +303,24 @@ class DirectiveWidget extends WidgetType {
       view.dispatch({ selection: { anchor: directive.from, head: directive.to } });
     });
 
+    if (this.built.kind === 'sentence') {
+      this.mountedView = view;
+      let byFrom = roleElementRegistry.get(view);
+      if (!byFrom) {
+        byFrom = new Map<number, Map<Role, HTMLElement>>();
+        roleElementRegistry.set(view, byFrom);
+      }
+      byFrom.set(this.directive.from, this.roleElements);
+    }
+
     return root;
+  }
+
+  override destroy(): void {
+    if (!this.mountedView) return;
+    const byFrom = roleElementRegistry.get(this.mountedView);
+    const current = byFrom?.get(this.directive.from);
+    if (current === this.roleElements) byFrom?.delete(this.directive.from);
   }
 
   private buildValueSpan(part: ValuePart, view: EditorView, root: HTMLElement): HTMLElement {
@@ -281,6 +337,7 @@ class DirectiveWidget extends WidgetType {
     }
     span.className = classes.join(' ');
     span.textContent = part.display;
+    this.roleElements.set(part.role, span);
 
     span.addEventListener('click', (event) => {
       if (event.button !== 0) return;

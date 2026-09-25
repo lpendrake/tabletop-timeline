@@ -142,3 +142,26 @@ export function filterHeldOptions(
 export function sanitiseFreeText(raw: string): string {
   return raw.replace(/[{}]/g, '').replace(/\r\n|\r|\n/g, ' ');
 }
+
+/** Minimum distance kept between the bubble's tail and either of its own edges. */
+export const TAIL_EDGE_INSET = 14;
+
+/**
+ * Where the bubble's tail should sit, as a horizontal offset (px) from the
+ * bubble's own left edge, so it visually points at the blank's rendered
+ * horizontal centre. Clamped to stay within the bubble's box (inset from
+ * both edges by `inset`, matching the tail's own footprint and the box's
+ * rounded corners) — the blank can sit outside the bubble's final,
+ * viewport-clamped position (e.g. near a screen edge), and the tail must
+ * still point somewhere on the box rather than sliding off it.
+ */
+export function computeTailOffset(
+  blankCenterX: number,
+  bubbleLeft: number,
+  bubbleWidth: number,
+  inset: number = TAIL_EDGE_INSET,
+): number {
+  const raw = blankCenterX - bubbleLeft;
+  const max = Math.max(inset, bubbleWidth - inset);
+  return Math.min(max, Math.max(inset, raw));
+}

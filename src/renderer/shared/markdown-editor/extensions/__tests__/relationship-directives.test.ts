@@ -8,6 +8,7 @@ import {
   setDirectiveContext,
   firstEditRole,
   crossEnd,
+  getDirectiveRoleElement,
   type RelationshipDirectivesConfig,
 } from '../relationship-directives';
 import { wikiLinks, setEntityLabels, type WikiLinksConfig } from '../wiki-links';
@@ -388,6 +389,34 @@ describe('relationship directives — wiki-link interop', () => {
     expect(el.querySelector('.cm-note-link')).toBeNull();
     expect(el.querySelector('.cm-wiki-link-raw')).toBeNull();
     expect(view.dom.querySelector('.cm-note-link')).not.toBeNull();
+  });
+});
+
+describe('relationship directives — per-view role element registry', () => {
+  it('scopes registered blank elements per EditorView, even for identical documents', () => {
+    const setupA = track(makeView(UNFINISHED_CHANGE_DIRECTIVE, {}, { labels: LABELS }));
+    const setupB = track(makeView(UNFINISHED_CHANGE_DIRECTIVE, {}, { labels: LABELS }));
+
+    const elA = getDirectiveRoleElement(setupA.view, 0, 'holder');
+    const elB = getDirectiveRoleElement(setupB.view, 0, 'holder');
+
+    expect(elA).not.toBeNull();
+    expect(elB).not.toBeNull();
+    expect(elA).not.toBe(elB);
+    expect(setupA.view.dom.contains(elA!)).toBe(true);
+    expect(setupB.view.dom.contains(elA!)).toBe(false);
+    expect(setupB.view.dom.contains(elB!)).toBe(true);
+    expect(setupA.view.dom.contains(elB!)).toBe(false);
+
+    // Destroying view B's widgets (via view.destroy(), which the harness
+    // does through `track`/`afterEach`) must not clobber view A's entry.
+    setupB.view.destroy();
+    expect(getDirectiveRoleElement(setupA.view, 0, 'holder')).toBe(elA);
+    expect(getDirectiveRoleElement(setupB.view, 0, 'holder')).toBeNull();
+
+    // Prevent the shared afterEach cleanup from destroying setupB's view twice.
+    cleanup = cleanup.filter((s) => s !== setupB);
+    setupB.container.remove();
   });
 });
 

@@ -12,9 +12,17 @@ import {
   relationshipBubble,
   type RelationshipBubbleHostContext,
 } from '../relationship-bubble-view-plugin';
-import { bubbleStateField } from '../relationship-bubble-state';
+import { bubbleStateField, insertDirective } from '../relationship-bubble-state';
 import { serialiseTemplate } from '../../../../../shared/relationships/directives/index';
 import { pf2eReputationSpec } from '../../../../../shared/relationships/system/index';
+
+/** Waits for the microtask + rAF the bubble uses to reposition/focus after opening. */
+async function flushBubbleOpen(): Promise<void> {
+  await act(async () => {
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
 
 const CHANGE_TEMPLATE = pf2eReputationSpec.actions.find((a) => a.key === 'change')!.template;
 
@@ -133,5 +141,43 @@ describe('relationship bubble — full mount', () => {
       fireEvent.keyDown(el, { key: 'z', ctrlKey: true });
     });
     expect(view.state.doc.toString()).toBe(docBefore);
+  });
+});
+
+describe('relationship bubble — focus', () => {
+  it('takes keyboard focus after a directive is inserted via the same path the / menu uses', async () => {
+    const setup = track(makeView(''));
+    const { view } = setup;
+    const template = pf2eReputationSpec.actions.find((a) => a.key === 'change')!.template;
+    const text = serialiseTemplate('rp01', 'change', template);
+
+    // Mirrors `editor-menu.ts`'s `onSelect`: the menu's own `restoreFocus`
+    // already gave the view focus by the time an action runs, then the
+    // action calls `insertDirective` — which is what actually opens the
+    // bubble. The bubble must still end up with focus afterwards.
+    act(() => {
+      view.focus();
+      insertDirective(view, 0, 0, text);
+    });
+
+    await flushBubbleOpen();
+
+    expect(document.activeElement).toBe(bubbleInput());
+  });
+
+  it('takes keyboard focus when a blank is opened by clicking its rendered value', async () => {
+    const setup = track(makeView(FULL_CHANGE_DIRECTIVE));
+    const { view } = setup;
+    const amountValue = view.dom.querySelector<HTMLElement>('.cm-directive-value-role-amount')!;
+
+    act(() => {
+      amountValue.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }),
+      );
+    });
+
+    await flushBubbleOpen();
+
+    expect(document.activeElement).toBe(bubbleInput());
   });
 });

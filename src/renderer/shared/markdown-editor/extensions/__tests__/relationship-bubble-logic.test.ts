@@ -13,6 +13,8 @@ import {
   shouldOfferCreateOption,
   filterHeldOptions,
   sanitiseFreeText,
+  computeTailOffset,
+  TAIL_EDGE_INSET,
 } from '../relationship-bubble-logic';
 import { parseDirectives, resolveTrackSpec } from '../../../../../shared/relationships';
 import { pf2eReputationSpec, attitudeSpec } from '../../../../../shared/relationships/system/index';
@@ -146,5 +148,27 @@ describe('option create-row + held-options filtering (pure)', () => {
 describe('sanitiseFreeText (pure)', () => {
   it('strips braces and collapses line breaks', () => {
     expect(sanitiseFreeText('a {b} c\nd')).toBe('a b c d');
+  });
+});
+
+describe('computeTailOffset (pure)', () => {
+  it('points straight at the blank centre when it falls inside the bubble', () => {
+    // Bubble spans [100, 340) (width 240); blank centre at 150 → 50px in.
+    expect(computeTailOffset(150, 100, 240)).toBe(50);
+  });
+
+  it('clamps to the inset from the left edge when the blank sits left of the bubble', () => {
+    expect(computeTailOffset(90, 100, 240)).toBe(TAIL_EDGE_INSET);
+  });
+
+  it('clamps to the inset from the right edge when the blank sits right of the bubble', () => {
+    expect(computeTailOffset(500, 100, 240)).toBe(240 - TAIL_EDGE_INSET);
+  });
+
+  it('falls back to the inset itself when the bubble is narrower than twice the inset', () => {
+    // Too narrow to keep both edge insets apart — pins to the (single) inset
+    // rather than producing a negative or out-of-order clamp range.
+    expect(computeTailOffset(0, 0, 10)).toBe(TAIL_EDGE_INSET);
+    expect(computeTailOffset(1000, 0, 10)).toBe(TAIL_EDGE_INSET);
   });
 });

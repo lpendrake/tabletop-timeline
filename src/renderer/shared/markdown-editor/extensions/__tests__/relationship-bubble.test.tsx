@@ -50,6 +50,8 @@ function baseProps(overrides: Partial<RelationshipBubbleProps> = {}): Relationsh
     onClose: vi.fn(),
     style: {},
     tailSide: 'above',
+    visible: true,
+    tailOffset: 16,
     ...overrides,
   };
 }
