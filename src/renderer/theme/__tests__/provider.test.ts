@@ -54,4 +54,31 @@ describe('ThemeProvider — CSS vars', () => {
     const value = document.documentElement.style.getPropertyValue('--theme-background');
     expect(value).toBe(lightfinder.chrome.background);
   });
+
+  it('sets --theme-warning CSS variable', () => {
+    ThemeProvider.setByName('lightfinder');
+    const value = document.documentElement.style.getPropertyValue('--theme-warning');
+    expect(value).toBe(lightfinder.chrome.warning);
+  });
+
+  it('sets --theme-warning-rgb CSS variable', () => {
+    ThemeProvider.setByName('lightfinder');
+    const value = document.documentElement.style.getPropertyValue('--theme-warning-rgb');
+    expect(value).toBeTruthy();
+    expect(value).toMatch(/^\d+ \d+ \d+$/);
+  });
+
+  it('sets --theme-directive-background CSS variable', () => {
+    ThemeProvider.setByName('lightfinder');
+    const value = document.documentElement.style.getPropertyValue('--theme-directive-background');
+    expect(value).toBe(lightfinder.editor.directiveBackground);
+  });
+
+  it('sets --theme-relationships-bar-track CSS variable', () => {
+    ThemeProvider.setByName('lightfinder');
+    const value = document.documentElement.style.getPropertyValue(
+      '--theme-relationships-bar-track',
+    );
+    expect(value).toBe(lightfinder.relationships.barTrack);
+  });
 });

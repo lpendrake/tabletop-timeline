@@ -20,6 +20,7 @@ export const darkPathfinder: Theme = {
     danger: '#c06040',
     dangerHover: '#5a2820',
     dottedFuture: '#7a6f58',
+    warning: '#f59e0b',
   },
 
   timeline: {
@@ -74,6 +75,13 @@ export const darkPathfinder: Theme = {
     foldPlaceholder: '#ddd',
     invalid: '#ff0000',
     selection: '#c9a860',
+    directiveBackground: '#242420',
+    directiveBorder: '#5a4530',
+    directiveHover: '#3a3d2a',
+    directiveValueHighlight: '#3a4d35',
+    directiveAttention: '#f59e0b',
+    directiveError: '#c06040',
+    directiveDelete: '#c06040',
   },
 
   bootstrap: {
@@ -94,5 +102,20 @@ export const darkPathfinder: Theme = {
     codeBackground: '#000',
     codeText: '#d4d4d8',
     codeBorder: '#27272a',
+  },
+
+  relationships: {
+    barTrack: '#3a3a30',
+    barFill: '#c9a860',
+    bandTick: '#5a4530',
+    rungInactive: '#7a6f58',
+    rungActive: '#6a9a4a',
+    chipBackground: '#3a4d35',
+    chipText: '#d8d0b8',
+    chipMutualBorder: '#5a4530',
+    rowHover: '#3a3d2a',
+    dropIndicator: '#c9a860',
+    stepSetBreak: '#5a4530',
+    errorText: '#c84848',
   },
 };

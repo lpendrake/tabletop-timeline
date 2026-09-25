@@ -40,6 +40,7 @@ export interface Theme {
     danger: string;
     dangerHover: string;
     dottedFuture: string;
+    warning: string;
   };
 
   timeline: {
@@ -58,6 +59,13 @@ export interface Theme {
     foldPlaceholder: string;
     invalid: string;
     selection: string;
+    directiveBackground: string;
+    directiveBorder: string;
+    directiveHover: string;
+    directiveValueHighlight: string;
+    directiveAttention: string;
+    directiveError: string;
+    directiveDelete: string;
   };
 
   bootstrap: {
@@ -78,6 +86,21 @@ export interface Theme {
     codeBackground: string;
     codeText: string;
     codeBorder: string;
+  };
+
+  relationships: {
+    barTrack: string;
+    barFill: string;
+    bandTick: string;
+    rungInactive: string;
+    rungActive: string;
+    chipBackground: string;
+    chipText: string;
+    chipMutualBorder: string;
+    rowHover: string;
+    dropIndicator: string;
+    stepSetBreak: string;
+    errorText: string;
   };
 }
 

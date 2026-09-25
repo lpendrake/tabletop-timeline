@@ -28,6 +28,7 @@ export const lightfinder: Theme = {
     danger: '#80281a',
     dangerHover: '#a8402a',
     dottedFuture: '#a08858',
+    warning: '#a06a18',
   },
 
   timeline: {
@@ -76,6 +77,13 @@ export const lightfinder: Theme = {
     foldPlaceholder: '#5a4d33',
     invalid: '#c8281a',
     selection: '#8a5e10',
+    directiveBackground: '#f4e8c2',
+    directiveBorder: '#8c7848',
+    directiveHover: '#e8dcb4',
+    directiveValueHighlight: '#c4d3a6',
+    directiveAttention: '#a06a18',
+    directiveError: '#80281a',
+    directiveDelete: '#80281a',
   },
 
   bootstrap: {
@@ -96,5 +104,20 @@ export const lightfinder: Theme = {
     codeBackground: '#dccfa0',
     codeText: '#1c160a',
     codeBorder: '#a8945e',
+  },
+
+  relationships: {
+    barTrack: '#d8c894',
+    barFill: '#8a5e10',
+    bandTick: '#8c7848',
+    rungInactive: '#7c6c48',
+    rungActive: '#3a6018',
+    chipBackground: '#f4e8c2',
+    chipText: '#1c160a',
+    chipMutualBorder: '#8c7848',
+    rowHover: '#e8dcb4',
+    dropIndicator: '#8a5e10',
+    stepSetBreak: '#8c7848',
+    errorText: '#923222',
   },
 };
