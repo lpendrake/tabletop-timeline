@@ -185,29 +185,3 @@ export function canDrop(payload: RowDragPayload | null | undefined, target: Drop
     payload.parentKey === target.parentKey
   );
 }
-
-function stripModePrefix(mode: GroupingMode, keys: readonly string[]): string[] {
-  const prefix = `${mode}|`;
-  return keys.filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length));
-}
-
-/**
- * Converts a flat, mode-prefixed key set (as produced by `outerRowStateKey`
- * / `innerRowStateKey`) into the plain-id array stored for one mode's
- * `expanded.outer` / `expanded.inner`.
- */
-export function expandedIdsForMode(
-  mode: GroupingMode,
-  flatKeys: ReadonlySet<string> | readonly string[],
-): string[] {
-  return stripModePrefix(mode, Array.from(flatKeys));
-}
-
-/**
- * Rebuilds a flat, mode-prefixed key set from a mode's stored plain-id
- * arrays (`expanded.outer` / `expanded.inner`), merging holder and observer
- * ids into one set the way `outerRowStateKey`/`innerRowStateKey` expect.
- */
-export function flatKeysFromExpandedIds(mode: GroupingMode, ids: readonly string[]): string[] {
-  return ids.map((id) => `${mode}|${id}`);
-}

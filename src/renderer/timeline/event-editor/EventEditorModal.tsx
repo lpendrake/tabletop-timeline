@@ -1,11 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { EditorView } from '@codemirror/view';
-import {
-  MarkdownEditor,
-  FormatToolbar,
-  composeExtraItems,
-  type EditorMenuContext,
-} from '../../shared/markdown-editor';
+import { MarkdownEditor, FormatToolbar } from '../../shared/markdown-editor';
 import { suggestLinks } from '../../shared/suggest-links';
 import { FooterPortal } from '../../components/footer-portal';
 import { useConfirm } from '../../shared/confirm-dialog/confirm-provider';
@@ -44,8 +39,8 @@ import { buildEntityLink } from '../../shared/entity-link';
 import { copyToClipboard } from '../../shared/clipboard';
 import { useNewNoteMenuConfig, entityFromCreatedNote, type CreatedNote } from '../../notes/public';
 import { useRelationshipEditorConfig } from '../../relationships/hooks/use-relationship-editor-config';
-import { buildRelationshipMenuItems } from '../../relationships/editor-menu';
 import { eventRelationshipDefaultReason } from './relationship-default-reason';
+import { bufferEpochSeconds } from './domain/buffer-epoch-seconds';
 import { CalendarProvider } from '../calendar/provider';
 import './EventEditorModal.css';
 
@@ -185,38 +180,18 @@ export function EventEditorModal({
   const viewRef = useRef<EditorView | null>(null);
   const autoSaveTimerRef = useRef<number | null>(null);
 
-  const relationshipDirectivesConfig = useRelationshipEditorConfig({
-    entityIndex,
-    defaultReason: eventRelationshipDefaultReason(buffer),
-    onOpenNote: onOpenById,
-    place: 'event',
-    currentPath: () => (filenameRef.current ? `timeline/${filenameRef.current}` : null),
-    at: () => {
-      const cal = CalendarProvider.get();
-      const parsed = cal.tryParse(bufferRef.current.date.trim());
-      return parsed ? cal.toEpochSeconds(parsed) : null;
-    },
-    getDocText: () => bufferRef.current.body,
-    confirm,
-  });
-
-  const relationshipMenuConfig = useMemo(
-    () => ({
-      extraItems: (ctx: EditorMenuContext) =>
-        buildRelationshipMenuItems(ctx, { library: relationshipDirectivesConfig.library }),
-    }),
-    [relationshipDirectivesConfig.library],
-  );
-
-  const editorContextMenu = useMemo(
-    () => ({
-      extraItems: composeExtraItems(
-        newNoteMenuConfig.extraItems,
-        relationshipMenuConfig.extraItems,
-      ),
-    }),
-    [newNoteMenuConfig, relationshipMenuConfig],
-  );
+  const { relationshipDirectives: relationshipDirectivesConfig, contextMenu: editorContextMenu } =
+    useRelationshipEditorConfig({
+      entityIndex,
+      defaultReason: eventRelationshipDefaultReason(buffer),
+      onOpenNote: onOpenById,
+      place: 'event',
+      currentPath: () => (filenameRef.current ? `timeline/${filenameRef.current}` : null),
+      at: () => bufferEpochSeconds(bufferRef.current, CalendarProvider.get()),
+      getDocText: () => bufferRef.current.body,
+      confirm,
+      extraMenuItems: newNoteMenuConfig.extraItems,
+    });
 
   // Clear pending timers if the modal unmounts mid-flight
   useEffect(() => {

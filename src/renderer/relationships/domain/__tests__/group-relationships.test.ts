@@ -10,7 +10,6 @@ import {
 } from '../../../../shared/relationships/index';
 import { groupRelationships } from '../group-relationships';
 import { describeTrackRow } from '../relationship-state';
-import { createValueCache } from '../value-cache';
 
 const rp01 = resolveTrackSpec(pf2eReputationSpec);
 const at01 = resolveTrackSpec(attitudeSpec);
@@ -102,11 +101,10 @@ describe('the same relationship reads identically in both grouping modes', () =>
 
     function flatten(rows: ReturnType<typeof groupRelationships>) {
       const map = new Map<string, ReturnType<typeof describeTrackRow>>();
-      const cache = createValueCache();
       for (const outer of rows) {
         for (const inner of outer.children) {
           for (const row of inner.tracks) {
-            map.set(row.key, describeTrackRow(row, now, cache));
+            map.set(row.key, describeTrackRow(row, now));
           }
         }
       }

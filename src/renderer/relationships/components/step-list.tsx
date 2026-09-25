@@ -1,34 +1,19 @@
 import type { TrackRow } from '../domain';
 import { buildStepRows, buildStepSentence, resolveStepOpenTarget } from '../domain';
-import type { ParsedFileEntry } from '../hooks/use-relationships';
-import type { ValueCache } from '../domain';
-import type { EntityIndexEntry } from '../../../types/global';
+import { currentValue } from '../../../shared/relationships/current-value';
+import { useRelationshipsViewContext } from '../relationships-context';
 
 export interface StepListProps {
   row: TrackRow;
-  now: number;
-  cache: ValueCache;
-  labelFor: (id: string) => string;
-  directivesFor: (path: string) => ParsedFileEntry | undefined;
-  entityIndex: EntityIndexEntry[];
-  onOpenById: (id: string) => void;
-  onOpenEvent: (filename: string) => void;
 }
 
 /** History for one expanded track row: only ever computed while that row is expanded. */
-export function StepList({
-  row,
-  now,
-  cache,
-  labelFor,
-  directivesFor,
-  entityIndex,
-  onOpenById,
-  onOpenEvent,
-}: StepListProps) {
+export function StepList({ row }: StepListProps) {
+  const { state, onOpenById, onOpenEvent } = useRelationshipsViewContext();
   if (!row.track) return null;
   const track = row.track;
-  const steps = buildStepRows(cache.stepsOf(row.ledger, track, now), track);
+  const { steps: rawSteps } = currentValue(row.ledger, track, state.now, { withSteps: true });
+  const steps = buildStepRows(rawSteps, track);
 
   return (
     <ul className="rel-step-list">
@@ -37,10 +22,10 @@ export function StepList({
           row.ledger,
           step,
           track,
-          directivesFor(step.declaredIn.path),
-          labelFor,
+          state.directivesFor(step.declaredIn.path),
+          state.labelFor,
         );
-        const target = resolveStepOpenTarget(step.declaredIn.path, entityIndex);
+        const target = resolveStepOpenTarget(step.declaredIn.path, state.entityIndex);
         const isFuture = !step.applied;
 
         return (

@@ -11,9 +11,6 @@ export {
   compareTrackRows,
 } from './group-relationships';
 
-export type { ValueCache } from './value-cache';
-export { createValueCache } from './value-cache';
-
 export type { TrackRowState } from './relationship-state';
 export { describeTrackRow } from './relationship-state';
 
@@ -59,11 +56,12 @@ export {
   moveAfter,
   dropPosition,
   canDrop,
-  expandedIdsForMode,
-  flatKeysFromExpandedIds,
 } from './view-order';
 
 export { applyViewOrderToRows } from './apply-view-order';
+
+export type { ViewOrderState } from './build-view-order';
+export { buildViewOrder, hydrateViewOrder } from './build-view-order';
 
 export { withoutPaths } from './directives-cache';
 

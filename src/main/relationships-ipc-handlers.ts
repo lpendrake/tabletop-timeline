@@ -35,12 +35,7 @@ export function registerRelationshipsIpcHandlers() {
       const result = addOption(rootDir, trackId, input);
       if (result.ok) {
         getRelationshipsStore().setLibrary(result.library);
-        const win = windowManager.getMainWindow();
-        // libraryChanged is the precise event; relationships:changed (empty
-        // paths) is kept alongside it so existing "reload on any change"
-        // listeners (e.g. useRelationshipLibrary) still refresh.
-        win?.webContents.send('relationships:libraryChanged');
-        win?.webContents.send('relationships:changed', { paths: [] });
+        windowManager.getMainWindow()?.webContents.send('relationships:libraryChanged');
       }
       return result;
     },

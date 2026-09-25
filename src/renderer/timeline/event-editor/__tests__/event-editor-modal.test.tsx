@@ -87,6 +87,8 @@ vi.mock('../../../relationships/data', () => ({
     setDefaultHolder: vi.fn().mockResolvedValue(undefined),
     addOption: vi.fn().mockResolvedValue({ ok: false, reason: 'unknown-track' }),
     onChanged: () => () => {},
+    onLibraryChanged: () => () => {},
+    onDefaultHolderChanged: () => () => {},
   },
 }));
 

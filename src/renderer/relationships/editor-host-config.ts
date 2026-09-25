@@ -6,14 +6,9 @@
  */
 import type { RelationshipDirectivesHostConfig } from '../shared/markdown-editor';
 import type { PickerOption } from '../shared/searchable-picker';
-import {
-  parseDirectives,
-  resolveTrack,
-  type Ledger,
-  type TrackLibrary,
-} from '../../shared/relationships';
+import { parseDirectives, resolveTrack, type TrackLibrary } from '../../shared/relationships';
 import { relationshipsData } from './data';
-import { heldOptionsAt, type HeldOptionsExclude } from './domain/held-options';
+import { heldOptionsForBuffer } from './domain/held-options';
 
 export interface ConfirmFn {
   (options: { title?: string; message: string; confirmLabel?: string }): Promise<boolean>;
@@ -42,8 +37,6 @@ export function makeHolderChosenHandler(
 
 export interface HeldOptionsDeps {
   library: TrackLibrary;
-  /** Snapshot of every ledger, refreshed by the caller on `relationshipsData.onChanged`. */
-  getLedgers: () => readonly Ledger[];
   /** Campaign-relative path of the note/event currently open, or null if unsaved. */
   currentPath: () => string | null;
   /** The point in in-game time the directive is declared at: an event's date, or null for a note (undated baseline). */
@@ -51,33 +44,42 @@ export interface HeldOptionsDeps {
 }
 
 /**
- * Builds the bubble's `heldOptions` resolver: looks up the (holder,
- * observer, track) ledger, locates the directive being edited (in the
- * buffer text the bubble itself supplies) to exclude it from the fold, and
- * delegates to the pure `heldOptionsAt`. Async to match
- * `RelationshipBubbleOptions.heldOptions` — this host has no IO of its own
- * to await, but the contract is async so a host that does (a main-process
- * ledger store) can implement it the same way.
+ * Builds the bubble's `heldOptions` resolver. Remove is event-only, so this
+ * always has a `currentPath` (an unsaved-note query returns `[]`). Fetches
+ * the (holder, observer, track) ledger lazily — only when a "remove" bubble
+ * actually opens, via `relationshipsData.getLedgers` — instead of loading
+ * every ledger up front on every keystroke, then delegates the fold to the
+ * pure `heldOptionsForBuffer`, which drops the saved copy of the current
+ * file's deltas and re-derives them from the buffer's live directives (see
+ * `domain/held-options.ts`).
  */
 export function makeHeldOptionsResolver(deps: HeldOptionsDeps): HeldOptionsResolver {
   return async ({ trackId, holder, observer, anchor, doc }) => {
     if (!holder || !observer) return [];
     const track = resolveTrack(trackId, deps.library);
     if (!track) return [];
-
-    const ledger = deps
-      .getLedgers()
-      .find((l) => l.holder === holder && l.observer === observer && l.track === trackId);
-    if (!ledger) return [];
-
     const path = deps.currentPath();
-    let exclude: HeldOptionsExclude | undefined;
-    if (path) {
-      const directive = parseDirectives(doc).directives.find((d) => d.from === anchor);
-      if (directive) exclude = { path, ordinal: directive.ordinal };
-    }
+    if (!path) return [];
 
-    return heldOptionsAt(ledger, track, deps.at(), exclude);
+    const ledgers = await relationshipsData.getLedgers(holder, 'holder');
+    const ledger = ledgers.find((l) => l.observer === observer && l.track === trackId) ?? {
+      holder,
+      observer,
+      track: trackId,
+      deltas: [],
+    };
+
+    const directive = parseDirectives(doc).directives.find((d) => d.from === anchor);
+
+    return heldOptionsForBuffer({
+      ledger,
+      track,
+      library: deps.library,
+      doc,
+      path,
+      at: deps.at(),
+      excludeOrdinal: directive?.ordinal,
+    });
   };
 }
 

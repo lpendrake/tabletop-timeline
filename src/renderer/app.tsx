@@ -24,6 +24,7 @@ import { applyWorkspaceDefaultTheme, applyCampaignTheme } from './views/settings
 import { defaultViewSettingsData } from './views/settings/default-view-settings-data';
 import { resolveDefaultView } from './views/settings/domain/resolve-default-view';
 import { useRelationshipLibrary } from './relationships/hooks/use-relationship-library';
+import { RelationshipLibraryProvider } from './relationships/library-context';
 import '../../src/index.css';
 
 export default function App() {
@@ -335,7 +336,7 @@ export default function App() {
   };
 
   return (
-    <>
+    <RelationshipLibraryProvider value={relationshipLibrary}>
       {renderMainContent()}
       <CampaignLoadOverlay
         result={loadResult}
@@ -344,6 +345,6 @@ export default function App() {
         messages={pendingLoadMessages}
         onDismissNotification={dismissLoadNotification}
       />
-    </>
+    </RelationshipLibraryProvider>
   );
 }

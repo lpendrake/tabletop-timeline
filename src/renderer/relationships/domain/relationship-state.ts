@@ -4,8 +4,8 @@
  */
 
 import type { TrackValue } from '../../../shared/relationships/model';
+import { computeValue } from '../../../shared/relationships/current-value';
 import type { TrackRow } from './group-relationships';
-import type { ValueCache } from './value-cache';
 
 export interface TrackRowState {
   value: TrackValue | null;
@@ -16,7 +16,7 @@ export interface TrackRowState {
   unknownTrack: boolean;
 }
 
-export function describeTrackRow(row: TrackRow, now: number, cache: ValueCache): TrackRowState {
+export function describeTrackRow(row: TrackRow, now: number): TrackRowState {
   const { track } = row;
   if (!track) {
     return { value: null, formatted: '', onlyFuture: false, unknownTrack: true };
@@ -25,7 +25,7 @@ export function describeTrackRow(row: TrackRow, now: number, cache: ValueCache):
   const deltas = row.ledger.deltas;
   const onlyFuture = deltas.length > 0 && deltas.every((d) => d.at !== null && d.at > now);
 
-  const value = onlyFuture ? track.clamp(track.initial) : cache.valueOf(row.ledger, track, now);
+  const value = onlyFuture ? track.clamp(track.initial) : computeValue(row.ledger, track, now);
 
   return {
     value,

@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const setDefaultHolder = vi.fn().mockResolvedValue(undefined);
+const getLedgers = vi.fn();
 vi.mock('../data', () => ({
   relationshipsData: {
     setDefaultHolder: (...args: unknown[]) => setDefaultHolder(...args),
     addOption: vi.fn(),
+    getLedgers: (...args: unknown[]) => getLedgers(...args),
   },
 }));
 
@@ -53,34 +55,81 @@ describe('makeHeldOptionsResolver', () => {
   const trackId = relationshipTagsSpec.id;
 
   function ledger(deltas: Ledger['deltas']): Ledger {
-    return { holder: 'h1', observer: 'o1', track: trackId, deltas };
+    return { holder: 'haaa', observer: 'oaaa', track: trackId, deltas };
   }
 
-  it('resolves held options for the (holder, observer, track) ledger as of the given point', async () => {
-    const deltas: Ledger['deltas'] = [
-      { op: 'add', key: 'member', at: null, declaredIn: { path: 'notes/a.md', ordinal: 0 } },
-      { op: 'add', key: 'employee', at: null, declaredIn: { path: 'notes/a.md', ordinal: 1 } },
-    ];
+  beforeEach(() => {
+    getLedgers.mockReset();
+  });
+
+  it('fetches lazily via relationshipsData.getLedgers(holder, "holder") and folds the saved ledger', async () => {
+    getLedgers.mockResolvedValue([
+      ledger([
+        { op: 'add', key: 'member', at: null, declaredIn: { path: 'notes/a.md', ordinal: 0 } },
+        { op: 'add', key: 'employee', at: null, declaredIn: { path: 'notes/a.md', ordinal: 1 } },
+      ]),
+    ]);
     const resolver = makeHeldOptionsResolver({
       library: LIBRARY,
-      getLedgers: () => [ledger(deltas)],
-      currentPath: () => null,
-      at: () => null,
+      currentPath: () => 'events/other.md',
+      at: () => 100,
     });
 
-    const result = await resolver({ trackId, holder: 'h1', observer: 'o1', anchor: 0, doc: '' });
+    const result = await resolver({
+      trackId,
+      holder: 'haaa',
+      observer: 'oaaa',
+      anchor: 0,
+      doc: '',
+    });
+    expect(getLedgers).toHaveBeenCalledWith('haaa', 'holder');
     expect(result).toEqual(['member', 'employee']);
   });
 
   it('returns empty when holder or observer is missing', async () => {
     const resolver = makeHeldOptionsResolver({
       library: LIBRARY,
-      getLedgers: () => [],
-      currentPath: () => null,
+      currentPath: () => 'events/a.md',
       at: () => null,
     });
-    expect(await resolver({ trackId, holder: null, observer: 'o1', anchor: 0, doc: '' })).toEqual(
+    expect(await resolver({ trackId, holder: null, observer: 'oaaa', anchor: 0, doc: '' })).toEqual(
       [],
     );
+    expect(getLedgers).not.toHaveBeenCalled();
+  });
+
+  it('returns empty when unsaved (no current path) — Remove is event-only', async () => {
+    const resolver = makeHeldOptionsResolver({
+      library: LIBRARY,
+      currentPath: () => null,
+      at: () => 100,
+    });
+    expect(
+      await resolver({ trackId, holder: 'haaa', observer: 'oaaa', anchor: 0, doc: '' }),
+    ).toEqual([]);
+    expect(getLedgers).not.toHaveBeenCalled();
+  });
+
+  it("re-derives the current file's deltas from the buffer instead of the saved snapshot", async () => {
+    getLedgers.mockResolvedValue([
+      ledger([
+        // Saved state of this same file: only 'member'.
+        { op: 'add', key: 'member', at: 100, declaredIn: { path: 'events/e.md', ordinal: 0 } },
+      ]),
+    ]);
+    // The buffer now also adds 'employee' — an unsaved edit above the one being edited.
+    const doc =
+      '{{tg01.gains {holder:[[haaa]]} is now {option:employee} with {observer:[[oaaa]]} — {reason:}}}\n' +
+      '{{tg01.gains {holder:[[haaa]]} is now {option:member} with {observer:[[oaaa]]} — {reason:}}}';
+    const resolver = makeHeldOptionsResolver({
+      library: LIBRARY,
+      currentPath: () => 'events/e.md',
+      at: () => 100,
+    });
+
+    const anchor = doc.indexOf('{{tg01.gains {holder:[[haaa]]} is now {option:member}');
+    const result = await resolver({ trackId, holder: 'haaa', observer: 'oaaa', anchor, doc });
+
+    expect(result).toEqual(['employee']); // saved 'member' dropped; buffer's 'member' excluded (being edited)
   });
 });

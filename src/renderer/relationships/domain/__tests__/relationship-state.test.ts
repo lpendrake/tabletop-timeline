@@ -7,7 +7,6 @@ import {
   type Ledger,
 } from '../../../../shared/relationships/index';
 import { describeTrackRow } from '../relationship-state';
-import { createValueCache } from '../value-cache';
 import type { TrackRow } from '../group-relationships';
 
 const rp01 = resolveTrackSpec(pf2eReputationSpec);
@@ -35,8 +34,7 @@ describe('relationships with only future changes are faded at the initial value'
       track: rp01.id,
       deltas: [delta({ op: 'adjust', by: 20, at: 500 }), delta({ op: 'adjust', by: 10, at: 600 })],
     };
-    const cache = createValueCache();
-    const state = describeTrackRow(trackRow(ledger), 100, cache);
+    const state = describeTrackRow(trackRow(ledger), 100);
 
     expect(state.onlyFuture).toBe(true);
     expect(state.value).toBe(rp01.clamp(rp01.initial));
@@ -50,8 +48,7 @@ describe('relationships with only future changes are faded at the initial value'
       track: rp01.id,
       deltas: [delta({ op: 'adjust', by: 20, at: 50 }), delta({ op: 'adjust', by: 10, at: 600 })],
     };
-    const cache = createValueCache();
-    const state = describeTrackRow(trackRow(ledger), 100, cache);
+    const state = describeTrackRow(trackRow(ledger), 100);
 
     expect(state.onlyFuture).toBe(false);
     expect(state.value).toBe(20);
@@ -59,8 +56,7 @@ describe('relationships with only future changes are faded at the initial value'
 
   it('an empty ledger is not onlyFuture', () => {
     const ledger: Ledger = { holder: 'aaaa', observer: 'bbbb', track: rp01.id, deltas: [] };
-    const cache = createValueCache();
-    const state = describeTrackRow(trackRow(ledger), 100, cache);
+    const state = describeTrackRow(trackRow(ledger), 100);
 
     expect(state.onlyFuture).toBe(false);
     expect(state.value).toBe(rp01.initial);
@@ -68,8 +64,7 @@ describe('relationships with only future changes are faded at the initial value'
 
   it('reports unknownTrack and a null value when the track cannot resolve', () => {
     const ledger: Ledger = { holder: 'aaaa', observer: 'bbbb', track: 'zzzz', deltas: [] };
-    const cache = createValueCache();
-    const state = describeTrackRow(trackRow(ledger, null), 100, cache);
+    const state = describeTrackRow(trackRow(ledger, null), 100);
 
     expect(state.unknownTrack).toBe(true);
     expect(state.value).toBeNull();

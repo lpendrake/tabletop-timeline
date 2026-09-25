@@ -11,23 +11,20 @@ function inner(key: string): InnerRow {
 }
 
 describe('outerRowStateKey', () => {
-  it('scopes the same entity id to different keys across modes', () => {
-    const a = outer('aaaa');
-    expect(outerRowStateKey('holder', a)).not.toBe(outerRowStateKey('observer', a));
+  it('is just the row key', () => {
+    expect(outerRowStateKey(outer('aaaa'))).toBe('aaaa');
   });
 });
 
 describe('innerRowStateKey', () => {
   it('scopes the same inner entity id to different keys under different outer rows', () => {
     const in1 = inner('bbbb');
-    expect(innerRowStateKey('holder', outer('aaaa'), in1)).not.toBe(
-      innerRowStateKey('holder', outer('cccc'), in1),
-    );
+    expect(innerRowStateKey(outer('aaaa'), in1)).not.toBe(innerRowStateKey(outer('cccc'), in1));
   });
 
-  it('is stable for the same mode/outer/inner triple', () => {
+  it('is stable for the same outer/inner pair', () => {
     const o = outer('aaaa');
     const i = inner('bbbb');
-    expect(innerRowStateKey('holder', o, i)).toBe(innerRowStateKey('holder', o, i));
+    expect(innerRowStateKey(o, i)).toBe(innerRowStateKey(o, i));
   });
 });

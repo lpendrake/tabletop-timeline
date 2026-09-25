@@ -2,6 +2,7 @@ import { FooterPortal } from '../../components/footer-portal';
 import { FooterButton } from '../../components/footer-button';
 import { useRelationships } from '../../relationships/hooks/use-relationships';
 import { RelationshipsList } from '../../relationships/components/relationships-list';
+import { useRelationshipLibraryContext } from '../../relationships/library-context';
 import type { EntityIndexEntry } from '../../../types/global';
 import '../../relationships/components/relationships.css';
 
@@ -20,7 +21,8 @@ export function RelationshipsView({
   onOpenById,
   onOpenEvent,
 }: RelationshipsViewProps) {
-  const state = useRelationships({ campaignPath, entityLabelMap, getEntityIndex });
+  const library = useRelationshipLibraryContext();
+  const state = useRelationships({ campaignPath, library, entityLabelMap, getEntityIndex });
 
   return (
     <div className="rel-view">

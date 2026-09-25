@@ -3,10 +3,12 @@ import { EMPTY_TRACK_LIBRARY, type TrackLibrary } from '../../../shared/relation
 import { relationshipsData } from '../data';
 
 /**
- * Loads the workspace's track library and keeps it fresh, reloading
- * whenever relationship data changes elsewhere (a new option added, a track
- * edited in settings, etc). Any host embedding the editor's relationship
- * menu or fill-in bubbles needs this.
+ * Loads the workspace's track library once and keeps it fresh, reloading
+ * whenever the library itself changes (a new option added, a track edited
+ * in settings, etc — see `relationshipsData.onLibraryChanged`). Called once,
+ * at app level; every other host reads the result via
+ * `RelationshipLibraryProvider`/`useRelationshipLibraryContext` instead of
+ * calling this hook again.
  */
 export function useRelationshipLibrary(): TrackLibrary {
   const [library, setLibrary] = useState<TrackLibrary>(EMPTY_TRACK_LIBRARY);
@@ -22,7 +24,7 @@ export function useRelationshipLibrary(): TrackLibrary {
         .catch(() => {});
     };
     reload();
-    const unsubscribe = relationshipsData.onChanged(reload);
+    const unsubscribe = relationshipsData.onLibraryChanged(reload);
     return () => {
       active = false;
       unsubscribe();

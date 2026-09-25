@@ -1,65 +1,34 @@
 import { showContextMenu } from '../../shared/context-menu';
 import type {
-  GroupingMode,
   InnerRow as InnerRowModel,
+  OuterRow as OuterRowModel,
   RowDragPayload,
-  TrackRow as TrackRowModel,
 } from '../domain';
-import type { ValueCache } from '../domain';
-import type { ParsedFileEntry } from '../hooks/use-relationships';
 import { useRowDrag } from '../hooks/use-row-drag';
-import type { EntityIndexEntry } from '../../../types/global';
+import { useRelationshipsViewContext } from '../relationships-context';
 import { EntityLink } from './entity-link';
 import { TrackRow } from './track-row';
 import { buildRowMoveMenuItems } from './row-menu-items';
 
 export interface InnerRowProps {
   row: InnerRowModel;
-  outerId: string;
-  mode: GroupingMode;
+  outer: OuterRowModel;
   isFirst: boolean;
   isLast: boolean;
-  now: number;
-  cache: ValueCache;
-  labelFor: (id: string) => string;
-  expanded: boolean;
-  onToggle: () => void;
-  isTrackExpanded: (row: TrackRowModel) => boolean;
-  onToggleTrack: (row: TrackRowModel) => void;
-  directivesFor: (path: string) => ParsedFileEntry | undefined;
-  entityIndex: EntityIndexEntry[];
-  onOpenById: (id: string) => void;
-  onOpenEvent: (filename: string) => void;
-  onMoveToTop: (payload: RowDragPayload) => void;
-  onMoveUp: (payload: RowDragPayload) => void;
-  onMoveDown: (payload: RowDragPayload) => void;
-  onDrop: (dragged: RowDragPayload, position: 'before' | 'after', targetId: string) => void;
 }
 
-export function InnerRow({
-  row,
-  outerId,
-  mode,
-  isFirst,
-  isLast,
-  now,
-  cache,
-  labelFor,
-  expanded,
-  onToggle,
-  isTrackExpanded,
-  onToggleTrack,
-  directivesFor,
-  entityIndex,
-  onOpenById,
-  onOpenEvent,
-  onMoveToTop,
-  onMoveUp,
-  onMoveDown,
-  onDrop,
-}: InnerRowProps) {
-  const payload: RowDragPayload = { mode, level: 'inner', parentKey: outerId, id: row.key };
+export function InnerRow({ row, outer, isFirst, isLast }: InnerRowProps) {
+  const { state, onOpenById } = useRelationshipsViewContext();
+  const mode = state.mode;
+
+  const payload: RowDragPayload = { mode, level: 'inner', parentKey: outer.key, id: row.key };
+  const onDrop = (dragged: RowDragPayload, position: 'before' | 'after', targetId: string) =>
+    position === 'before'
+      ? state.moveRowBefore(dragged, targetId)
+      : state.moveRowAfter(dragged, targetId);
   const drag = useRowDrag(payload, onDrop);
+
+  const expanded = state.isInnerExpanded(outer, row);
 
   function handleContextMenu(e: React.MouseEvent) {
     e.preventDefault();
@@ -67,9 +36,9 @@ export function InnerRow({
     showContextMenu(
       buildRowMoveMenuItems(
         {
-          onMoveToTop: () => onMoveToTop(payload),
-          onMoveUp: () => onMoveUp(payload),
-          onMoveDown: () => onMoveDown(payload),
+          onMoveToTop: () => state.moveRowToTop(payload),
+          onMoveUp: () => state.moveRowUp(payload),
+          onMoveDown: () => state.moveRowDown(payload),
         },
         isFirst,
         isLast,
@@ -102,14 +71,14 @@ export function InnerRow({
         <button
           type="button"
           className="rel-expand-toggle"
-          onClick={onToggle}
+          onClick={() => state.toggleInner(outer, row)}
           aria-expanded={expanded}
         >
           {expanded ? '▾' : '▸'}
         </button>
         <EntityLink
           id={row.entityId}
-          label={labelFor(row.entityId)}
+          label={state.labelFor(row.entityId)}
           onOpenById={onOpenById}
           className="rel-inner-label"
         />
@@ -117,19 +86,7 @@ export function InnerRow({
       {expanded && (
         <div className="rel-track-list">
           {row.tracks.map((track) => (
-            <TrackRow
-              key={track.key}
-              row={track}
-              now={now}
-              cache={cache}
-              labelFor={labelFor}
-              expanded={isTrackExpanded(track)}
-              onToggle={() => onToggleTrack(track)}
-              directivesFor={directivesFor}
-              entityIndex={entityIndex}
-              onOpenById={onOpenById}
-              onOpenEvent={onOpenEvent}
-            />
+            <TrackRow key={track.key} row={track} />
           ))}
         </div>
       )}

@@ -4,8 +4,6 @@ import {
   canDrop,
   defaultViewOrder,
   dropPosition,
-  expandedIdsForMode,
-  flatKeysFromExpandedIds,
   moveAfter,
   moveBefore,
   moveDown,
@@ -94,15 +92,6 @@ describe('collapse state persists per mode in the same file', () => {
     const roundTripped = parseViewOrder(JSON.parse(serialiseViewOrder(order)));
     expect(roundTripped.holder.expanded.outer).toEqual(['aaaa']);
     expect(roundTripped.observer.expanded.outer).toEqual(['bbbb']);
-  });
-
-  it('flatKeysFromExpandedIds / expandedIdsForMode round-trip through the mode prefix', () => {
-    const flatHolder = flatKeysFromExpandedIds('holder', ['aaaa', 'bbbb']);
-    const flatObserver = flatKeysFromExpandedIds('observer', ['cccc']);
-    const flat = new Set([...flatHolder, ...flatObserver]);
-
-    expect(expandedIdsForMode('holder', flat)).toEqual(['aaaa', 'bbbb']);
-    expect(expandedIdsForMode('observer', flat)).toEqual(['cccc']);
   });
 });
 

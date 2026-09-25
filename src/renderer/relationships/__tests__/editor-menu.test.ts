@@ -62,6 +62,24 @@ describe('buildRelationshipMenuItems', () => {
     expect(disabledLabels).not.toContain('PF2E Reputation');
   });
 
+  it('in a note, hides actions not allowed there (Change/Remove) but keeps Set/Add', () => {
+    const { ctx, container } = makeContext();
+    views.push(ctx.view);
+    container.remove();
+
+    const items = buildRelationshipMenuItems(ctx, { library: LIBRARY, place: 'note' });
+    const root = items[0];
+    if (root.kind !== 'submenu') throw new Error('expected submenu');
+
+    const rep = root.items.find((i) => i.kind === 'submenu' && i.label === 'PF2E Reputation');
+    if (!rep || rep.kind !== 'submenu') throw new Error('expected PF2E Reputation submenu');
+    expect(rep.items.map((a) => (a.kind === 'action' ? a.label : null))).toEqual(['Set']);
+
+    const tags = root.items.find((i) => i.kind === 'submenu' && i.label === 'Relationship tags');
+    if (!tags || tags.kind !== 'submenu') throw new Error('expected Relationship tags submenu');
+    expect(tags.items.map((a) => (a.kind === 'action' ? a.label : null))).not.toContain('Remove');
+  });
+
   it('/rep then Enter targets PF2E Reputation › Change', () => {
     const { ctx, container } = makeContext();
     views.push(ctx.view);

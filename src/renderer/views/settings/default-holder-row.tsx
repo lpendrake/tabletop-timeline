@@ -3,7 +3,8 @@ import { SettingRow } from './controls/setting-row';
 import { SearchablePicker } from '../../shared/searchable-picker';
 import { notesData } from '../../notes/data';
 import { relationshipsData } from '../../relationships/data';
-import { notesToPickerOptions, holderLabel } from './domain/holder-options';
+import { notesToPickerOptions } from '../../relationships/domain/note-picker-options';
+import { holderLabel } from './domain/holder-options';
 import type { EntityIndexEntry } from '../../../types/global';
 
 interface Props {

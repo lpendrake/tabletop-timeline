@@ -1,11 +1,10 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
   resolveTrackSpec,
   pf2eReputationSpec,
   type Ledger,
 } from '../../../../shared/relationships';
 import { groupRelationships } from '../group-relationships';
-import { createValueCache } from '../value-cache';
 import { pathsNeededForExpandedTracks } from '../paths-to-fetch';
 
 const rp01 = resolveTrackSpec(pf2eReputationSpec);
@@ -38,29 +37,21 @@ describe('pathsNeededForExpandedTracks', () => {
     });
 
     const expandedRow = rows[0].children[0].tracks[0];
-    const paths = pathsNeededForExpandedTracks(
-      rows,
-      (row) => row.key === expandedRow.key,
-      100,
-      createValueCache(),
-    );
+    const paths = pathsNeededForExpandedTracks(rows, (row) => row.key === expandedRow.key, 100);
 
     expect(paths).toEqual([expandedRow.ledger.deltas[0].declaredIn.path]);
   });
 
-  it('never calls stepsOf for a collapsed row', () => {
+  it('never collects paths for a collapsed row', () => {
     const ledgers = [ledger('aaaa', 'bbbb')];
     const rows = groupRelationships(ledgers, 'holder', {
       resolveTrack,
       trackOrder: [rp01.id],
       labelFor,
     });
-    const cache = createValueCache();
-    const stepsOfSpy = vi.spyOn(cache, 'stepsOf');
 
-    const paths = pathsNeededForExpandedTracks(rows, () => false, 100, cache);
+    const paths = pathsNeededForExpandedTracks(rows, () => false, 100);
 
     expect(paths).toEqual([]);
-    expect(stepsOfSpy).not.toHaveBeenCalled();
   });
 });

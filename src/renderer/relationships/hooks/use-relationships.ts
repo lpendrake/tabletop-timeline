@@ -5,19 +5,19 @@ import type {
   ParsedDirective,
   TrackLibrary,
 } from '../../../shared/relationships';
-import { EMPTY_TRACK_LIBRARY, listTracks, resolveTrack } from '../../../shared/relationships';
+import { listTracks, resolveTrack } from '../../../shared/relationships';
 import type { EntityIndexEntry } from '../../../types/global';
 import { timelinePort } from '../../timeline/data/ports';
 import { CalendarProvider } from '../../timeline/calendar/provider';
 import { deriveInGameNowSeconds } from '../../shared/in-game-now';
 import { relationshipsData } from '../data';
 import { viewOrderData } from '../view-order-data';
+import { createSaveQueue } from '../view-order-save-queue';
 import {
   applyViewOrderToRows,
-  createValueCache,
-  expandedIdsForMode,
-  flatKeysFromExpandedIds,
+  buildViewOrder,
   groupRelationships,
+  hydrateViewOrder,
   innerRowStateKey,
   moveAfter,
   moveBefore,
@@ -35,8 +35,7 @@ import {
   type OuterRow,
   type RowDragPayload,
   type TrackRow,
-  type ValueCache,
-  type ViewOrder,
+  type ViewOrderState,
 } from '../domain';
 
 export interface ParsedFileEntry {
@@ -46,6 +45,7 @@ export interface ParsedFileEntry {
 
 export interface UseRelationshipsOptions {
   campaignPath: string;
+  library: TrackLibrary;
   entityLabelMap: Map<string, string>;
   getEntityIndex: () => EntityIndexEntry[];
 }
@@ -56,7 +56,6 @@ export interface UseRelationshipsResult {
   rows: OuterRow[];
   problems: InvalidDirectiveEntry[];
   now: number;
-  cache: ValueCache;
   labelFor: (id: string) => string;
   entityIndex: EntityIndexEntry[];
   isOuterExpanded: (row: OuterRow) => boolean;
@@ -76,35 +75,36 @@ export interface UseRelationshipsResult {
 
 const SAVE_DEBOUNCE_MS = 300;
 
-export function useRelationships(options: UseRelationshipsOptions): UseRelationshipsResult {
-  const { campaignPath, entityLabelMap, getEntityIndex } = options;
+const EMPTY_MODE_SET: Record<GroupingMode, ReadonlySet<string>> = {
+  holder: new Set(),
+  observer: new Set(),
+};
 
-  const [tracks, setTracks] = useState<TrackLibrary>(EMPTY_TRACK_LIBRARY);
+function emptyViewOrderState(): ViewOrderState {
+  return {
+    order: { holder: {}, observer: {} },
+    expandedOuter: EMPTY_MODE_SET,
+    expandedInner: EMPTY_MODE_SET,
+    expandedTrack: new Set(),
+  };
+}
+
+export function useRelationships(options: UseRelationshipsOptions): UseRelationshipsResult {
+  const { campaignPath, library, entityLabelMap, getEntityIndex } = options;
+
   const [ledgers, setLedgers] = useState<Ledger[]>([]);
   const [problems, setProblems] = useState<InvalidDirectiveEntry[]>([]);
   const [mode, setMode] = useState<GroupingMode>('holder');
   const [now, setNow] = useState<number>(Infinity);
   const [directivesCache, setDirectivesCache] = useState<Record<string, ParsedFileEntry>>({});
 
-  const [expandedOuter, setExpandedOuter] = useState<ReadonlySet<string>>(new Set());
-  const [expandedInner, setExpandedInner] = useState<ReadonlySet<string>>(new Set());
-  const [expandedTrack, setExpandedTrack] = useState<ReadonlySet<string>>(new Set());
-  const [order, setOrder] = useState<Record<GroupingMode, Record<string, string[]>>>({
-    holder: {},
-    observer: {},
-  });
-
-  const cacheRef = useRef<ValueCache | null>(null);
-  if (!cacheRef.current) cacheRef.current = createValueCache();
-  const cache = cacheRef.current;
+  const [viewOrderState, setViewOrderState] = useState<ViewOrderState>(emptyViewOrderState());
 
   const reload = useCallback(async () => {
-    const [nextTracks, nextLedgers, nextProblems] = await Promise.all([
-      relationshipsData.getTracks(),
+    const [nextLedgers, nextProblems] = await Promise.all([
       relationshipsData.getAllLedgers(),
       relationshipsData.getInvalid(),
     ]);
-    setTracks(nextTracks);
     setLedgers(nextLedgers);
     setProblems(nextProblems);
   }, []);
@@ -134,91 +134,46 @@ export function useRelationships(options: UseRelationshipsOptions): UseRelations
   // ---- View order + collapse-state persistence (relationships/view-order.json) ----
 
   const loadedRef = useRef(false);
-  const pendingSaveRef = useRef<ViewOrder | null>(null);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const flushPendingSave = useCallback((path: string) => {
-    if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-    }
-    const pending = pendingSaveRef.current;
-    if (pending) {
-      pendingSaveRef.current = null;
-      void viewOrderData.save(path, pending);
-    }
-  }, []);
+  const saveQueueRef = useRef(
+    createSaveQueue<ViewOrderState>((state) => {
+      void viewOrderData.save(campaignPath, buildViewOrder(state));
+    }, SAVE_DEBOUNCE_MS),
+  );
 
   useEffect(() => {
     loadedRef.current = false;
     let active = true;
+    // A fresh queue per campaign: any pending write from the previous
+    // campaign's queue would otherwise fire against the new campaignPath.
+    saveQueueRef.current = createSaveQueue<ViewOrderState>((state) => {
+      void viewOrderData.save(campaignPath, buildViewOrder(state));
+    }, SAVE_DEBOUNCE_MS);
     viewOrderData.load(campaignPath).then((loaded) => {
       if (!active) return;
-      setOrder({ holder: loaded.holder.order, observer: loaded.observer.order });
-      setExpandedOuter(
-        new Set([
-          ...flatKeysFromExpandedIds('holder', loaded.holder.expanded.outer),
-          ...flatKeysFromExpandedIds('observer', loaded.observer.expanded.outer),
-        ]),
-      );
-      setExpandedInner(
-        new Set([
-          ...flatKeysFromExpandedIds('holder', loaded.holder.expanded.inner),
-          ...flatKeysFromExpandedIds('observer', loaded.observer.expanded.inner),
-        ]),
-      );
-      setExpandedTrack(
-        new Set([...loaded.holder.expanded.track, ...loaded.observer.expanded.track]),
-      );
+      setViewOrderState(hydrateViewOrder(loaded));
       loadedRef.current = true;
     });
     return () => {
       active = false;
       // Flush any pending debounced write for the campaign we're leaving.
-      flushPendingSave(campaignPath);
+      saveQueueRef.current.flush();
     };
-  }, [campaignPath, flushPendingSave]);
+  }, [campaignPath]);
 
   useEffect(() => {
     if (!loadedRef.current) return;
-    const toSave: ViewOrder = {
-      version: 1,
-      holder: {
-        order: order.holder,
-        expanded: {
-          outer: expandedIdsForMode('holder', expandedOuter),
-          inner: expandedIdsForMode('holder', expandedInner),
-          track: Array.from(expandedTrack),
-        },
-      },
-      observer: {
-        order: order.observer,
-        expanded: {
-          outer: expandedIdsForMode('observer', expandedOuter),
-          inner: expandedIdsForMode('observer', expandedInner),
-          track: Array.from(expandedTrack),
-        },
-      },
-    };
-    pendingSaveRef.current = toSave;
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      saveTimerRef.current = null;
-      const pending = pendingSaveRef.current;
-      pendingSaveRef.current = null;
-      if (pending) void viewOrderData.save(campaignPath, pending);
-    }, SAVE_DEBOUNCE_MS);
-    // No cleanup here: the timer is re-armed on the next relevant change and
+    saveQueueRef.current.schedule(viewOrderState);
+    // No cleanup here: the queue re-arms on the next relevant change and is
     // flushed explicitly on unmount / campaign change (see the effect above).
-  }, [order, expandedOuter, expandedInner, expandedTrack, campaignPath]);
+  }, [viewOrderState]);
 
   const labelFor = useCallback(
     (id: string) => resolveEntityLabel(id, entityLabelMap, getEntityIndex()),
     [entityLabelMap, getEntityIndex],
   );
 
-  const resolveTrackFn = useCallback((id: string) => resolveTrack(id, tracks), [tracks]);
-  const trackOrder = useMemo(() => listTracks(tracks).map((t) => t.id), [tracks]);
+  const resolveTrackFn = useCallback((id: string) => resolveTrack(id, library), [library]);
+  const trackOrder = useMemo(() => listTracks(library).map((t) => t.id), [library]);
 
   const groupedRows = useMemo(
     () => groupRelationships(ledgers, mode, { resolveTrack: resolveTrackFn, trackOrder, labelFor }),
@@ -226,8 +181,8 @@ export function useRelationships(options: UseRelationshipsOptions): UseRelations
   );
 
   const rows = useMemo(
-    () => applyViewOrderToRows(groupedRows, order[mode], labelFor),
-    [groupedRows, order, mode, labelFor],
+    () => applyViewOrderToRows(groupedRows, viewOrderState.order[mode], labelFor),
+    [groupedRows, viewOrderState.order, mode, labelFor],
   );
 
   const rowsRef = useRef(rows);
@@ -235,8 +190,8 @@ export function useRelationships(options: UseRelationshipsOptions): UseRelations
 
   // Fetch directives only for the paths behind currently expanded track rows.
   useEffect(() => {
-    const isExpanded = (row: TrackRow) => expandedTrack.has(row.key);
-    const needed = pathsNeededForExpandedTracks(rows, isExpanded, now, cache);
+    const isExpanded = (row: TrackRow) => viewOrderState.expandedTrack.has(row.key);
+    const needed = pathsNeededForExpandedTracks(rows, isExpanded, now);
     const missing = needed.filter((path) => !(path in directivesCache));
     if (missing.length === 0) return;
 
@@ -254,7 +209,7 @@ export function useRelationships(options: UseRelationshipsOptions): UseRelations
     return () => {
       active = false;
     };
-  }, [rows, expandedTrack, now, cache, directivesCache]);
+  }, [rows, viewOrderState.expandedTrack, now, directivesCache]);
 
   const directivesFor = useCallback((path: string) => directivesCache[path], [directivesCache]);
 
@@ -264,55 +219,66 @@ export function useRelationships(options: UseRelationshipsOptions): UseRelations
     return outer ? outer.children.map((c) => c.key) : [];
   }, []);
 
-  const setOrderForParent = useCallback(
-    (rowMode: GroupingMode, parentKey: string, ids: string[]) => {
-      setOrder((prev) => ({
+  /** Applies one of the pure `view-order` move functions to the payload's
+   * visible siblings and writes the result back for its (mode, parentKey). */
+  const applyMove = useCallback(
+    (payload: RowDragPayload, fn: (visible: string[], id: string) => string[]) => {
+      const visible = visibleSiblings(payload);
+      const nextIds = fn(visible, payload.id);
+      setViewOrderState((prev) => ({
         ...prev,
-        [rowMode]: { ...prev[rowMode], [parentKey]: ids },
+        order: {
+          ...prev.order,
+          [payload.mode]: { ...prev.order[payload.mode], [payload.parentKey]: nextIds },
+        },
       }));
     },
-    [],
+    [visibleSiblings],
   );
 
-  const moveRowToTop = useCallback(
-    (payload: RowDragPayload) => {
-      const visible = visibleSiblings(payload);
-      setOrderForParent(payload.mode, payload.parentKey, moveToTop(visible, payload.id));
+  const applyMoveWithTarget = useCallback(
+    (
+      payload: RowDragPayload,
+      targetId: string,
+      fn: (visible: string[], id: string, targetId: string) => string[],
+    ) => {
+      applyMove(payload, (visible, id) => fn(visible, id, targetId));
     },
-    [visibleSiblings, setOrderForParent],
+    [applyMove],
   );
 
-  const moveRowUp = useCallback(
-    (payload: RowDragPayload) => {
-      const visible = visibleSiblings(payload);
-      setOrderForParent(payload.mode, payload.parentKey, moveUp(visible, payload.id));
+  const toggleOuterExpanded = useCallback(
+    (row: OuterRow) => {
+      setViewOrderState((prev) => ({
+        ...prev,
+        expandedOuter: {
+          ...prev.expandedOuter,
+          [mode]: toggleInSet(prev.expandedOuter[mode], outerRowStateKey(row)),
+        },
+      }));
     },
-    [visibleSiblings, setOrderForParent],
+    [mode],
   );
 
-  const moveRowDown = useCallback(
-    (payload: RowDragPayload) => {
-      const visible = visibleSiblings(payload);
-      setOrderForParent(payload.mode, payload.parentKey, moveDown(visible, payload.id));
+  const toggleInnerExpanded = useCallback(
+    (outer: OuterRow, inner: InnerRow) => {
+      setViewOrderState((prev) => ({
+        ...prev,
+        expandedInner: {
+          ...prev.expandedInner,
+          [mode]: toggleInSet(prev.expandedInner[mode], innerRowStateKey(outer, inner)),
+        },
+      }));
     },
-    [visibleSiblings, setOrderForParent],
+    [mode],
   );
 
-  const moveRowBefore = useCallback(
-    (payload: RowDragPayload, targetId: string) => {
-      const visible = visibleSiblings(payload);
-      setOrderForParent(payload.mode, payload.parentKey, moveBefore(visible, payload.id, targetId));
-    },
-    [visibleSiblings, setOrderForParent],
-  );
-
-  const moveRowAfter = useCallback(
-    (payload: RowDragPayload, targetId: string) => {
-      const visible = visibleSiblings(payload);
-      setOrderForParent(payload.mode, payload.parentKey, moveAfter(visible, payload.id, targetId));
-    },
-    [visibleSiblings, setOrderForParent],
-  );
+  const toggleTrackExpanded = useCallback((row: TrackRow) => {
+    setViewOrderState((prev) => ({
+      ...prev,
+      expandedTrack: toggleInSet(prev.expandedTrack, row.key),
+    }));
+  }, []);
 
   return {
     mode,
@@ -320,22 +286,20 @@ export function useRelationships(options: UseRelationshipsOptions): UseRelations
     rows,
     problems,
     now,
-    cache,
     labelFor,
     entityIndex: getEntityIndex(),
-    isOuterExpanded: (row) => expandedOuter.has(outerRowStateKey(mode, row)),
-    toggleOuter: (row) =>
-      setExpandedOuter((prev) => toggleInSet(prev, outerRowStateKey(mode, row))),
-    isInnerExpanded: (outer, inner) => expandedInner.has(innerRowStateKey(mode, outer, inner)),
-    toggleInner: (outer, inner) =>
-      setExpandedInner((prev) => toggleInSet(prev, innerRowStateKey(mode, outer, inner))),
-    isTrackExpanded: (row) => expandedTrack.has(row.key),
-    toggleTrack: (row) => setExpandedTrack((prev) => toggleInSet(prev, row.key)),
+    isOuterExpanded: (row) => viewOrderState.expandedOuter[mode].has(outerRowStateKey(row)),
+    toggleOuter: toggleOuterExpanded,
+    isInnerExpanded: (outer, inner) =>
+      viewOrderState.expandedInner[mode].has(innerRowStateKey(outer, inner)),
+    toggleInner: toggleInnerExpanded,
+    isTrackExpanded: (row) => viewOrderState.expandedTrack.has(row.key),
+    toggleTrack: toggleTrackExpanded,
     directivesFor,
-    moveRowToTop,
-    moveRowUp,
-    moveRowDown,
-    moveRowBefore,
-    moveRowAfter,
+    moveRowToTop: (payload) => applyMove(payload, moveToTop),
+    moveRowUp: (payload) => applyMove(payload, moveUp),
+    moveRowDown: (payload) => applyMove(payload, moveDown),
+    moveRowBefore: (payload, targetId) => applyMoveWithTarget(payload, targetId, moveBefore),
+    moveRowAfter: (payload, targetId) => applyMoveWithTarget(payload, targetId, moveAfter),
   };
 }

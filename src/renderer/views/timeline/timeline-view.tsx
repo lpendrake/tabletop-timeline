@@ -73,7 +73,7 @@ import { copyToClipboard } from '../../shared/clipboard';
 import { entityIndex } from '../../shared/entity-index';
 import { LabelOverrideEditor } from '../../shared/components/label-override-editor';
 import { useConfirm } from '../../shared/confirm-dialog/confirm-provider';
-import { useRelationshipLibrary } from '../../relationships/hooks/use-relationship-library';
+import { useRelationshipLibraryContext } from '../../relationships/library-context';
 import '../../timeline/session-editor/session-mode.css';
 import './timeline-view.css';
 
@@ -107,7 +107,7 @@ export function TimelineView({
 }: TimelineViewProps) {
   const weekdays = ThemeProvider.get().timeline.days;
   const { confirm } = useConfirm();
-  const relationshipLibrary = useRelationshipLibrary();
+  const relationshipLibrary = useRelationshipLibraryContext();
   const [viewState, setViewState] = useState<ViewState>({
     centerSeconds: 0,
     secondsPerPixel: DEFAULT_SECONDS_PER_PIXEL,
