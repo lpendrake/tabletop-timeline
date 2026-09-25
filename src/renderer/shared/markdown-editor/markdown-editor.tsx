@@ -35,7 +35,9 @@ import { imagePaste, type ImagePasteConfig } from './extensions/image-paste';
 import { imageDecorations, type ImageDecorationsOptions } from './extensions/image-decorations';
 import { dropLink, type DropLinkConfig } from './extensions/drop-link';
 import { editorContextMenu, type EditorMenuExtraItems } from './extensions/editor-context-menu';
+import { relationshipDirectives, setDirectiveContext } from './extensions/relationship-directives';
 import { formattingKeymap } from './commands';
+import type { TrackLibrary, Role } from '../../../shared/relationships';
 
 /**
  * Pairs an EditorState with the Compartment instance embedded in it.
@@ -57,6 +59,13 @@ export interface WikiLinksHostConfig {
   onHoverEnd?: (relatedTarget: Element | null) => void;
   /** Hides local-label-editing context-menu items even when the editor itself is editable. */
   readOnly?: boolean;
+}
+
+export interface RelationshipDirectivesHostConfig {
+  library: TrackLibrary;
+  defaultReason: string;
+  onOpenNote?: (id: string) => void;
+  onEditField?: (target: { from: number; ordinal: number }, role: Role) => void;
 }
 
 export interface MarkdownEditorProps {
@@ -93,6 +102,13 @@ export interface MarkdownEditorProps {
   contextMenu?: { extraItems?: EditorMenuExtraItems };
 
   /**
+   * Renders relationship directives (`{{trackId.action ...}}`) as readable
+   * blocks in live mode. Omit to render blocks with built-in tracks only and
+   * `Unspecified` as the default reason (no field-editing callbacks).
+   */
+  relationshipDirectives?: RelationshipDirectivesHostConfig;
+
+  /**
    * Document offset at which to place the caret when the editor first mounts
    * with fresh content (i.e. no `savedInstance`). Clamped to [0, doc.length].
    * Omit (or pass `undefined`) to keep the default behaviour of caret at 0.
@@ -114,6 +130,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   dropLink: dropLinkConfig,
   mdLinks: mdLinksConfig,
   contextMenu: contextMenuConfig,
+  relationshipDirectives: relationshipDirectivesConfig,
   initialCursor,
 }) => {
   const editorRef = useRef<HTMLDivElement>(null);
@@ -128,6 +145,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   const imagesRef = useRef(imagesConfig);
   const mdLinksRef = useRef(mdLinksConfig);
   const contextMenuRef = useRef(contextMenuConfig);
+  const relationshipDirectivesRef = useRef(relationshipDirectivesConfig);
   onChangeRef.current = onChange;
   onSaveInstanceRef.current = onSaveInstance;
   isSourceModeRef.current = isSourceMode;
@@ -136,6 +154,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   imagesRef.current = imagesConfig;
   mdLinksRef.current = mdLinksConfig;
   contextMenuRef.current = contextMenuConfig;
+  relationshipDirectivesRef.current = relationshipDirectivesConfig;
 
   const modeCompartmentRef = useRef<Compartment>(
     savedInstance?.modeCompartment ?? new Compartment(),
@@ -157,6 +176,12 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       markdownLinkClick({
         onOpenExternal: (u) => mdLinksRef.current?.onOpenExternal?.(u),
         onOpenInternal: (u) => mdLinksRef.current?.onOpenInternal?.(u),
+      }),
+      relationshipDirectives({
+        readOnly: readOnlyRef.current,
+        onOpenNote: (id) => relationshipDirectivesRef.current?.onOpenNote?.(id),
+        onEditField: (target, role) =>
+          relationshipDirectivesRef.current?.onEditField?.(target, role),
       }),
     ];
     return exts;
@@ -291,6 +316,23 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       view.dispatch({ effects: setEntityLabels.of(wikiLinksConfig.entityLabels) });
     }
   }, [wikiLinksConfig?.entityLabels, isSourceMode]);
+
+  // Keep relationship-directive blocks aware of the current track library and default reason.
+  useEffect(() => {
+    const view = internalViewRef.current;
+    if (view && !isSourceMode) {
+      view.dispatch({
+        effects: setDirectiveContext.of({
+          library: relationshipDirectivesConfig?.library ?? { custom: [], optionAdditions: {} },
+          defaultReason: relationshipDirectivesConfig?.defaultReason ?? 'Unspecified',
+        }),
+      });
+    }
+  }, [
+    relationshipDirectivesConfig?.library,
+    relationshipDirectivesConfig?.defaultReason,
+    isSourceMode,
+  ]);
 
   return <div ref={editorRef} className="markdown-editor-container" />;
 };

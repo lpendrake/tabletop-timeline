@@ -16,6 +16,7 @@ A CodeMirror 6 wrapper for editing and previewing markdown. Used by notes and th
 - `commands.ts` — pure CodeMirror commands (bold/italic/heading/list/etc). Safe to import standalone for custom toolbars.
 - `theme.ts` — `lastGaspThemeExtensions` styling + syntax highlighting.
 - `extensions/wiki-links.ts` — `[[name|id]]` parsing, completion, click handler. Activated via `props.wikiLinks`.
+- `extensions/relationship-directives.ts` — renders `{{trackId.action ...}}` directives (parsed by `src/shared/relationships/`) as atomic, form-like blocks. Activated via `props.relationshipDirectives`; live mode only. See `extensions/AGENTS.md` for why it uses `Decoration.replace`, unlike wiki links.
 - `extensions/wiki-link-query.ts` — pure `WIKI_LINK_QUERY_RE` / `isInWikiLinkQuery(textBeforeCaret)`: detects an open `[[...` or `@...` link query. Shared by `wiki-links.ts` (completion source) and `slash-trigger.ts` (to suppress the `/` menu mid-query) so the two definitions can't drift.
 - `extensions/editor-context-menu.ts` — the editor's own menu (Copy / Paste / Delete / Formatting, plus any host `contextMenu.extraItems`) on plain editor text. Opens on right-click, on typing `/` at the caret (see `extensions/slash-trigger.ts`), and on Shift+F10 / the ContextMenu key. Registered unconditionally, after the mode compartment so the wiki-link contextmenu handler (live mode only) gets first refusal on `.cm-note-link` clicks.
 - `extensions/slash-trigger.ts` — pure `shouldOpenSlashMenu(state, pos)`: decides whether a typed `/` should open the menu instead of inserting a character.
@@ -34,6 +35,7 @@ A CodeMirror 6 wrapper for editing and previewing markdown. Used by notes and th
 - `savedInstance` / `onSaveInstance` — preserve doc + selection + undo history across host-level remounts (e.g., tab switching). The compartment is part of the saved instance and must round-trip.
 - `viewRef` — imperative access for toolbars and focus management.
 - `wikiLinks`, `imagePaste`, `dropLink` — optional host-supplied behaviors. Each is its own config object; omit to disable that feature entirely.
+- `relationshipDirectives` — `{ library, defaultReason, onOpenNote?, onEditField? }`. Omit to still render directive blocks (built-in tracks only, `defaultReason: 'Unspecified'`) with no field-editing/note-opening callbacks. `onEditField` is a hook point only — the floating fill-in bubble UI is a later task.
 - `contextMenu.extraItems` — optional `EditorMenuExtraItems` (`(ctx: EditorMenuContext) => ContextMenuItem[]`) appended, after a separator, to the editor's own menu — both the right-click menu and the `/`-triggered one. `EditorMenuContext` gives the host the acted-on range (`from`/`to`), `selectedText`, and `replaceRange(text)` to replace it and refocus the editor. Read lazily each time a menu opens (via a ref), so changing the callback after mount takes effect on the next open without rebuilding the base extension layer.
 
 ## How to add a new read-only preview surface
@@ -72,7 +74,7 @@ CodeMirror standard extensions (history, keymaps, bracket matching, closeBracket
 - **Shift+F10 / the ContextMenu key** — opens the same menu anchored at the caret, acting on the current selection, without the `/` bookkeeping (no re-insertion on Escape, Backspace doesn't close it).
 
 **Mode compartment (hot-swappable via `Compartment`):**
-`markdownDecorations()`, `imageDecorations(imagesConfig)`, `wikiLinks(...)`, and `markdownLinkClick(...)` are all bundled inside a single `Compartment`. In source mode the compartment holds an empty array; in live mode it holds these four. Switching mode calls `compartment.reconfigure(...)` — no editor recreation. The compartment instance is part of the `SavedEditorInstance` and must always round-trip with the state it belongs to.
+`markdownDecorations()`, `imageDecorations(imagesConfig)`, `wikiLinks(...)`, `markdownLinkClick(...)`, and `relationshipDirectives(...)` are all bundled inside a single `Compartment`. In source mode the compartment holds an empty array; in live mode it holds these five. Switching mode calls `compartment.reconfigure(...)` — no editor recreation. The compartment instance is part of the `SavedEditorInstance` and must always round-trip with the state it belongs to.
 
 ### Read vs write mode
 

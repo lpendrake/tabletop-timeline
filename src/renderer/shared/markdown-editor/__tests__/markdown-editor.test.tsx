@@ -187,6 +187,40 @@ describe('MarkdownEditor', () => {
     expect(container.querySelector('.markdown-editor-container')).not.toBeNull();
   });
 
+  it('relationship directives: live mode renders a block, source mode shows raw text', () => {
+    setup();
+    const directive =
+      '{{rp01.change Rep change: {amount:-2} {observer:[[a1b2]]} rep for {holder:[[c3d4]]} — {reason:x}}}';
+    const viewRef = createRef<EditorView | null>() as React.MutableRefObject<EditorView | null>;
+    renderEl(
+      <MarkdownEditor
+        content={directive}
+        onChange={vi.fn()}
+        viewRef={viewRef}
+        relationshipDirectives={{
+          library: { custom: [], optionAdditions: {} },
+          defaultReason: 'Unspecified',
+        }}
+      />,
+    );
+    expect(container.querySelector('.cm-directive')).not.toBeNull();
+
+    renderEl(
+      <MarkdownEditor
+        content={directive}
+        onChange={vi.fn()}
+        viewRef={viewRef}
+        isSourceMode={true}
+        relationshipDirectives={{
+          library: { custom: [], optionAdditions: {} },
+          defaultReason: 'Unspecified',
+        }}
+      />,
+    );
+    expect(container.querySelector('.cm-directive')).toBeNull();
+    expect(container.textContent).toContain('rp01.change');
+  });
+
   it('does not crash when optional features are omitted', () => {
     // wikiLinks, imagePaste, dropLink omitted — should mount cleanly
     setup();

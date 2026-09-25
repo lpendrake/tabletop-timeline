@@ -20,6 +20,7 @@ import {
   keymap,
   type DecorationSet,
 } from '@codemirror/view';
+import { parseDirectives } from '../../../../shared/relationships';
 import { makePointerGuard } from './pointer-guard';
 import { showContextMenu, type ContextMenuItem } from '../../context-menu';
 import '../../context-menu/context-menu.css';
@@ -406,6 +407,24 @@ function makeWikiLinkPointerGuard(config: WikiLinksConfig): Extension {
   ];
 }
 
+/**
+ * The source ranges of every relationship directive (`{{trackId.action ...}}`)
+ * in the document. Defined here — rather than imported from
+ * `relationship-directives.ts` — to avoid a circular import (that extension
+ * imports `entityLabelMapField` from this file); it reads only the shared,
+ * host-agnostic parser, never the directive-rendering extension itself.
+ */
+export function directiveRanges(text: string): { from: number; to: number }[] {
+  return parseDirectives(text).directives.map((d) => ({ from: d.from, to: d.to }));
+}
+
+function isWithinDirective(
+  range: { from: number; to: number },
+  directives: { from: number; to: number }[],
+): boolean {
+  return directives.some((d) => range.from >= d.from && range.to <= d.to);
+}
+
 export function buildDecorations(state: EditorState, _config: WikiLinksConfig): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const doc = state.doc;
@@ -413,12 +432,17 @@ export function buildDecorations(state: EditorState, _config: WikiLinksConfig): 
   const knownIds = state.field(knownIdsField, false) ?? new Set<string>();
   const entityLabelMap = state.field(entityLabelMapField, false) ?? new Map<string, string>();
   const hasIndex = knownIds.size > 0;
+  // A directive's own {{...}} body can contain [[id]] role values (e.g.
+  // {holder:[[c3d4]]}) — those are rendered as part of the directive's form
+  // block, never as an independent wiki-link decoration.
+  const directives = directiveRanges(doc.toString());
 
   for (let i = 1; i <= doc.lines; i++) {
     const line = doc.line(i);
     const links = findWikiLinksInLine(line.text, line.from);
 
     for (const link of links) {
+      if (isWithinDirective(link, directives)) continue;
       const broken = hasIndex && !knownIds.has(link.id);
 
       // Split rendering: the raw [[…]] source stays real, editable, cursor-navigable
