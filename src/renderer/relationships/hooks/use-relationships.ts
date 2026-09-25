@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Ledger, ParsedDirective, TrackLibrary } from '../../../shared/relationships';
-import { listTracks, resolveTrack } from '../../../shared/relationships';
-import type { InvalidDirectiveEntry } from '../../../main/relationships-store';
+import type {
+  InvalidDirectiveEntry,
+  Ledger,
+  ParsedDirective,
+  TrackLibrary,
+} from '../../../shared/relationships';
+import { EMPTY_TRACK_LIBRARY, listTracks, resolveTrack } from '../../../shared/relationships';
 import type { EntityIndexEntry } from '../../../types/global';
 import { timelinePort } from '../../timeline/data/ports';
 import { CalendarProvider } from '../../timeline/calendar/provider';
@@ -70,13 +74,12 @@ export interface UseRelationshipsResult {
   moveRowAfter: (payload: RowDragPayload, targetId: string) => void;
 }
 
-const EMPTY_LIBRARY: TrackLibrary = { custom: [], optionAdditions: {} };
 const SAVE_DEBOUNCE_MS = 300;
 
 export function useRelationships(options: UseRelationshipsOptions): UseRelationshipsResult {
   const { campaignPath, entityLabelMap, getEntityIndex } = options;
 
-  const [tracks, setTracks] = useState<TrackLibrary>(EMPTY_LIBRARY);
+  const [tracks, setTracks] = useState<TrackLibrary>(EMPTY_TRACK_LIBRARY);
   const [ledgers, setLedgers] = useState<Ledger[]>([]);
   const [problems, setProblems] = useState<InvalidDirectiveEntry[]>([]);
   const [mode, setMode] = useState<GroupingMode>('holder');

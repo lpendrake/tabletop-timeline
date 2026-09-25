@@ -48,7 +48,7 @@ export function serialiseTemplate(
 }
 
 /** Values cannot contain braces or a line break; strip them rather than reject silently. */
-function sanitiseValue(value: string): string {
+export function sanitiseValue(value: string): string {
   return value.replace(/[{}]/g, '').replace(/\r\n|\r|\n/g, ' ');
 }
 

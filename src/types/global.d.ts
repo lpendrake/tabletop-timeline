@@ -12,9 +12,14 @@ import type {
 } from '../renderer/timeline/data/types';
 export type { EntityIndexEntry, EntityIndexDelta } from '../shared/entity-index-entry';
 import type { CalendarSpec } from '../shared/calendar';
-import type { Ledger, ParsedDirective, TrackLibrary } from '../shared/relationships';
-import type { InvalidDirectiveEntry, LedgersAs } from '../main/relationships-store';
-import type { AddOptionResult } from '../main/settings/relationship-tracks';
+import type {
+  AddOptionResult,
+  InvalidDirectiveEntry,
+  Ledger,
+  LedgersAs,
+  ParsedDirective,
+  TrackLibrary,
+} from '../shared/relationships';
 
 export interface Campaign {
   id: string;

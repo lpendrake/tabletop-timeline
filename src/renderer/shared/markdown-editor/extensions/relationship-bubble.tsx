@@ -1,5 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { noteIdOf, type Role, type ResolvedTrack } from '../../../../shared/relationships';
+import {
+  noteIdOf,
+  sanitiseValue,
+  type Role,
+  type ResolvedTrack,
+} from '../../../../shared/relationships';
 import {
   SearchablePicker,
   moveHighlight,
@@ -9,7 +14,6 @@ import {
 import {
   decideBubbleKey,
   filterHeldOptions,
-  sanitiseFreeText,
   shouldOfferCreateOption,
   stepAmount,
   stepNumericValue,
@@ -114,7 +118,9 @@ function Field(props: RelationshipBubbleProps) {
     return (
       <NumberField
         {...props}
-        validate={validateAmount}
+        validate={(raw) =>
+          track ? validateAmount(raw, track) : { ok: false, message: 'Unknown track' }
+        }
         step={(raw, dir) =>
           track ? stepAmount(raw, track, dir) : String((Number(raw) || 0) + dir)
         }
@@ -229,7 +235,7 @@ function ReasonField({
   useBubbleFocus(ref, visible);
 
   function commit(direction: BubbleCommitDirection) {
-    onCommit(sanitiseFreeText(text), direction);
+    onCommit(sanitiseValue(text), direction);
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
@@ -334,15 +340,16 @@ function NotePickerField(props: RelationshipBubbleProps) {
   );
 }
 
-function RungField(props: RelationshipBubbleProps & { track: ResolvedTrack }) {
+function RungField(
+  props: RelationshipBubbleProps & { track: Extract<ResolvedTrack, { kind: 'ordinal' }> },
+) {
   const { value, track, onCommit, onClose, visible } = props;
   const ref = useRef<HTMLInputElement>(null);
   useBubbleFocus(ref, visible);
-  const positions = track.positions as { key: string; label: string }[];
-  const options: PickerOption[] = positions.map((p) => ({
-    id: p.key,
-    path: p.label,
-    label: p.label,
+  const options: PickerOption[] = track.rungs.map((r) => ({
+    id: r.key,
+    path: r.label,
+    label: r.label,
   }));
 
   const handleTab = usePickerTabHandler(options, undefined, value || null, onCommit);
@@ -368,7 +375,9 @@ function RungField(props: RelationshipBubbleProps & { track: ResolvedTrack }) {
  * helpers `SearchablePicker` uses) instead of `SearchablePicker` itself,
  * which has no room for that row.
  */
-function OptionField(props: RelationshipBubbleProps & { track: ResolvedTrack }) {
+function OptionField(
+  props: RelationshipBubbleProps & { track: Extract<ResolvedTrack, { kind: 'categorical' }> },
+) {
   const { value, track, trackId, heldOptionKeys, createOption, onCommit, onClose, visible } = props;
   const [query, setQuery] = useState('');
   const [highlight, setHighlight] = useState(0);
@@ -377,9 +386,11 @@ function OptionField(props: RelationshipBubbleProps & { track: ResolvedTrack }) 
   const ref = useRef<HTMLInputElement>(null);
   useBubbleFocus(ref, visible);
 
-  const allOptions: PickerOption[] = (
-    (track.spec as { options?: { key: string; label: string }[] }).options ?? []
-  ).map((o) => ({ id: o.key, path: o.label, label: o.label }));
+  const allOptions: PickerOption[] = track.options.map((o) => ({
+    id: o.key,
+    path: o.label,
+    label: o.label,
+  }));
   const options = filterHeldOptions(allOptions, heldOptionKeys);
   const ranked = rankPickerOptions(options, query);
   const offerCreate = Boolean(createOption) && shouldOfferCreateOption(query, options);

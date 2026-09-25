@@ -1,6 +1,11 @@
-import type { Ledger, ParsedDirective, TrackLibrary } from '../../shared/relationships';
-import type { InvalidDirectiveEntry, LedgersAs } from '../../main/relationships-store';
-import type { AddOptionResult } from '../../main/settings/relationship-tracks';
+import type {
+  AddOptionResult,
+  InvalidDirectiveEntry,
+  Ledger,
+  LedgersAs,
+  ParsedDirective,
+  TrackLibrary,
+} from '../../shared/relationships';
 
 /**
  * Renderer-side IO port for relationship data. Thin typed wrappers over

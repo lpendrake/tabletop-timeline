@@ -12,11 +12,14 @@ import {
   decideBubbleKey,
   shouldOfferCreateOption,
   filterHeldOptions,
-  sanitiseFreeText,
   computeTailOffset,
   TAIL_EDGE_INSET,
 } from '../relationship-bubble-logic';
-import { parseDirectives, resolveTrackSpec } from '../../../../../shared/relationships';
+import {
+  parseDirectives,
+  resolveTrackSpec,
+  sanitiseValue,
+} from '../../../../../shared/relationships';
 import { pf2eReputationSpec, attitudeSpec } from '../../../../../shared/relationships/system/index';
 
 function directiveFor(text: string) {
@@ -49,23 +52,36 @@ describe('blank ordering (pure)', () => {
 });
 
 describe('validation (pure)', () => {
+  const track = resolveTrackSpec(pf2eReputationSpec);
+
   it('rejects a zero amount and non-numbers', () => {
-    expect(validateAmount('0')).toEqual({ ok: false, message: 'Amount cannot be zero' });
-    expect(validateAmount('abc')).toEqual({ ok: false, message: 'Amount must be a number' });
-    expect(validateAmount('-3')).toEqual({ ok: true, value: '-3' });
+    expect(validateAmount('0', track)).toEqual({ ok: false, message: 'Amount cannot be zero' });
+    expect(validateAmount('abc', track)).toEqual({ ok: false, message: '"abc" is not a number' });
+    expect(validateAmount('-3', track)).toEqual({ ok: true, value: '-3' });
+  });
+
+  it('rejects a fractional amount on an integer-step track', () => {
+    expect(validateAmount('1.5', track)).toEqual({
+      ok: false,
+      message: '1.5 must be a whole number',
+    });
   });
 
   it('rejects an out-of-range numeric value', () => {
-    const track = resolveTrackSpec(pf2eReputationSpec);
     expect(validateNumericValue('999', track)).toEqual({
       ok: false,
-      message: 'Value is out of range',
+      message: '999 is out of range for PF2E Reputation',
     });
     expect(validateNumericValue('x', track)).toEqual({
       ok: false,
-      message: 'Value must be a number',
+      message: '"x" is not a number',
     });
     expect(validateNumericValue('10', track)).toEqual({ ok: true, value: '10' });
+  });
+
+  it('rejects malformed decimal syntax (exponents, hex)', () => {
+    expect(validateAmount('1e3', track)).toEqual({ ok: false, message: '"1e3" is not a number' });
+    expect(validateAmount('0x10', track)).toEqual({ ok: false, message: '"0x10" is not a number' });
   });
 });
 
@@ -145,9 +161,9 @@ describe('option create-row + held-options filtering (pure)', () => {
   });
 });
 
-describe('sanitiseFreeText (pure)', () => {
+describe('sanitiseValue (pure, shared)', () => {
   it('strips braces and collapses line breaks', () => {
-    expect(sanitiseFreeText('a {b} c\nd')).toBe('a b c d');
+    expect(sanitiseValue('a {b} c\nd')).toBe('a b c d');
   });
 });
 

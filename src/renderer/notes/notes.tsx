@@ -21,6 +21,7 @@ import { buildEntityLink, buildAssetLink } from '../shared/entity-link';
 import { copyToClipboard } from '../shared/clipboard';
 import { findEntityIdByNotePath } from './domain/link-resolution';
 import { useRelationshipEditorConfig } from '../relationships/hooks/use-relationship-editor-config';
+import { NOTE_DEFAULT_REASON } from '../../shared/relationships';
 import { buildRelationshipMenuItems } from '../relationships/editor-menu';
 import { useConfirm } from '../shared/confirm-dialog/confirm-provider';
 import { NoteContextMenu } from './components/note-context-menu.tsx';
@@ -92,7 +93,7 @@ export function NotesApp({
     : null;
   const relationshipDirectivesConfig = useRelationshipEditorConfig({
     entityIndex: ctrl.entityIndex,
-    defaultReason: 'Unspecified',
+    defaultReason: NOTE_DEFAULT_REASON,
     onOpenNote: ctrl.handleOpenLink,
     currentNoteId: () =>
       ctrl.activeTab

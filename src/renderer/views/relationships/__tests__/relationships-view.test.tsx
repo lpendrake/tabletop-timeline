@@ -8,7 +8,7 @@ import { fireEvent } from '@testing-library/react';
 
 import { parseDirectives } from '../../../../shared/relationships';
 import type { Ledger, RelationshipDelta } from '../../../../shared/relationships';
-import type { InvalidDirectiveEntry } from '../../../../main/relationships-store';
+import type { InvalidDirectiveEntry } from '../../../../shared/relationships';
 import type { EntityIndexEntry } from '../../../../types/global';
 
 // ---- Hoisted mock state (mutable across a test, read inside the mock factories) ----

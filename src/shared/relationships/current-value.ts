@@ -46,7 +46,10 @@ export interface CurrentValueResult {
 export function applyDelta(value: TrackValue, op: DeltaOp, track: ResolvedTrack): TrackValue {
   switch (op.op) {
     case 'adjust':
-      return track.adjust(value, op.by);
+      // Categorical tracks have no Set/adjust action (see AGENTS.md) — an
+      // `adjust` op is never produced for one, but the value-level type is
+      // generic, so this stays a runtime no-op rather than a type error.
+      return track.kind === 'categorical' ? value : track.adjust(value, op.by);
     case 'set':
       return track.clamp(op.value);
     case 'add': {

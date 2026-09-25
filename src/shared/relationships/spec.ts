@@ -72,8 +72,6 @@ export interface CategoricalTrackSpec {
   name: string;
   actions: ActionSpec[];
   options: OptionSpec[];
-  multiple: boolean;
-  extensible: boolean;
 }
 
 export type TrackSpec = NumericTrackSpec | OrdinalTrackSpec | CategoricalTrackSpec;

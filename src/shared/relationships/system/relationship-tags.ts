@@ -6,8 +6,6 @@ export const relationshipTagsSpec: CategoricalTrackSpec = {
   kind: 'categorical',
   id: RELATIONSHIP_TAGS_ID,
   name: 'Relationship tags',
-  multiple: true,
-  extensible: true,
   options: [
     { key: 'member', label: 'member', mutual: false },
     { key: 'employee', label: 'employee', mutual: false },

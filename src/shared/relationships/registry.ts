@@ -12,7 +12,13 @@ export interface TrackLibrary {
   optionAdditions: Record<TrackId, OptionSpec[]>;
 }
 
-const EMPTY_LIBRARY: TrackLibrary = { custom: [], optionAdditions: {} };
+/** The empty track library (built-in system tracks only) — shared to avoid re-allocating literals everywhere. */
+export const EMPTY_TRACK_LIBRARY: TrackLibrary = Object.freeze({
+  custom: [],
+  optionAdditions: {},
+});
+
+const EMPTY_LIBRARY: TrackLibrary = EMPTY_TRACK_LIBRARY;
 
 /** Appends user-added categorical options to a spec's built-in options, ignoring duplicate keys. */
 export function withOptionAdditions(

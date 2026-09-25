@@ -50,15 +50,17 @@ export interface DirectiveParseError {
   message: string;
 }
 
-const TRACK_ID_RE = /^[a-z0-9]{4}$/;
 const ACTION_KEY_CHAR_RE = /[a-z0-9-]/;
 const ROLE_NAME_CHAR_RE = /[a-z]/;
 
 // A `{{` is only ever treated as the start of a directive envelope when it is
 // immediately followed by `xxxx.` — four lowercase-alphanumeric chars and a
 // dot. Anything else (`{{ foo }}`, `{{bar}}`, prose that just happens to use
-// double braces) is ordinary text and never produces an error.
-const ENVELOPE_START_RE = /^\{\{([a-z0-9]{4})\./;
+// double braces) is ordinary text and never produces an error. Sticky (`/y`),
+// anchored via `lastIndex` instead of `source.slice(idx)`, so testing every
+// `{{` candidate stays O(1) per candidate rather than slicing to EOF each
+// time (which made scanning a file with many false-positive `{{`s O(n²)).
+const ENVELOPE_START_STICKY_RE = /\{\{([a-z0-9]{4})\./y;
 
 interface CodeRange {
   from: number;
@@ -172,22 +174,16 @@ interface EnvelopeAttempt {
 
 /** Attempts to parse one directive envelope starting at `start` (source[start] === '{'). */
 function parseEnvelopeAt(source: string, start: number, ordinal: number): EnvelopeAttempt {
-  const envelopeMatch = ENVELOPE_START_RE.exec(source.slice(start));
+  ENVELOPE_START_STICKY_RE.lastIndex = start;
+  const envelopeMatch = ENVELOPE_START_STICKY_RE.exec(source);
   // Caller already checked this matches; kept for type-narrowing safety.
   /* istanbul ignore next */
   if (!envelopeMatch) {
     return { error: { from: start, to: start + 2, message: 'Not a directive envelope' } };
   }
+  // The capture group's own `[a-z0-9]{4}` shape is the only validity check a
+  // track id needs here — a separate `TRACK_ID_RE` test would be unreachable.
   const trackId = envelopeMatch[1];
-  if (!TRACK_ID_RE.test(trackId)) {
-    return {
-      error: {
-        from: start,
-        to: lineEndAfter(source, start),
-        message: `Invalid track id "${trackId}"`,
-      },
-    };
-  }
 
   let i = start + 2 + trackId.length + 1; // past `{{` + trackId + `.`
 
@@ -338,7 +334,8 @@ export function parseDirectives(source: string): {
       continue;
     }
 
-    if (!ENVELOPE_START_RE.test(source.slice(idx))) {
+    ENVELOPE_START_STICKY_RE.lastIndex = idx;
+    if (!ENVELOPE_START_STICKY_RE.test(source)) {
       pos = idx + 2;
       continue;
     }
@@ -368,13 +365,18 @@ export function roleValue(d: ParsedDirective, role: Role): string | undefined {
   return d.tokens.find((t) => t.role === role)?.value;
 }
 
-/** Any required role other than `reason` missing or empty makes a directive unfinished. */
-export function isUnfinished(d: ParsedDirective, requiredRoles: Role[]): boolean {
-  return requiredRoles.some((role) => {
+/** Required roles (other than `reason`) that are missing or empty, in `requiredRoles` order. */
+export function missingRoles(d: ParsedDirective, requiredRoles: Role[]): Role[] {
+  return requiredRoles.filter((role) => {
     if (role === 'reason') return false;
     const value = roleValue(d, role);
     return value === undefined || value === '';
   });
+}
+
+/** Any required role other than `reason` missing or empty makes a directive unfinished. */
+export function isUnfinished(d: ParsedDirective, requiredRoles: Role[]): boolean {
+  return missingRoles(d, requiredRoles).length > 0;
 }
 
 /** The 4-char note id from a role value like `[[a1b2]]` or `[[Label|a1b2]]`; null otherwise. */

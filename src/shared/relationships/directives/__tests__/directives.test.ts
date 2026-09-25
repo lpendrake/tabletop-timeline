@@ -17,12 +17,16 @@ import {
   serialiseTemplate,
   setRoleValueChange,
   interpretDirective,
+  allowedActions,
   readableParts,
+  validateRoleValue,
 } from '../index.js';
 import { requiredRoles } from '../../templates.js';
 
 const pf2eReputation = resolveTrackSpec(pf2eReputationSpec);
-const attitude = resolveTrackSpec(attitudeSpec);
+const attitudeResolved = resolveTrackSpec(attitudeSpec);
+if (attitudeResolved.kind !== 'ordinal') throw new Error('expected an ordinal track');
+const attitude = attitudeResolved;
 const relationshipTags = resolveTrackSpec(relationshipTagsSpec);
 
 function resolveTrack(id: string) {
@@ -532,6 +536,123 @@ describe('interpret: wrong type, unknown option, unknown rung, zero amount, unkn
     const { directives } = parseDirectives(raw);
     const result = interpretDirective(directives[0], { resolveTrack });
     expect(result.status).toBe('ok');
+  });
+});
+
+describe('notes vs events: adjust/remove are event-only', () => {
+  const message = "Notes have no order, so this can't be used here. Use an event.";
+
+  it('rejects Change (adjust) in a note (undated: true)', () => {
+    const raw =
+      '{{rp01.change Rep change: {amount:1} {observer:[[a1b2]]} rep for {holder:[[c3d4]]} — {reason:}}}';
+    const { directives } = parseDirectives(raw);
+    const result = interpretDirective(directives[0], { resolveTrack, undated: true });
+    expect(result.status).toBe('invalid');
+    if (result.status === 'invalid') {
+      expect(result.problems).toEqual([{ code: 'not-allowed-in-note', message }]);
+    }
+  });
+
+  it('rejects Loses (remove) in a note (undated: true)', () => {
+    const raw =
+      '{{tg01.loses {holder:[[e5f6]]} is no longer {option:member} with {observer:[[b7c8]]} — {reason:}}}';
+    const { directives } = parseDirectives(raw);
+    const result = interpretDirective(directives[0], { resolveTrack, undated: true });
+    expect(result.status).toBe('invalid');
+    if (result.status === 'invalid') {
+      expect(result.problems).toEqual([{ code: 'not-allowed-in-note', message }]);
+    }
+  });
+
+  it('allows Set (numeric/ordinal) and Add (tags) in a note', () => {
+    const setRaw =
+      "{{rp01.set Rep set: {holder:[[c3d4]]}'s rep with {observer:[[a1b2]]} is {value:5} — {reason:}}}";
+    const { directives: setDirectives } = parseDirectives(setRaw);
+    expect(interpretDirective(setDirectives[0], { resolveTrack, undated: true }).status).toBe('ok');
+
+    const addRaw =
+      '{{tg01.gains {holder:[[e5f6]]} is now {option:member} with {observer:[[b7c8]]} — {reason:}}}';
+    const { directives: addDirectives } = parseDirectives(addRaw);
+    expect(interpretDirective(addDirectives[0], { resolveTrack, undated: true }).status).toBe('ok');
+  });
+
+  it('allows Change/Loses in an event (undated: false, the default)', () => {
+    const raw =
+      '{{rp01.change Rep change: {amount:1} {observer:[[a1b2]]} rep for {holder:[[c3d4]]} — {reason:}}}';
+    const { directives } = parseDirectives(raw);
+    expect(interpretDirective(directives[0], { resolveTrack }).status).toBe('ok');
+  });
+});
+
+describe('allowedActions: note excludes adjust/remove, event allows everything', () => {
+  it('excludes adjust on a numeric track for a note', () => {
+    const notedKinds = allowedActions(pf2eReputation, 'note').map((a) => a.kind);
+    expect(notedKinds).not.toContain('adjust');
+    expect(notedKinds).toContain('set');
+  });
+
+  it('excludes remove on a categorical track for a note, keeps add', () => {
+    const noteKinds = allowedActions(relationshipTags, 'note').map((a) => a.kind);
+    expect(noteKinds).toEqual(['add']);
+    const eventKinds = allowedActions(relationshipTags, 'event').map((a) => a.kind);
+    expect(eventKinds.sort()).toEqual(['add', 'remove']);
+  });
+
+  it('an event allows every action a track defines', () => {
+    expect(
+      allowedActions(attitude, 'event')
+        .map((a) => a.kind)
+        .sort(),
+    ).toEqual(attitude.actions.map((a) => a.kind).sort());
+  });
+});
+
+describe('validateRoleValue: strict decimal syntax and integer-step tracks', () => {
+  it('rejects exponent and hex notation', () => {
+    expect(validateRoleValue('amount', '1e3', pf2eReputation)).toEqual({
+      ok: false,
+      message: '"1e3" is not a number',
+    });
+    expect(validateRoleValue('amount', '0x10', pf2eReputation)).toEqual({
+      ok: false,
+      message: '"0x10" is not a number',
+    });
+  });
+
+  it('rejects a fractional amount on an integer-step numeric track', () => {
+    expect(validateRoleValue('amount', '1.5', pf2eReputation)).toEqual({
+      ok: false,
+      message: '1.5 must be a whole number',
+    });
+  });
+
+  it('rejects a fractional amount used as an ordinal adjust step', () => {
+    // Ordinal steps are always integral rungs, regardless of the track's own step.
+    expect(validateRoleValue('amount', '2.5', attitude).ok).toBe(false);
+  });
+
+  it('accepts a valid integer amount and numeric value', () => {
+    expect(validateRoleValue('amount', '-2', pf2eReputation)).toEqual({ ok: true, value: -2 });
+    expect(validateRoleValue('value', '10', pf2eReputation)).toEqual({ ok: true, value: 10 });
+  });
+});
+
+describe('ordinal adjust never throws on a malformed amount', () => {
+  it('fast-check: fold never throws for any interpreted ok-status directive across arbitrary deltas', () => {
+    fc.assert(
+      fc.property(
+        fc.oneof(
+          fc.integer({ min: -1000, max: 1000 }),
+          fc.double({ noNaN: false, min: -1e9, max: 1e9 }),
+        ),
+        (by) => {
+          expect(() => attitude.adjust('indifferent', by)).not.toThrow();
+          const result = attitude.adjust('indifferent', by);
+          expect(attitude.isValidValue(result)).toBe(true);
+        },
+      ),
+      { numRuns: 200 },
+    );
   });
 });
 

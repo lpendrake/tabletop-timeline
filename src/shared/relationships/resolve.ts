@@ -20,37 +20,44 @@ import { validateTemplate } from './templates.js';
 
 export type ResolvedAction = ActionSpec;
 
-export interface NumericPosition {
-  key: string;
-  label: string;
-  start: number;
-  /** Exclusive upper bound; null = unbounded (runs to +Infinity / track max). */
-  end: number | null;
-}
-
-export interface OrdinalPosition {
-  key: string;
-  label: string;
-  index: number;
-}
-
-export interface ResolvedTrack {
+interface BaseTrack {
   id: string;
   name: string;
-  kind: TrackKind;
-  spec: TrackSpec;
   actions: ResolvedAction[];
   action(key: string): ResolvedAction | undefined;
-  initial: TrackValue;
   clamp(value: TrackValue): TrackValue;
-  adjust(value: TrackValue, by: number): TrackValue;
-  labelFor(value: TrackValue): string | string[] | undefined;
   format(value: TrackValue): string;
-  positions: NumericPosition[] | OrdinalPosition[];
+  labelFor(value: TrackValue): string | string[] | undefined;
   isValidValue(value: TrackValue): boolean;
-  optionFor(key: string): OptionSpec | undefined;
-  rungIndex(key: string): number;
 }
+
+export interface NumericTrack extends BaseTrack {
+  kind: 'numeric';
+  initial: number;
+  min: number | null;
+  max: number | null;
+  step: number;
+  bands: BandSpec[];
+  showValue: boolean;
+  adjust(value: TrackValue, by: number): TrackValue;
+}
+
+export interface OrdinalTrack extends BaseTrack {
+  kind: 'ordinal';
+  initial: string;
+  rungs: RungSpec[];
+  rungIndex(key: string): number;
+  adjust(value: TrackValue, by: number): TrackValue;
+}
+
+export interface TagTrack extends BaseTrack {
+  kind: 'categorical';
+  initial: string[];
+  options: OptionSpec[];
+  optionFor(key: string): OptionSpec | undefined;
+}
+
+export type ResolvedTrack = NumericTrack | OrdinalTrack | TagTrack;
 
 export interface SpecError {
   code: string;
@@ -112,7 +119,8 @@ function validateBands(spec: NumericTrackSpec): SpecError[] {
 export function validateTrackSpec(spec: TrackSpec): SpecValidationResult {
   const errors: SpecError[] = [];
 
-  errors.push(...validateActions(spec.actions, spec.kind));
+  const actions = Array.isArray(spec.actions) ? spec.actions : [];
+  errors.push(...validateActions(actions, spec.kind));
 
   if (spec.kind === 'numeric') {
     if (spec.min !== null && spec.max !== null && spec.min > spec.max) {
@@ -120,17 +128,26 @@ export function validateTrackSpec(spec: TrackSpec): SpecValidationResult {
     }
     errors.push(...validateBands(spec));
   } else if (spec.kind === 'ordinal') {
-    errors.push(...uniqueKeyErrors(spec.rungs, 'rung'));
-    if (spec.rungs.length === 0) {
+    const rungs = Array.isArray(spec.rungs) ? spec.rungs : [];
+    errors.push(...uniqueKeyErrors(rungs, 'rung'));
+    if (rungs.length === 0) {
       errors.push({ code: 'no-rungs' });
-    } else if (!spec.rungs.some((r) => r.key === spec.initial)) {
+    } else if (!rungs.some((r) => r.key === spec.initial)) {
       errors.push({ code: 'unknown-initial-rung', detail: spec.initial });
     }
   } else {
-    errors.push(...uniqueKeyErrors(spec.options, 'option'));
+    const options = Array.isArray(spec.options) ? spec.options : [];
+    errors.push(...uniqueKeyErrors(options, 'option'));
   }
 
   return errors.length > 0 ? { ok: false, errors } : { ok: true };
+}
+
+interface NumericPosition {
+  key: string;
+  label: string;
+  start: number;
+  end: number | null;
 }
 
 function buildNumericPositions(spec: NumericTrackSpec): NumericPosition[] {
@@ -146,8 +163,9 @@ function buildNumericPositions(spec: NumericTrackSpec): NumericPosition[] {
   });
 }
 
-function compileNumeric(spec: NumericTrackSpec): ResolvedTrack {
+function compileNumeric(spec: NumericTrackSpec): NumericTrack {
   const positions = buildNumericPositions(spec);
+  const bands = spec.bands ?? [];
 
   function clampNumber(v: number): number {
     let out = v;
@@ -170,10 +188,14 @@ function compileNumeric(spec: NumericTrackSpec): ResolvedTrack {
     id: spec.id,
     name: spec.name,
     kind: 'numeric',
-    spec,
+    initial: spec.initial,
+    min: spec.min,
+    max: spec.max,
+    step: spec.step,
+    bands,
+    showValue: spec.showValue,
     actions: spec.actions,
     action: (key) => spec.actions.find((a) => a.key === key),
-    initial: spec.initial,
     clamp: (v) => clampNumber(Number(v)),
     adjust: (v, by) => clampNumber(Number(v) + by),
     labelFor: (v) => bandFor(Number(v))?.label,
@@ -183,7 +205,6 @@ function compileNumeric(spec: NumericTrackSpec): ResolvedTrack {
       if (!band) return String(n);
       return spec.showValue ? `${n} (${band.label})` : band.label;
     },
-    positions,
     isValidValue: (v) => {
       const n = Number(v);
       if (!Number.isFinite(n)) return false;
@@ -191,18 +212,10 @@ function compileNumeric(spec: NumericTrackSpec): ResolvedTrack {
       if (spec.max !== null && n > spec.max) return false;
       return true;
     },
-    optionFor: () => undefined,
-    rungIndex: () => -1,
   };
 }
 
-function compileOrdinal(spec: OrdinalTrackSpec): ResolvedTrack {
-  const positions: OrdinalPosition[] = spec.rungs.map((rung: RungSpec, index) => ({
-    key: rung.key,
-    label: rung.label,
-    index,
-  }));
-
+function compileOrdinal(spec: OrdinalTrackSpec): OrdinalTrack {
   function indexOf(key: string): number {
     return spec.rungs.findIndex((r) => r.key === key);
   }
@@ -215,27 +228,29 @@ function compileOrdinal(spec: OrdinalTrackSpec): ResolvedTrack {
     id: spec.id,
     name: spec.name,
     kind: 'ordinal',
-    spec,
+    initial: spec.initial,
+    rungs: spec.rungs,
     actions: spec.actions,
     action: (key) => spec.actions.find((a) => a.key === key),
-    initial: spec.initial,
     clamp: (v) => clampRung(String(v)),
     adjust: (v, by) => {
       const startIndex = indexOf(String(v));
       const from = startIndex >= 0 ? startIndex : indexOf(spec.initial);
-      const clampedIndex = Math.max(0, Math.min(spec.rungs.length - 1, from + by));
-      return spec.rungs[clampedIndex].key;
+      // Defensive: a fractional or non-finite `by` (a malformed amount that
+      // slipped past validation somehow) must never produce a fractional or
+      // out-of-range array index — round and clamp before indexing.
+      const safeBy = Number.isFinite(by) ? Math.round(by) : 0;
+      const clampedIndex = Math.max(0, Math.min(spec.rungs.length - 1, from + safeBy));
+      return spec.rungs[clampedIndex]?.key ?? spec.initial;
     },
     labelFor: (v) => spec.rungs.find((r) => r.key === String(v))?.label,
     format: (v) => spec.rungs.find((r) => r.key === String(v))?.label ?? String(v),
-    positions,
     isValidValue: (v) => indexOf(String(v)) >= 0,
-    optionFor: () => undefined,
     rungIndex: (key) => indexOf(key),
   };
 }
 
-function compileCategorical(spec: CategoricalTrackSpec): ResolvedTrack {
+function compileCategorical(spec: CategoricalTrackSpec): TagTrack {
   function optionOrder(key: string): number {
     return spec.options.findIndex((o) => o.key === key);
   }
@@ -244,13 +259,9 @@ function compileCategorical(spec: CategoricalTrackSpec): ResolvedTrack {
     return spec.options.find((o) => o.key === key);
   }
 
+  // Tags are always multi-valued and user-definable — see AGENTS.md.
   function clampKeys(keys: string[]): string[] {
     const known = keys.filter((k) => optionOrder(k) >= 0);
-    if (!spec.multiple) {
-      // Single-select: keep the last known key in input order — "add"
-      // replaces the current option, "set" makes it exactly the given one.
-      return known.length > 0 ? [known[known.length - 1]] : [];
-    }
     const deduped = Array.from(new Set(known));
     return deduped.sort((a, b) => optionOrder(a) - optionOrder(b));
   }
@@ -259,21 +270,18 @@ function compileCategorical(spec: CategoricalTrackSpec): ResolvedTrack {
     id: spec.id,
     name: spec.name,
     kind: 'categorical',
-    spec,
+    initial: [] as string[],
+    options: spec.options,
     actions: spec.actions,
     action: (key) => spec.actions.find((a) => a.key === key),
-    initial: [] as TrackValue,
     clamp: (v) => clampKeys(Array.isArray(v) ? v : [String(v)]),
-    adjust: (v) => v,
     labelFor: (v) => (Array.isArray(v) ? v : [String(v)]).map((k) => optionFor(k)?.label ?? k),
     format: (v) => {
       const keys = Array.isArray(v) ? v : [String(v)];
       return keys.map((k) => optionFor(k)?.label ?? k).join(', '); // empty selection formats as '' — see AGENTS.md
     },
-    positions: [],
     isValidValue: (v) => Array.isArray(v) && v.every((k) => optionOrder(k) >= 0),
     optionFor,
-    rungIndex: () => -1,
   };
 }
 

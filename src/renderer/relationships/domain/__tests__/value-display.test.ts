@@ -19,7 +19,7 @@ describe('valueDisplay: bar for banded numeric, ladder for ordinal, chips with m
     if (display.kind !== 'bar') throw new Error('unreachable');
     // range is [-50, 50], value 12 -> (12 - -50) / 100 = 0.62
     expect(display.fraction).toBeCloseTo(0.62, 5);
-    expect(display.bands).toHaveLength(rp01.positions.length);
+    expect(display.bands).toHaveLength(rp01.kind === 'numeric' ? rp01.bands.length : 0);
     expect(display.bands[0]).toEqual({ key: 'hunted', label: 'Hunted', startFraction: 0 });
     expect(display.label).toBe(rp01.format(12));
   });

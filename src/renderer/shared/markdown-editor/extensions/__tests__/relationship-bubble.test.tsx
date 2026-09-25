@@ -90,7 +90,7 @@ describe('amount field — validation and stepping', () => {
     fireEvent.change(input(), { target: { value: 'abc' } });
     fireEvent.keyDown(input(), { key: 'Enter' });
     expect(onCommit).not.toHaveBeenCalled();
-    expect(container.textContent).toContain('Amount must be a number');
+    expect(container.textContent).toContain('"abc" is not a number');
 
     fireEvent.change(input(), { target: { value: '5' } });
     fireEvent.keyDown(input(), { key: 'Enter' });
@@ -303,7 +303,7 @@ describe('option field — create row and held-options filtering', () => {
     render(baseProps({ role: 'option', value: '', track: OPTIONS_TRACK, heldOptionKeys: null }));
     const rows = Array.from(container.querySelectorAll('.relationship-bubble-row'));
     expect(rows.length).toBe(
-      OPTIONS_TRACK.spec.kind === 'categorical' ? OPTIONS_TRACK.spec.options.length : 0,
+      OPTIONS_TRACK.kind === 'categorical' ? OPTIONS_TRACK.options.length : 0,
     );
   });
 });

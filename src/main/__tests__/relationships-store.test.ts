@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { compareDeltas } from '../../shared/relationships/index.js';
-import type { CategoricalTrackSpec, TrackLibrary } from '../../shared/relationships/index.js';
+import type { CategoricalTrackSpec } from '../../shared/relationships/index.js';
 import { RelationshipsStore } from '../relationships-store.js';
 import type { RelationshipFileInput } from '../relationships-store.js';
 
@@ -14,6 +14,11 @@ function repChangeDirective(
   reason: string,
 ): string {
   return `{{rp01.change Rep change: {amount:${amount}} {observer:[[${observer}]]} rep for {holder:[[${holder}]]} — {reason:${reason}}}}`;
+}
+
+/** Set (unlike Change/adjust) is allowed in a note — a note has no order. */
+function repSetDirective(holder: string, observer: string, value: number, reason: string): string {
+  return `{{rp01.set Rep set: {holder:[[${holder}]]}'s rep with {observer:[[${observer}]]} is {value:${value}} — {reason:${reason}}}}`;
 }
 
 function tagsGainsDirective(
@@ -57,7 +62,7 @@ describe('event directives get at from epochSeconds; note directives are undated
     const store = newStore();
     store.rebuild([
       eventFile('timeline/e1.md', repChangeDirective(A, C, -2, 'attacked'), 1000),
-      noteFile('notes/n1.md', repChangeDirective(C, A, 3, 'gift')),
+      noteFile('notes/n1.md', repSetDirective(C, A, 3, 'gift')),
     ]);
 
     const eventLedger = store.ledgersFor(A, 'holder')[0];
@@ -87,7 +92,7 @@ describe('unfinished directives are skipped silently', () => {
   it('produces no deltas and no invalid entry for a directive missing a required role', () => {
     const store = newStore();
     const source =
-      '{{rp01.change Rep change: {amount:-2} {observer:[[a1b2]]} rep for {holder:} — {reason:}}}';
+      "{{rp01.set Rep set: {holder:}'s rep with {observer:[[a1b2]]} is {value:5} — {reason:}}}";
     store.rebuild([noteFile('notes/n1.md', source)]);
 
     expect(store.ledgers()).toHaveLength(0);
@@ -100,7 +105,7 @@ describe('saving a file replaces all its directives and mirrors', () => {
     const store = newStore();
     const originalSource = [
       tagsGainsDirective(A, C, 'married', 'wedding'),
-      repChangeDirective(A, C, -5, 'feud'),
+      repSetDirective(A, C, -5, 'feud'),
     ].join('\n');
     store.rebuild([noteFile('notes/n1.md', originalSource)]);
 
@@ -108,7 +113,7 @@ describe('saving a file replaces all its directives and mirrors', () => {
     expect(store.ledgersFor(C, 'holder').find((l) => l.track === 'tg01')).toBeDefined(); // mirror
     expect(store.ledgersFor(A, 'holder').find((l) => l.track === 'rp01')).toBeDefined();
 
-    const revisedSource = repChangeDirective(A, C, -5, 'feud');
+    const revisedSource = repSetDirective(A, C, -5, 'feud');
     store.updateFile(noteFile('notes/n1.md', revisedSource));
 
     expect(store.ledgersFor(A, 'holder').find((l) => l.track === 'tg01')).toBeUndefined();
@@ -132,11 +137,12 @@ describe('mutual options mirror', () => {
 
   it('mirrors a mutual remove to the other side', () => {
     const store = newStore();
+    // Remove has no order-free meaning, so it's event-only — see AGENTS.md.
     const source = [
       tagsGainsDirective(A, C, 'married', 'wedding'),
       tagsLosesDirective(A, C, 'married', 'divorce'),
     ].join('\n');
-    store.rebuild([noteFile('notes/n1.md', source)]);
+    store.rebuild([eventFile('timeline/e1.md', source, 1000)]);
 
     const mirror = store.ledgersFor(C, 'both').find((l) => l.holder === C && l.observer === A);
     expect(mirror?.deltas.map((d) => d.op)).toEqual(['add', 'remove']);
@@ -152,65 +158,10 @@ describe('mutual options mirror', () => {
   });
 });
 
-const SET_TRACK: CategoricalTrackSpec = {
-  kind: 'categorical',
-  id: 'cst1',
-  name: 'Custom Set Track',
-  multiple: true,
-  extensible: true,
-  options: [
-    { key: 'ally', label: 'Ally', mutual: false },
-    { key: 'rival', label: 'Rival', mutual: false },
-    { key: 'allied', label: 'Allied', mutual: true },
-    { key: 'sworn-enemy', label: 'Sworn Enemy', mutual: true },
-  ],
-  actions: [
-    {
-      key: 'set',
-      label: 'Set',
-      kind: 'set',
-      template: '{holder} and {observer} become {option} — {reason}',
-    },
-  ],
-};
-
-function setTrackDirective(
-  holder: string,
-  observer: string,
-  option: string,
-  reason: string,
-): string {
-  return `{{cst1.set {holder:[[${holder}]]} and {observer:[[${observer}]]} become {option:${option}} — {reason:${reason}}}}`;
-}
-
-describe('set with mixed mutual and non-mutual options mirrors only mutual ones', () => {
-  it('mirrors add/remove for each mutual option, leaves non-mutual options alone', () => {
-    const store = newStore();
-    const library: TrackLibrary = { custom: [SET_TRACK], optionAdditions: {} };
-    store.setLibrary(library);
-    store.rebuild([noteFile('notes/n1.md', setTrackDirective(A, C, 'allied', 'reconciled'))]);
-
-    const direct = store.ledgersFor(A, 'both').find((l) => l.holder === A && l.observer === C);
-    expect(direct?.deltas).toEqual([expect.objectContaining({ op: 'set', value: ['allied'] })]);
-
-    const mirror = store.ledgersFor(C, 'both').find((l) => l.holder === C && l.observer === A);
-    // Only the two mutual options (allied, sworn-enemy) are mirrored — ally/rival are untouched.
-    expect(mirror?.deltas).toHaveLength(2);
-    expect(mirror?.deltas).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ op: 'add', key: 'allied', mirrored: true }),
-        expect.objectContaining({ op: 'remove', key: 'sworn-enemy', mirrored: true }),
-      ]),
-    );
-  });
-});
-
 const FLIP_TRACK_NON_MUTUAL: CategoricalTrackSpec = {
   kind: 'categorical',
   id: 'cst2',
   name: 'Flip Track',
-  multiple: true,
-  extensible: true,
   options: [{ key: 'friend', label: 'Friend', mutual: false }],
   actions: [
     {
@@ -254,14 +205,14 @@ describe('reverse index recomputes only touched ledgers', () => {
   it('preserves object identity for ledgers untouched by an update', () => {
     const store = newStore();
     store.rebuild([
-      noteFile('notes/n1.md', repChangeDirective(A, C, -2, 'a')),
+      noteFile('notes/n1.md', repSetDirective(A, C, -2, 'a')),
       noteFile('notes/n2.md', tagsGainsDirective('e5f6', 'g7h8', 'member', 'joined')),
     ]);
 
     const untouchedBefore = store.ledgersFor('e5f6', 'holder')[0];
     const touchedBefore = store.ledgersFor(A, 'holder')[0];
 
-    const result = store.updateFile(noteFile('notes/n1.md', repChangeDirective(A, C, -9, 'b')));
+    const result = store.updateFile(noteFile('notes/n1.md', repSetDirective(A, C, -9, 'b')));
 
     const untouchedAfter = store.ledgersFor('e5f6', 'holder')[0];
     const touchedAfter = store.ledgersFor(A, 'holder')[0];

@@ -7,6 +7,7 @@ import {
   resolveTrackSpec,
   validateTrackSpec,
   validateTemplate,
+  compileTrack,
   requiredRoles,
   SYSTEM_TRACKS,
   pf2eReputationSpec,
@@ -21,13 +22,23 @@ import {
   type Ledger,
   type NumericTrackSpec,
   type OrdinalTrackSpec,
-  type CategoricalTrackSpec,
   type TrackValue,
+  type ResolvedTrack,
 } from '../index.js';
 
+function asOrdinal(track: ResolvedTrack): Extract<ResolvedTrack, { kind: 'ordinal' }> {
+  if (track.kind !== 'ordinal') throw new Error('expected an ordinal track');
+  return track;
+}
+
+function asCategorical(track: ResolvedTrack): Extract<ResolvedTrack, { kind: 'categorical' }> {
+  if (track.kind !== 'categorical') throw new Error('expected a categorical track');
+  return track;
+}
+
 const pf2eReputation = resolveTrackSpec(pf2eReputationSpec);
-const attitude = resolveTrackSpec(attitudeSpec);
-const relationshipTags = resolveTrackSpec(relationshipTagsSpec);
+const attitude = asOrdinal(resolveTrackSpec(attitudeSpec));
+const relationshipTags = asCategorical(resolveTrackSpec(relationshipTagsSpec));
 
 function delta(
   partial: Partial<RelationshipDelta> & Pick<RelationshipDelta, 'op'>,
@@ -378,6 +389,7 @@ function applyOpForTest(
 ): TrackValue {
   switch (d.op) {
     case 'adjust':
+      if (track.kind === 'categorical') throw new Error('adjust is not valid for categorical');
       return track.adjust(value, d.by);
     case 'set':
       return track.clamp(d.value);
@@ -415,59 +427,6 @@ describe('multiple-select add/remove are set ops; removing absent is a no-op', (
     const value = relationshipTags.clamp(['member']) as string[];
     const filtered = value.filter((k) => k !== 'hates');
     expect(relationshipTags.clamp(filtered)).toEqual(['member']);
-  });
-});
-
-describe('single-select add replaces current option; set replaces exactly', () => {
-  const singleSelectSpec: CategoricalTrackSpec = {
-    ...relationshipTagsSpec,
-    id: 'ss01',
-    multiple: false,
-  };
-  const singleSelect = resolveTrackSpec(singleSelectSpec);
-
-  it('add replaces the current option', () => {
-    expect(singleSelect.clamp(['member', 'employee'])).toEqual(['employee']);
-  });
-
-  it('set replaces exactly', () => {
-    expect(singleSelect.clamp(['married'])).toEqual(['married']);
-  });
-
-  function ledgerFor(deltas: RelationshipDelta[]): Ledger {
-    return { holder: 'aaaa', observer: 'bbbb', track: singleSelect.id, deltas };
-  }
-
-  it('add replaces the current option via a ledger: married -> add member -> [member]', () => {
-    const ledger = ledgerFor([
-      delta({ op: 'set', value: ['married'], declaredIn: { path: 'a.md', ordinal: 0 } }),
-      delta({ op: 'add', key: 'member', declaredIn: { path: 'a.md', ordinal: 1 } }),
-    ]);
-    expect(currentValue(ledger, singleSelect, Infinity).value).toEqual(['member']);
-  });
-
-  it('add replaces the current option via a ledger: member -> add married -> [married]', () => {
-    const ledger = ledgerFor([
-      delta({ op: 'set', value: ['member'], declaredIn: { path: 'a.md', ordinal: 0 } }),
-      delta({ op: 'add', key: 'married', declaredIn: { path: 'a.md', ordinal: 1 } }),
-    ]);
-    expect(currentValue(ledger, singleSelect, Infinity).value).toEqual(['married']);
-  });
-
-  it('set makes the value exactly the given option', () => {
-    const ledger = ledgerFor([
-      delta({ op: 'set', value: ['member'], declaredIn: { path: 'a.md', ordinal: 0 } }),
-      delta({ op: 'set', value: ['hates'], declaredIn: { path: 'a.md', ordinal: 1 } }),
-    ]);
-    expect(currentValue(ledger, singleSelect, Infinity).value).toEqual(['hates']);
-  });
-
-  it('removing an absent key is a no-op', () => {
-    const ledger = ledgerFor([
-      delta({ op: 'set', value: ['married'], declaredIn: { path: 'a.md', ordinal: 0 } }),
-      delta({ op: 'remove', key: 'member', declaredIn: { path: 'a.md', ordinal: 1 } }),
-    ]);
-    expect(currentValue(ledger, singleSelect, Infinity).value).toEqual(['married']);
   });
 });
 
@@ -510,10 +469,24 @@ describe('option additions append to built-in tags and ignore duplicate keys', (
       },
     };
     const track = resolveTrack(relationshipTagsSpec.id, library);
-    const optionKeys =
-      track?.spec.kind === 'categorical' ? track.spec.options.map((o) => o.key) : [];
+    const optionKeys = track?.kind === 'categorical' ? track.options.map((o) => o.key) : [];
     expect(optionKeys).toContain('rival');
     expect(optionKeys.filter((k) => k === 'married')).toHaveLength(1);
+  });
+});
+
+describe('compileTrack never throws on a malformed spec', () => {
+  it('returns errors instead of throwing for a spec missing required arrays', () => {
+    const malformed = {
+      kind: 'ordinal',
+      id: 'bad1',
+      name: 'Bad',
+      initial: 'x',
+      // `actions` and `rungs` missing entirely.
+    } as unknown as OrdinalTrackSpec;
+    expect(() => compileTrack(malformed)).not.toThrow();
+    const result = compileTrack(malformed);
+    expect('errors' in result).toBe(true);
   });
 });
 

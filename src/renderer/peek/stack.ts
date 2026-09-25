@@ -3,7 +3,7 @@ import { showPeek, type PeekHandle } from './show';
 import { resolvePeekTarget } from './resolve';
 import { buildEntityLabelMap } from '../../shared/entity-labels';
 import { isContextMenuOpen, onContextMenuOpenChange } from '../shared/context-menu';
-import type { TrackLibrary } from '../../shared/relationships';
+import { NOTE_DEFAULT_REASON, type TrackLibrary } from '../../shared/relationships';
 
 const OPEN_DELAY_MS = 150;
 const CLOSE_DELAY_MS = 250;
@@ -95,7 +95,7 @@ function openWindow(path: string, anchor: HTMLElement, depth: number) {
     onOpenById: stackConfig!.onOpenById,
     entityLabels,
     relationshipDirectives: stackConfig!.getRelationshipLibrary
-      ? { library: stackConfig!.getRelationshipLibrary(), defaultReason: 'Unspecified' }
+      ? { library: stackConfig!.getRelationshipLibrary(), defaultReason: NOTE_DEFAULT_REASON }
       : undefined,
     stackDepth: Math.min(depth, MAX_DEPTH - 1),
     onPin: () => {

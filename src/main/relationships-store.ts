@@ -9,7 +9,6 @@
  * underlying parsing/interpretation/value rules this store wires together.
  */
 
-import type { CategoricalTrackSpec } from '../shared/relationships/index.js';
 import type {
   DeltaOp,
   Ledger,
@@ -18,10 +17,12 @@ import type {
 } from '../shared/relationships/index.js';
 import type { ParsedDirective } from '../shared/relationships/index.js';
 import {
+  EMPTY_TRACK_LIBRARY,
   interpretDirective,
   parseDirectives,
   resolveTrack,
 } from '../shared/relationships/index.js';
+import type { InvalidDirectiveEntry, LedgersAs } from '../shared/relationships/ipc-types.js';
 
 /** One file's directive-bearing content, as handed to the store by its caller. */
 export interface RelationshipFileInput {
@@ -36,14 +37,7 @@ export interface RelationshipFileInput {
   epochSeconds?: number | null;
 }
 
-export interface InvalidDirectiveEntry {
-  path: string;
-  /** Absent for a raw parse error, which isn't associated with a well-formed directive. */
-  ordinal?: number;
-  from: number;
-  to: number;
-  messages: string[];
-}
+export type { InvalidDirectiveEntry, LedgersAs };
 
 export interface LedgerKeyTriple {
   holder: string;
@@ -55,9 +49,6 @@ export interface StoreChangeResult {
   touched: LedgerKeyTriple[];
 }
 
-export type LedgersAs = 'holder' | 'observer' | 'both';
-
-const EMPTY_LIBRARY: TrackLibrary = { custom: [], optionAdditions: {} };
 const KEY_SEP = '::';
 
 function ledgerKey(holder: string, observer: string, track: string): string {
@@ -81,7 +72,7 @@ interface ParsedRecord {
 }
 
 export class RelationshipsStore {
-  private library: TrackLibrary = EMPTY_LIBRARY;
+  private library: TrackLibrary = EMPTY_TRACK_LIBRARY;
   private knownNoteIds = new Set<string>();
   private fileInputs = new Map<string, RelationshipFileInput>();
   private ledgerObjects = new Map<string, Ledger>();
@@ -114,7 +105,7 @@ export class RelationshipsStore {
 
   /** Resets the store to a blank slate: no files, default (empty) library, no known notes. */
   clear(): void {
-    this.library = EMPTY_LIBRARY;
+    this.library = EMPTY_TRACK_LIBRARY;
     this.knownNoteIds = new Set();
     this.fileInputs = new Map();
     this.ledgerObjects = new Map();
@@ -239,6 +230,9 @@ export class RelationshipsStore {
       const interpreted = interpretDirective(d, {
         resolveTrack: (id) => resolveTrack(id, this.library),
         isKnownNote: (id) => this.knownNoteIds.has(id),
+        // Notes have no order — Change/Shift/Remove are event-only. See
+        // src/shared/relationships/AGENTS.md.
+        undated: !isEvent,
       });
 
       if (interpreted.status === 'unfinished') continue;
@@ -263,11 +257,10 @@ export class RelationshipsStore {
 
       const track = resolveTrack(trackId, this.library);
       if (track && track.kind === 'categorical') {
-        const spec = track.spec as CategoricalTrackSpec;
         const mirrorKey = ledgerKey(observer, holder, trackId);
 
         if (op.op === 'add' || op.op === 'remove') {
-          const optSpec = spec.options.find((o) => o.key === op.key);
+          const optSpec = track.optionFor(op.key);
           if (optSpec?.mutual) {
             const mirrorDelta: RelationshipDelta = {
               ...op,
@@ -280,8 +273,11 @@ export class RelationshipsStore {
             pushTo(additions, mirrorKey, mirrorDelta);
           }
         } else if (op.op === 'set') {
+          // Defensive: no track can define a categorical Set action (see
+          // AGENTS.md), so directive interpretation never produces this op
+          // here — kept for any non-directive caller that might.
           const setKeys = Array.isArray(op.value) ? op.value : [String(op.value)];
-          for (const optSpec of spec.options) {
+          for (const optSpec of track.options) {
             if (!optSpec.mutual) continue;
             const mirrorOp: DeltaOp = setKeys.includes(optSpec.key)
               ? { op: 'add', key: optSpec.key }

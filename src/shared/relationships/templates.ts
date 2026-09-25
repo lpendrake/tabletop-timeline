@@ -47,9 +47,9 @@ export function requiredRoles(kind: ActionKind, trackKind: TrackKind): Role[] {
     return [];
   }
   if (kind === 'set') {
-    if (trackKind === 'categorical') {
-      return ['holder', 'observer', 'option', 'reason'];
-    }
+    // Categorical tracks have no Set action — Add/Remove are how a
+    // categorical value changes. See AGENTS.md's notes-vs-events invariant.
+    if (trackKind === 'categorical') return [];
     return ['holder', 'observer', 'value', 'reason'];
   }
   if (kind === 'add' || kind === 'remove') {
@@ -63,7 +63,7 @@ export function requiredRoles(kind: ActionKind, trackKind: TrackKind): Role[] {
 
 /** Whether an action kind is meaningful on a track kind at all. */
 function isKindValidForTrack(kind: ActionKind, trackKind: TrackKind): boolean {
-  if (kind === 'set') return true;
+  if (kind === 'set') return trackKind === 'numeric' || trackKind === 'ordinal';
   if (kind === 'adjust') return trackKind === 'numeric' || trackKind === 'ordinal';
   if (kind === 'add' || kind === 'remove') return trackKind === 'categorical';
   return false;

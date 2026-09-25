@@ -4,11 +4,12 @@
  * ledger? Used by both the main-process index and the editor.
  */
 
-import { Role } from '../spec.js';
+import { ActionKind, Role } from '../spec.js';
 import { DeltaOp } from '../model.js';
 import { requiredRoles } from '../templates.js';
-import { ResolvedTrack } from '../resolve.js';
-import { ParsedDirective, noteIdOf, noteRoleValue, roleValue } from './parse.js';
+import { ResolvedAction, ResolvedTrack } from '../resolve.js';
+import { ParsedDirective, missingRoles, noteIdOf, noteRoleValue, roleValue } from './parse.js';
+import { validateRoleValue } from './validate-value.js';
 
 export type DirectiveProblemCode =
   | 'unknown-track'
@@ -17,7 +18,25 @@ export type DirectiveProblemCode =
   | 'unknown-option'
   | 'unknown-rung'
   | 'wrong-type'
-  | 'zero-amount';
+  | 'zero-amount'
+  | 'not-allowed-in-note';
+
+/** Action kinds allowed in a note (undated) vs an event — see AGENTS.md. */
+const NOTE_ONLY_DISALLOWED: ReadonlySet<ActionKind> = new Set(['adjust', 'remove']);
+
+function isActionAllowed(action: ResolvedAction, place: 'note' | 'event'): boolean {
+  if (place === 'event') return true;
+  return !NOTE_ONLY_DISALLOWED.has(action.kind);
+}
+
+/**
+ * The actions a track offers in a note vs an event: a note has no order, so
+ * Change/Shift (`adjust`) and Remove are event-only — a note may only Set
+ * (numeric/ordinal) or Add (tags).
+ */
+export function allowedActions(track: ResolvedTrack, place: 'note' | 'event'): ResolvedAction[] {
+  return track.actions.filter((a) => isActionAllowed(a, place));
+}
 
 export interface DirectiveProblem {
   role?: Role;
@@ -41,14 +60,13 @@ export type InterpretedDirective =
 export interface InterpretContext {
   resolveTrack: (id: string) => ResolvedTrack | null;
   isKnownNote?: (id: string) => boolean;
-}
-
-function missingRequired(d: ParsedDirective, required: Role[]): Role[] {
-  return required.filter((role) => {
-    if (role === 'reason') return false;
-    const value = roleValue(d, role);
-    return value === undefined || value === '';
-  });
+  /**
+   * True when this directive is declared directly on a note (undated) rather
+   * than an event. A note has no order, so Change/Shift (`adjust`) and
+   * Remove are rejected there — see AGENTS.md. Defaults to `false` (event
+   * context) when omitted.
+   */
+  undated?: boolean;
 }
 
 function checkNoteRole(
@@ -72,12 +90,6 @@ function checkNoteRole(
     return null;
   }
   return noteId;
-}
-
-function parseAmount(value: string): number | null {
-  if (!/^[+-]?\d+(\.\d+)?$/.test(value.trim())) return null;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
 }
 
 export function interpretDirective(
@@ -107,8 +119,22 @@ export function interpretDirective(
     };
   }
 
+  const place: 'note' | 'event' = ctx.undated ? 'note' : 'event';
+  if (!isActionAllowed(action, place)) {
+    return {
+      status: 'invalid',
+      directive: d,
+      problems: [
+        {
+          code: 'not-allowed-in-note',
+          message: "Notes have no order, so this can't be used here. Use an event.",
+        },
+      ],
+    };
+  }
+
   const required = requiredRoles(action.kind, track.kind);
-  const missing = missingRequired(d, required);
+  const missing = missingRoles(d, required);
   if (missing.length > 0) {
     return { status: 'unfinished', directive: d, missing };
   }
@@ -123,32 +149,17 @@ export function interpretDirective(
 
   if (action.kind === 'adjust') {
     const raw = roleValue(d, 'amount') ?? '';
-    const amount = parseAmount(raw);
-    if (amount === null) {
-      problems.push({ role: 'amount', code: 'wrong-type', message: `"${raw}" is not a number` });
-    } else if (amount === 0) {
-      problems.push({
-        role: 'amount',
-        code: 'zero-amount',
-        message: 'Amount cannot be zero',
-      });
+    const result = validateRoleValue('amount', raw, track);
+    if (!result.ok) {
+      const code = result.message === 'Amount cannot be zero' ? 'zero-amount' : 'wrong-type';
+      problems.push({ role: 'amount', code, message: result.message });
     } else {
-      op = { op: 'adjust', by: amount };
+      op = { op: 'adjust', by: result.value };
     }
   } else if (action.kind === 'set') {
-    if (track.kind === 'categorical') {
-      const raw = roleValue(d, 'option') ?? '';
-      const known = track.optionFor(raw);
-      if (!known) {
-        problems.push({
-          role: 'option',
-          code: 'unknown-option',
-          message: `Unknown option "${raw}" for ${track.name}`,
-        });
-      } else {
-        op = { op: 'set', value: [raw] };
-      }
-    } else if (track.kind === 'ordinal') {
+    // Categorical has no Set action (enforced by requiredRoles/templates), so
+    // this branch is only ever reached for numeric/ordinal.
+    if (track.kind === 'ordinal') {
       const raw = roleValue(d, 'value') ?? '';
       if (track.rungIndex(raw) < 0) {
         problems.push({
@@ -161,20 +172,14 @@ export function interpretDirective(
       }
     } else {
       const raw = roleValue(d, 'value') ?? '';
-      const amount = parseAmount(raw);
-      if (amount === null) {
-        problems.push({ role: 'value', code: 'wrong-type', message: `"${raw}" is not a number` });
-      } else if (!track.isValidValue(amount)) {
-        problems.push({
-          role: 'value',
-          code: 'wrong-type',
-          message: `${amount} is out of range for ${track.name}`,
-        });
+      const result = validateRoleValue('value', raw, track);
+      if (!result.ok) {
+        problems.push({ role: 'value', code: 'wrong-type', message: result.message });
       } else {
-        op = { op: 'set', value: amount };
+        op = { op: 'set', value: result.value };
       }
     }
-  } else {
+  } else if (track.kind === 'categorical') {
     // add / remove — categorical only, enforced by requiredRoles/templates.
     const raw = roleValue(d, 'option') ?? '';
     const known = track.optionFor(raw);

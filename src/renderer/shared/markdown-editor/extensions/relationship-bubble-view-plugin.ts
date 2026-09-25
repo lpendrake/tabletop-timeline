@@ -12,10 +12,10 @@ import type { Extension } from '@codemirror/state';
 import {
   parseDirectives,
   resolveTrack,
-  extractBlanks,
   roleValue,
   noteIdOf,
   noteRoleValue,
+  promptFor,
   type ParsedDirective,
   type Role,
   type TrackLibrary,
@@ -59,11 +59,6 @@ export interface RelationshipBubbleHostContext {
     observer: string | null;
     anchor: number;
   }) => string[];
-}
-
-function promptFor(role: Role, template: string): string {
-  const blank = extractBlanks(template).find((b) => b.role === role);
-  return blank?.prompt || `Choose ${role}`;
 }
 
 function noteIdFor(d: ParsedDirective, role: Role): string | null {
@@ -167,7 +162,7 @@ class RelationshipBubblePlugin {
     const track = resolveTrack(directive.trackId, ctx.library);
     const action = track?.action(directive.actionKey);
     const value = roleValue(directive, role) ?? '';
-    const prompt = action ? promptFor(role, action.template) : `Choose ${role}`;
+    const prompt = action ? promptFor(role, action.template) : `choose ${role}`;
 
     const holderId = noteIdFor(directive, 'holder');
     const observerId = noteIdFor(directive, 'observer');

@@ -10,6 +10,9 @@ import { ResolvedTrack } from '../resolve.js';
 import { ParsedDirective, noteIdOf } from './parse.js';
 import { DirectiveProblem } from './interpret.js';
 
+/** The default reason shown when a directive's `reason` blank is empty and lives on a note. */
+export const NOTE_DEFAULT_REASON = 'Unspecified';
+
 export type ReadablePart =
   | { kind: 'text'; text: string }
   | {
@@ -32,7 +35,8 @@ export interface ReadableContext {
   problems?: DirectiveProblem[];
 }
 
-function promptFor(role: Role, template: string): string {
+/** The prompt a blank shows when empty: its template `{role:Prompt}` text, or `choose <role>`. */
+export function promptFor(role: Role, template: string): string {
   const blank = extractBlanks(template).find((b) => b.role === role);
   if (blank?.prompt) return blank.prompt;
   return `choose ${role}`;
@@ -165,7 +169,7 @@ export function readableParts(d: ParsedDirective, ctx: ReadableContext): Readabl
     }
 
     if (role === 'option') {
-      const option = track.optionFor(value);
+      const option = track.kind === 'categorical' ? track.optionFor(value) : undefined;
       parts.push({
         kind: 'value',
         role,

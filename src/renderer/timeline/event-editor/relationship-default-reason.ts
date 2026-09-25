@@ -1,4 +1,5 @@
 import { effectiveTitle, type EditorBuffer } from './domain';
+import { NOTE_DEFAULT_REASON } from '../../../shared/relationships';
 
 /**
  * The default `reason` the relationship editor menu/bubble fill in for
@@ -8,5 +9,5 @@ import { effectiveTitle, type EditorBuffer } from './domain';
  * was opened.
  */
 export function eventRelationshipDefaultReason(buf: EditorBuffer): string {
-  return effectiveTitle(buf) || 'Unspecified';
+  return effectiveTitle(buf) || NOTE_DEFAULT_REASON;
 }

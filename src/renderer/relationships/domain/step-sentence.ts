@@ -12,7 +12,7 @@ import type {
   ResolvedTrack,
   Ledger,
 } from '../../../shared/relationships';
-import { readableParts } from '../../../shared/relationships';
+import { NOTE_DEFAULT_REASON, readableParts } from '../../../shared/relationships';
 import type { StepRow } from './step-rows';
 
 export interface ParsedFile {
@@ -43,8 +43,8 @@ export function buildStepSentence(
   if (!directive) return null;
 
   const defaultReason = isEventPath(step.declaredIn.path)
-    ? (parsedFile.title ?? 'Unspecified')
-    : 'Unspecified';
+    ? (parsedFile.title ?? NOTE_DEFAULT_REASON)
+    : NOTE_DEFAULT_REASON;
 
   const parts = readableParts(directive, { track, labelForNote, defaultReason });
 

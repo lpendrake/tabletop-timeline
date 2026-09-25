@@ -51,11 +51,14 @@ afterEach(() => {
 
 const DIRECTIVE =
   '{{rp01.change Rep change: {amount:-2} {observer:[[a1b2]]} rep for {holder:[[c3d4]]} — {reason:attacked}}}';
+// A note has no order, so only Set/Add are allowed there — Change (adjust) is event-only.
+const NOTE_DIRECTIVE =
+  "{{rp01.set Rep set: {holder:[[c3d4]]}'s rep with {observer:[[a1b2]]} is {value:5} — {reason:attacked}}}";
 
 describe('open, close and reopen carries no state over', () => {
   it("holds only the currently-open campaign's data", () => {
     const campaignA = makeCampaign();
-    writeNote(campaignA, 'a.md', DIRECTIVE);
+    writeNote(campaignA, 'a.md', NOTE_DIRECTIVE);
     buildRelationshipIndex(campaignA, EMPTY_LIBRARY, ['a1b2', 'c3d4']);
     expect(getRelationshipsStore().ledgers().length).toBeGreaterThan(0);
 
@@ -87,7 +90,7 @@ describe('invalid directives are retained and surfaced in load messages', () => 
 describe('buildRelationshipIndex summary', () => {
   it('counts one directive per source (not per mirror), across notes and dated events', () => {
     const campaign = makeCampaign();
-    writeNote(campaign, 'a.md', DIRECTIVE);
+    writeNote(campaign, 'a.md', NOTE_DIRECTIVE);
     writeEvent(campaign, '0001-001-e.md', 500, DIRECTIVE);
     writeEvent(campaign, '0001-002-undated.md', null, DIRECTIVE);
 

@@ -31,8 +31,9 @@ export { ROLES, isRole, extractBlanks, requiredRoles, validateTemplate } from '.
 export type {
   ResolvedAction,
   ResolvedTrack,
-  NumericPosition,
-  OrdinalPosition,
+  NumericTrack,
+  OrdinalTrack,
+  TagTrack,
   SpecError,
   SpecValidationResult,
 } from './resolve.js';
@@ -63,7 +64,7 @@ export {
 
 // Registry
 export type { TrackLibrary } from './registry.js';
-export { resolveTrack, listTracks, withOptionAdditions } from './registry.js';
+export { resolveTrack, listTracks, withOptionAdditions, EMPTY_TRACK_LIBRARY } from './registry.js';
 
 // Directives (parsing, serialisation, semantic resolution, readable sentences)
 export type {
@@ -78,16 +79,27 @@ export type {
   InterpretContext,
   ReadablePart,
   ReadableContext,
+  ValueValidation,
 } from './directives/index.js';
 export {
   parseDirectives,
   roleValue,
   isUnfinished,
+  missingRoles,
   noteIdOf,
   noteRoleValue,
   serialiseDirective,
   serialiseTemplate,
   setRoleValueChange,
+  sanitiseValue,
   interpretDirective,
+  allowedActions,
   readableParts,
+  promptFor,
+  NOTE_DEFAULT_REASON,
+  validateRoleValue,
+  STRICT_DECIMAL_RE,
 } from './directives/index.js';
+
+// IPC contract types (shared shape between main and renderer)
+export type { InvalidDirectiveEntry, LedgersAs, AddOptionResult } from './ipc-types.js';

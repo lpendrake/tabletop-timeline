@@ -29,6 +29,8 @@ import {
   interpretDirective,
   readableParts,
   resolveTrack,
+  EMPTY_TRACK_LIBRARY,
+  NOTE_DEFAULT_REASON,
   type ParsedDirective,
   type ReadablePart,
   type Role,
@@ -36,6 +38,7 @@ import {
 } from '../../../../shared/relationships';
 import { entityLabelMapField, setEntityLabels } from './wiki-links';
 import { openDirectiveBubble } from './relationship-bubble-state';
+import { firstOf } from './relationship-bubble-logic';
 
 export interface RelationshipDirectivesConfig {
   readOnly?: boolean;
@@ -53,8 +56,10 @@ interface DirectiveContext {
   defaultReason: string;
 }
 
-const EMPTY_LIBRARY: TrackLibrary = { custom: [], optionAdditions: {} };
-const DEFAULT_CONTEXT: DirectiveContext = { library: EMPTY_LIBRARY, defaultReason: 'Unspecified' };
+const DEFAULT_CONTEXT: DirectiveContext = {
+  library: EMPTY_TRACK_LIBRARY,
+  defaultReason: NOTE_DEFAULT_REASON,
+};
 
 /** Dispatch to push the resolved track library and the host's default reason into the editor. */
 export const setDirectiveContext = StateEffect.define<DirectiveContext>();
@@ -76,9 +81,7 @@ type ValuePart = Extract<ReadablePart, { kind: 'value' }>;
 /** Picks the field a click on the wording (or an Enter on a selected block) should target. */
 export function firstEditRole(parts: ReadablePart[]): Role | null {
   const values = parts.filter((p): p is ValuePart => p.kind === 'value');
-  const empty = values.find((p) => p.empty);
-  if (empty) return empty.role;
-  return values[0]?.role ?? null;
+  return firstOf(values, (p) => p.empty)?.role ?? null;
 }
 
 /**
@@ -107,6 +110,12 @@ function buildDirectiveView(
   const track = resolveDirectiveTrack(d.trackId, library);
   const interpreted = interpretDirective(d, {
     resolveTrack: (id) => resolveDirectiveTrack(id, library),
+    // This preview doesn't yet know whether its host document is a note or
+    // an event (that wiring is out of scope here — see AGENTS.md's
+    // notes-vs-events invariant, enforced for real by the main store, which
+    // does know); default to the permissive event context so existing
+    // editor behaviour is unaffected.
+    undated: false,
   });
 
   if (interpreted.status === 'invalid') {

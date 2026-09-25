@@ -33,14 +33,42 @@ describe('readTrackLibrary', () => {
     expect(readTrackLibrary(dir)).toEqual({ custom: [], optionAdditions: {} });
   });
 
+  it('drops a custom entry missing required shape rather than throwing', () => {
+    const dir = makeTmpDir();
+    const raw = {
+      custom: [
+        // Missing `actions` entirely.
+        { kind: 'categorical', id: 'bad1', name: 'Bad Track', options: [] },
+        // Categorical missing `options`.
+        { kind: 'categorical', id: 'bad2', name: 'Bad Track 2', actions: [] },
+        // Well-formed — should survive filtering.
+        { kind: 'categorical', id: 'good', name: 'Good Track', options: [], actions: [] },
+        // Not even an object.
+        'garbage',
+      ],
+      optionAdditions: {
+        [RELATIONSHIP_TAGS_ID]: [
+          { key: 'ok', label: 'ok', mutual: false },
+          { key: 'missing-mutual', label: 'x' }, // dropped: no `mutual`
+          'garbage',
+        ],
+      },
+    };
+    fs.writeFileSync(path.join(dir, 'relationship-tracks.json'), JSON.stringify(raw));
+
+    const library = readTrackLibrary(dir);
+    expect(library.custom.map((t) => t.id)).toEqual(['good']);
+    expect(library.optionAdditions[RELATIONSHIP_TAGS_ID]).toEqual([
+      { key: 'ok', label: 'ok', mutual: false },
+    ]);
+  });
+
   it('round-trips a written library', () => {
     const dir = makeTmpDir();
     const custom: CategoricalTrackSpec = {
       kind: 'categorical',
       id: 'cst1',
       name: 'Custom Track',
-      multiple: true,
-      extensible: true,
       options: [{ key: 'ally', label: 'Ally', mutual: true }],
       actions: [],
     };
@@ -83,8 +111,6 @@ describe('addOption', () => {
       kind: 'categorical',
       id: 'cst1',
       name: 'Custom Track',
-      multiple: true,
-      extensible: true,
       options: [{ key: 'ally', label: 'Ally', mutual: false }],
       actions: [],
     };
@@ -111,22 +137,5 @@ describe('addOption', () => {
     const dir = makeTmpDir();
     const result = addOption(dir, PF2E_REPUTATION_ID, { label: 'X', mutual: false });
     expect(result).toEqual({ ok: false, reason: 'not-categorical' });
-  });
-
-  it('rejects a non-extensible categorical track', () => {
-    const dir = makeTmpDir();
-    const custom: CategoricalTrackSpec = {
-      kind: 'categorical',
-      id: 'cst2',
-      name: 'Locked Track',
-      multiple: false,
-      extensible: false,
-      options: [{ key: 'a', label: 'A', mutual: false }],
-      actions: [],
-    };
-    writeTrackLibrary(dir, { custom: [custom], optionAdditions: {} });
-
-    const result = addOption(dir, 'cst2', { label: 'B', mutual: false });
-    expect(result).toEqual({ ok: false, reason: 'not-extensible' });
   });
 });

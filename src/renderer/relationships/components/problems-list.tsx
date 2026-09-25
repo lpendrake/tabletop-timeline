@@ -1,4 +1,4 @@
-import type { InvalidDirectiveEntry } from '../../../main/relationships-store';
+import type { InvalidDirectiveEntry } from '../../../shared/relationships';
 import type { EntityIndexEntry } from '../../../types/global';
 import { resolveStepOpenTarget } from '../domain';
 

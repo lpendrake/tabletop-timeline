@@ -41,6 +41,7 @@ import {
   type RelationshipBubbleHostContext,
 } from './extensions/relationship-bubble-view-plugin';
 import { formattingKeymap } from './commands';
+import { EMPTY_TRACK_LIBRARY, NOTE_DEFAULT_REASON } from '../../../shared/relationships';
 import type { TrackLibrary, Role } from '../../../shared/relationships';
 import type { PickerOption } from '../searchable-picker';
 
@@ -144,14 +145,12 @@ export interface MarkdownEditorProps {
   initialCursor?: number;
 }
 
-const EMPTY_LIBRARY: TrackLibrary = { custom: [], optionAdditions: {} };
-
 function makeBubbleHostContext(
   config: RelationshipDirectivesHostConfig | undefined,
 ): RelationshipBubbleHostContext {
   return {
-    library: config?.library ?? EMPTY_LIBRARY,
-    defaultReason: config?.defaultReason ?? 'Unspecified',
+    library: config?.library ?? EMPTY_TRACK_LIBRARY,
+    defaultReason: config?.defaultReason ?? NOTE_DEFAULT_REASON,
     noteOptions: () => config?.bubbles?.noteOptions() ?? [],
     defaultHolderId: () => config?.bubbles?.defaultHolderId?.() ?? null,
     currentNoteId: () => config?.bubbles?.currentNoteId?.() ?? null,
@@ -372,8 +371,8 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     if (view && !isSourceMode) {
       view.dispatch({
         effects: setDirectiveContext.of({
-          library: relationshipDirectivesConfig?.library ?? { custom: [], optionAdditions: {} },
-          defaultReason: relationshipDirectivesConfig?.defaultReason ?? 'Unspecified',
+          library: relationshipDirectivesConfig?.library ?? EMPTY_TRACK_LIBRARY,
+          defaultReason: relationshipDirectivesConfig?.defaultReason ?? NOTE_DEFAULT_REASON,
         }),
       });
     }

@@ -16,6 +16,7 @@ import { buildRelationshipIndex } from './relationships-index.js';
 import { getRelationshipsStore } from './relationships-store.js';
 import { readRootDir } from './settings/root-dir.js';
 import { readTrackLibrary } from './settings/relationship-tracks.js';
+import { EMPTY_TRACK_LIBRARY } from '../shared/relationships/index.js';
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -71,7 +72,7 @@ app.whenReady().then(() => {
         name: 'Building relationship index',
         task: async (onProgress) => {
           const rootDir = readRootDir();
-          const library = rootDir ? readTrackLibrary(rootDir) : { custom: [], optionAdditions: {} };
+          const library = rootDir ? readTrackLibrary(rootDir) : EMPTY_TRACK_LIBRARY;
           const knownNoteIds = entityIndex.filter((e) => e.type === 'note').map((e) => e.id);
           return buildRelationshipIndex(resolvedPath, library, knownNoteIds, onProgress);
         },

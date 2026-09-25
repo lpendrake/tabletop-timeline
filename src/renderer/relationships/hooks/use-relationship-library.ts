@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { TrackLibrary } from '../../../shared/relationships';
+import { EMPTY_TRACK_LIBRARY, type TrackLibrary } from '../../../shared/relationships';
 import { relationshipsData } from '../data';
-
-const EMPTY_LIBRARY: TrackLibrary = { custom: [], optionAdditions: {} };
 
 /**
  * Loads the workspace's track library and keeps it fresh, reloading
@@ -11,7 +9,7 @@ const EMPTY_LIBRARY: TrackLibrary = { custom: [], optionAdditions: {} };
  * menu or fill-in bubbles needs this.
  */
 export function useRelationshipLibrary(): TrackLibrary {
-  const [library, setLibrary] = useState<TrackLibrary>(EMPTY_LIBRARY);
+  const [library, setLibrary] = useState<TrackLibrary>(EMPTY_TRACK_LIBRARY);
 
   useEffect(() => {
     let active = true;
