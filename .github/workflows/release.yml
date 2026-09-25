@@ -1,21 +1,46 @@
-name: Build and Release
+# Keeps one draft release up to date with the latest main.
+#
+# Every merge to main builds the installer and uploads it to a draft release
+# for the next version (the latest published release, bumped by one). Merges
+# before you publish all land on the same draft, replacing its files.
+#
+# To release: open the draft on GitHub, write the notes, and click Publish.
+# Publishing creates the tag on the commit the installer was built from.
+#
+# To jump to a specific version (e.g. 0.2.0 or 1.0.0), run this workflow
+# manually from the Actions tab with a version override. Delete any draft
+# left over for the old version.
+#
+# The version in package.json is a 0.0.0-dev placeholder and is never used
+# for releases.
+
+name: Release
 
 on:
   push:
     branches:
       - main
-    tags:
-      - 'v*'
-  pull_request:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version override, e.g. 0.2.0 (leave blank to bump the latest release)'
+        required: false
+        default: ''
+
+# A newer merge supersedes an in-progress build of the same draft.
+concurrency:
+  group: release
+  cancel-in-progress: true
 
 jobs:
-  build:
+  draft:
     runs-on: windows-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     permissions:
-      contents: write # Needed to create GitHub Releases
+      contents: write # Needed to create and update GitHub Releases
 
     steps:
       - name: Checkout code
@@ -28,27 +53,34 @@ jobs:
           cache: 'npm'
           cache-dependency-path: package-lock.json
 
+      - name: Work out next version
+        id: version
+        shell: bash
+        env:
+          OVERRIDE: ${{ inputs.version }}
+        run: |
+          latest=$(gh release list --exclude-drafts --limit 1 --json tagName --jq '.[0].tagName')
+          version=$(node scripts/next-version.mjs "$latest" "$OVERRIDE")
+          echo "Latest published release: $latest"
+          echo "Draft version: $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - name: Install dependencies
         run: npm ci
 
       - name: Lint check
         run: npm run lint
 
-      - name: Build (Dev / PR)
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        run: npm run package:test
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and upload to draft release
+        shell: bash
+        run: npm run package:publish -- -c.extraMetadata.version="${{ steps.version.outputs.version }}"
 
-      - name: Upload Artifacts (Dev / PR)
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-executable
-          path: release/*.exe
-
-      - name: Build and Publish Release
-        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
-        run: npm run package:publish
+      - name: Point draft at this commit
+        shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # Alpha/beta/rc versions stay prereleases, like earlier releases.
+          prerelease=false
+          [[ "$VERSION" == *-* ]] && prerelease=true
+          gh release edit "v$VERSION" --target "$GITHUB_SHA" --prerelease="$prerelease"
