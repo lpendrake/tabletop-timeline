@@ -3,15 +3,18 @@ import * as path from 'node:path';
 import { BrowserWindow } from 'electron';
 import * as chokidar from 'chokidar';
 import { indexSingleEntity, ASSET_EXTENSIONS } from './entity-index.js';
-import { parseNote } from '../shared/frontmatter.js';
-import { parseEventFile, SAFE_FILENAME_RE } from './timelineIpcHandlers.js';
+import { SAFE_FILENAME_RE } from './timelineIpcHandlers.js';
+import { readRelationshipFileInput } from './relationships-index.js';
 import { getRelationshipsStore } from './relationships-store.js';
+import type { StoreChangeResult } from './relationships-store.js';
+
+function shouldNotify(result: StoreChangeResult): boolean {
+  return result.touched.length > 0 || result.invalidChanged || result.knownNotesChanged;
+}
 
 export class FileWatcher {
   private watcher: chokidar.FSWatcher | null = null;
   private campaignPath = '';
-  /** notes/<rel>.md -> frontmatter id, kept so an unlink can drop it from the relationships store's known-note set. */
-  private noteIdsByPath = new Map<string, string>();
 
   public async start(campaignPath: string, mainWindow: BrowserWindow) {
     this.stop();
@@ -62,7 +65,7 @@ export class FileWatcher {
     mainWindow.webContents.send('entity:indexDelta', { op, entry });
   }
 
-  /** Keeps the relationship store's directive index (and known-note-id set) current as files change. */
+  /** Keeps the relationship store current as files change; notifies the renderer only when something actually changed. */
   private pushRelationshipsDelta(
     filePath: string,
     op: 'update' | 'remove',
@@ -77,44 +80,24 @@ export class FileWatcher {
     const store = getRelationshipsStore();
 
     if (op === 'remove') {
-      store.removeFile(rel);
-      if (isNote) {
-        const id = this.noteIdsByPath.get(rel);
-        if (id) {
-          store.removeKnownNoteId(id);
-          this.noteIdsByPath.delete(rel);
-        }
+      const result = store.removeFile(rel);
+      if (shouldNotify(result)) {
+        mainWindow.webContents.send('relationships:changed', { paths: [rel] });
       }
-      mainWindow.webContents.send('relationships:changed', { paths: [rel] });
       return;
     }
 
     if (!fs.existsSync(filePath)) return;
+    if (isEvent && !SAFE_FILENAME_RE.test(path.basename(filePath))) return;
 
-    if (isEvent) {
-      if (!SAFE_FILENAME_RE.test(path.basename(filePath))) return;
-      const { event } = parseEventFile(filePath, path.basename(filePath));
-      store.updateFile({
-        path: rel,
-        source: event.body,
-        title: event.title,
-        isEvent: true,
-        epochSeconds: event.epochSeconds ?? null,
-      });
-    } else {
-      const content = fs.readFileSync(filePath, 'utf-8');
-      const fallbackTitle = path.basename(filePath, '.md');
-      const { frontmatter, body } = parseNote(content, fallbackTitle);
-      this.noteIdsByPath.set(rel, frontmatter.id);
-      store.addKnownNoteId(frontmatter.id);
-      store.updateFile({ path: rel, source: body, title: frontmatter.title, isEvent: false });
+    const input = readRelationshipFileInput(this.campaignPath, rel);
+    const result = store.updateFile(input);
+    if (shouldNotify(result)) {
+      mainWindow.webContents.send('relationships:changed', { paths: [rel] });
     }
-
-    mainWindow.webContents.send('relationships:changed', { paths: [rel] });
   }
 
   public stop() {
-    this.noteIdsByPath.clear();
     if (this.watcher) {
       this.watcher.close();
       this.watcher = null;

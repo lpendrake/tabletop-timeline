@@ -73,8 +73,10 @@ app.whenReady().then(() => {
         task: async (onProgress) => {
           const rootDir = readRootDir();
           const library = rootDir ? readTrackLibrary(rootDir) : EMPTY_TRACK_LIBRARY;
-          const knownNoteIds = entityIndex.filter((e) => e.type === 'note').map((e) => e.id);
-          return buildRelationshipIndex(resolvedPath, library, knownNoteIds, onProgress);
+          const knownNotes = entityIndex
+            .filter((e) => e.type === 'note')
+            .map((e) => ({ path: e.path, id: e.id }));
+          return buildRelationshipIndex(resolvedPath, library, knownNotes, onProgress);
         },
       },
     ]);

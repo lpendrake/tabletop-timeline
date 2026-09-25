@@ -162,6 +162,8 @@ declare global {
       getDefaultReputationHolder: () => Promise<string | null>;
       setDefaultReputationHolder: (id: string | null) => Promise<void>;
       onRelationshipsChanged: (callback: (data: { paths: string[] }) => void) => () => void;
+      onRelationshipLibraryChanged: (callback: () => void) => () => void;
+      onRelationshipDefaultHolderChanged: (callback: (id: string | null) => void) => () => void;
     };
   }
 }

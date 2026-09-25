@@ -8,7 +8,7 @@ vi.mock('electron', () => ({
   shell: { trashItem: vi.fn() },
 }));
 
-import { buildRelationshipIndex } from '../relationships-index.js';
+import { buildRelationshipIndex, readRelationshipFileInput } from '../relationships-index.js';
 import { getRelationshipsStore } from '../relationships-store.js';
 
 const EMPTY_LIBRARY = { custom: [], optionAdditions: {} };
@@ -59,7 +59,10 @@ describe('open, close and reopen carries no state over', () => {
   it("holds only the currently-open campaign's data", () => {
     const campaignA = makeCampaign();
     writeNote(campaignA, 'a.md', NOTE_DIRECTIVE);
-    buildRelationshipIndex(campaignA, EMPTY_LIBRARY, ['a1b2', 'c3d4']);
+    buildRelationshipIndex(campaignA, EMPTY_LIBRARY, [
+      { path: 'notes/a1b2.md', id: 'a1b2' },
+      { path: 'notes/c3d4.md', id: 'c3d4' },
+    ]);
     expect(getRelationshipsStore().ledgers().length).toBeGreaterThan(0);
 
     // simulate campaign:close
@@ -81,9 +84,38 @@ describe('invalid directives are retained and surfaced in load messages', () => 
       '{{rp99.change Rep change: {amount:-2} {observer:[[a1b2]]} rep for {holder:[[c3d4]]} — {reason:x}}}';
     writeNote(campaign, 'bad.md', badDirective);
 
-    const summary = buildRelationshipIndex(campaign, EMPTY_LIBRARY, ['a1b2', 'c3d4']);
+    const summary = buildRelationshipIndex(campaign, EMPTY_LIBRARY, [
+      { path: 'notes/a1b2.md', id: 'a1b2' },
+      { path: 'notes/c3d4.md', id: 'c3d4' },
+    ]);
     expect(summary).toMatch(/rp99/);
     expect(getRelationshipsStore().invalid()).toHaveLength(1);
+  });
+});
+
+describe('readRelationshipFileInput', () => {
+  it('reads a note, returning its frontmatter id and title as isEvent: false', () => {
+    const campaign = makeCampaign();
+    writeNote(campaign, 'a.md', NOTE_DIRECTIVE);
+
+    const input = readRelationshipFileInput(campaign, 'notes/a.md');
+    expect(input.path).toBe('notes/a.md');
+    expect(input.isEvent).toBe(false);
+    expect(input.noteId).toBe('n001');
+    expect(input.title).toBe('Note');
+    expect(input.source).toContain(NOTE_DIRECTIVE);
+  });
+
+  it('reads an event, returning its epochSeconds and title as isEvent: true', () => {
+    const campaign = makeCampaign();
+    writeEvent(campaign, '0001-001-e.md', 500, DIRECTIVE);
+
+    const input = readRelationshipFileInput(campaign, 'timeline/0001-001-e.md');
+    expect(input.path).toBe('timeline/0001-001-e.md');
+    expect(input.isEvent).toBe(true);
+    expect(input.epochSeconds).toBe(500);
+    expect(input.title).toBe('Event');
+    expect(input.source).toContain(DIRECTIVE);
   });
 });
 
@@ -94,7 +126,10 @@ describe('buildRelationshipIndex summary', () => {
     writeEvent(campaign, '0001-001-e.md', 500, DIRECTIVE);
     writeEvent(campaign, '0001-002-undated.md', null, DIRECTIVE);
 
-    const summary = buildRelationshipIndex(campaign, EMPTY_LIBRARY, ['a1b2', 'c3d4']);
+    const summary = buildRelationshipIndex(campaign, EMPTY_LIBRARY, [
+      { path: 'notes/a1b2.md', id: 'a1b2' },
+      { path: 'notes/c3d4.md', id: 'c3d4' },
+    ]);
     expect(summary).toMatch(/^2 relationship directives indexed/);
     expect(summary).toMatch(/no date/i);
   });

@@ -9,18 +9,15 @@
  * underlying parsing/interpretation/value rules this store wires together.
  */
 
-import type {
-  DeltaOp,
-  Ledger,
-  RelationshipDelta,
-  TrackLibrary,
-} from '../shared/relationships/index.js';
+import type { Ledger, RelationshipDelta, TrackLibrary } from '../shared/relationships/index.js';
 import type { ParsedDirective } from '../shared/relationships/index.js';
 import {
   EMPTY_TRACK_LIBRARY,
   interpretDirective,
+  noteIdOf,
   parseDirectives,
   resolveTrack,
+  roleValue,
 } from '../shared/relationships/index.js';
 import type { InvalidDirectiveEntry, LedgersAs } from '../shared/relationships/ipc-types.js';
 
@@ -35,6 +32,8 @@ export interface RelationshipFileInput {
   isEvent: boolean;
   /** For an event: its epochSeconds, or null/undefined when the event has no date. Ignored for notes. */
   epochSeconds?: number | null;
+  /** For a note: its frontmatter id. Ignored for an event. */
+  noteId?: string;
 }
 
 export type { InvalidDirectiveEntry, LedgersAs };
@@ -47,6 +46,16 @@ export interface LedgerKeyTriple {
 
 export interface StoreChangeResult {
   touched: LedgerKeyTriple[];
+  /** This file's own invalid-directive entries differ from before the change. */
+  invalidChanged: boolean;
+  /** The known-notes map (path -> id) changed — a note was created, edited, deleted or moved. */
+  knownNotesChanged: boolean;
+}
+
+/** A note the store should know about, e.g. from the entity index. */
+export interface KnownNote {
+  path: string;
+  id: string;
 }
 
 const KEY_SEP = '::';
@@ -66,6 +75,19 @@ function pushTo<K, V>(map: Map<K, V[]>, key: K, value: V): void {
   else map.set(key, [value]);
 }
 
+function deltaIdentity(d: RelationshipDelta): string {
+  return `${d.declaredIn.path}#${d.declaredIn.ordinal}`;
+}
+
+/** Deep-enough equality for change detection: two invalid-entry lists built the same way. */
+function sameInvalidEntries(
+  a: InvalidDirectiveEntry[] | undefined,
+  b: InvalidDirectiveEntry[] | undefined,
+): boolean {
+  if ((a?.length ?? 0) === 0 && (b?.length ?? 0) === 0) return true;
+  return JSON.stringify(a ?? []) === JSON.stringify(b ?? []);
+}
+
 interface ParsedRecord {
   title?: string;
   directives: ParsedDirective[];
@@ -73,7 +95,6 @@ interface ParsedRecord {
 
 export class RelationshipsStore {
   private library: TrackLibrary = EMPTY_TRACK_LIBRARY;
-  private knownNoteIds = new Set<string>();
   private fileInputs = new Map<string, RelationshipFileInput>();
   private ledgerObjects = new Map<string, Ledger>();
   private invalidEntries = new Map<string, InvalidDirectiveEntry[]>();
@@ -81,37 +102,120 @@ export class RelationshipsStore {
   /** path -> set of ledger keys that path currently contributes deltas to (direct or mirrored). */
   private reverseIndex = new Map<string, Set<string>>();
 
-  setKnownNoteIds(ids: Iterable<string>): void {
-    this.knownNoteIds = new Set(ids);
+  /** note path -> its frontmatter id. The store's own record of "known notes". */
+  private noteIdByPath = new Map<string, string>();
+  /** note id -> set of note paths currently claiming it (normally at most one). */
+  private pathsByNoteId = new Map<string, Set<string>>();
+  /** note id -> set of file paths whose directives reference it (as holder or observer). */
+  private referencedBy = new Map<string, Set<string>>();
+  /** file path -> set of note ids its directives currently reference. Mirror of referencedBy, kept for O(1) cleanup. */
+  private referencedIdsByPath = new Map<string, Set<string>>();
+
+  /**
+   * Seeds the known-notes map (path -> id) wholesale, e.g. from the entity
+   * index at campaign load. Populating every note's id up front — before any
+   * directive is interpreted — means a directive referencing a note that
+   * hasn't been scanned yet still resolves correctly regardless of file
+   * order during a bulk rebuild.
+   */
+  seedKnownNotes(notes: Iterable<KnownNote>): void {
+    this.noteIdByPath = new Map();
+    this.pathsByNoteId = new Map();
+    for (const { path, id } of notes) {
+      this.noteIdByPath.set(path, id);
+      let set = this.pathsByNoteId.get(id);
+      if (!set) {
+        set = new Set();
+        this.pathsByNoteId.set(id, set);
+      }
+      set.add(path);
+    }
   }
 
-  addKnownNoteId(id: string): void {
-    this.knownNoteIds.add(id);
+  private isKnownNote(id: string): boolean {
+    return (this.pathsByNoteId.get(id)?.size ?? 0) > 0;
   }
 
-  removeKnownNoteId(id: string): void {
-    this.knownNoteIds.delete(id);
+  /** Registers/updates one note's id. Returns whether the note's own path->id mapping changed. */
+  private registerNoteId(path: string, id: string): { pathIdChanged: boolean } {
+    const prevId = this.noteIdByPath.get(path);
+    if (prevId === id) return { pathIdChanged: false };
+
+    if (prevId !== undefined) {
+      const prevSet = this.pathsByNoteId.get(prevId);
+      if (prevSet) {
+        prevSet.delete(path);
+        if (prevSet.size === 0) this.pathsByNoteId.delete(prevId);
+      }
+    }
+
+    this.noteIdByPath.set(path, id);
+    let set = this.pathsByNoteId.get(id);
+    if (!set) {
+      set = new Set();
+      this.pathsByNoteId.set(id, set);
+    }
+    set.add(path);
+    return { pathIdChanged: true };
   }
 
-  /** Clears everything and re-derives from scratch. Keeps the current library and known-note-id set. */
-  rebuild(files: RelationshipFileInput[]): void {
+  /** Drops a note's id registration. Returns the id it held and whether that id is now completely unknown. */
+  private unregisterNoteId(path: string): { id: string; becameUnknown: boolean } | null {
+    const id = this.noteIdByPath.get(path);
+    if (id === undefined) return null;
+    this.noteIdByPath.delete(path);
+    const set = this.pathsByNoteId.get(id);
+    let becameUnknown = false;
+    if (set) {
+      set.delete(path);
+      if (set.size === 0) {
+        this.pathsByNoteId.delete(id);
+        becameUnknown = true;
+      }
+    }
+    return { id, becameUnknown };
+  }
+
+  /** Re-derives every file referencing `noteId` (except `excludePath`), e.g. after that id becomes known/unknown. */
+  private rederiveReferencing(noteId: string, excludePath?: string): Set<string> {
+    const paths = this.referencedBy.get(noteId);
+    if (!paths || paths.size === 0) return new Set();
+    const touched = new Set<string>();
+    for (const p of [...paths]) {
+      if (p === excludePath) continue;
+      const input = this.fileInputs.get(p);
+      if (!input) continue;
+      for (const k of this.clearPath(p)) touched.add(k);
+      for (const k of this.applyFile(input)) touched.add(k);
+    }
+    return touched;
+  }
+
+  /** Clears everything and re-derives from scratch. Keeps the current known-note-id set; optionally swaps the library. */
+  rebuild(files: RelationshipFileInput[], library?: TrackLibrary): void {
+    if (library) this.library = library;
     this.fileInputs = new Map();
     this.ledgerObjects = new Map();
     this.invalidEntries = new Map();
     this.parsedByPath = new Map();
     this.reverseIndex = new Map();
+    this.referencedBy = new Map();
+    this.referencedIdsByPath = new Map();
     for (const file of files) this.applyFile(file);
   }
 
   /** Resets the store to a blank slate: no files, default (empty) library, no known notes. */
   clear(): void {
     this.library = EMPTY_TRACK_LIBRARY;
-    this.knownNoteIds = new Set();
     this.fileInputs = new Map();
     this.ledgerObjects = new Map();
     this.invalidEntries = new Map();
     this.parsedByPath = new Map();
     this.reverseIndex = new Map();
+    this.noteIdByPath = new Map();
+    this.pathsByNoteId = new Map();
+    this.referencedBy = new Map();
+    this.referencedIdsByPath = new Map();
   }
 
   /**
@@ -121,31 +225,56 @@ export class RelationshipsStore {
    * resolves and mirrors — history must be re-derived, not patched.
    */
   setLibrary(library: TrackLibrary): void {
-    this.library = library;
     const files = [...this.fileInputs.values()];
-    this.fileInputs = new Map();
-    this.ledgerObjects = new Map();
-    this.invalidEntries = new Map();
-    this.parsedByPath = new Map();
-    this.reverseIndex = new Map();
-    for (const file of files) this.applyFile(file);
+    this.rebuild(files, library);
   }
 
   /** Replaces all directives (and mirrors) declared by this file — never merges with what was there before. */
   updateFile(fileInput: RelationshipFileInput): StoreChangeResult {
-    const removed = this.clearPath(fileInput.path);
+    const { path, isEvent, noteId } = fileInput;
+    const invalidBefore = this.invalidEntries.get(path);
+
+    const removed = this.clearPath(path);
+
+    let knownNotesChanged = false;
+    let becameKnown = false;
+    if (!isEvent && noteId) {
+      const { pathIdChanged } = this.registerNoteId(path, noteId);
+      knownNotesChanged = pathIdChanged;
+      becameKnown = pathIdChanged && this.pathsByNoteId.get(noteId)?.size === 1;
+    }
+
     const added = this.applyFile(fileInput);
-    const union = new Set([...removed, ...added]);
-    return { touched: [...union].map(splitKey) };
+    const touched = new Set([...removed, ...added]);
+
+    if (becameKnown && noteId) {
+      for (const k of this.rederiveReferencing(noteId, path)) touched.add(k);
+    }
+
+    const invalidAfter = this.invalidEntries.get(path);
+    const invalidChanged = !sameInvalidEntries(invalidBefore, invalidAfter);
+
+    return { touched: [...touched].map(splitKey), invalidChanged, knownNotesChanged };
   }
 
   removeFile(path: string): StoreChangeResult {
+    const invalidBefore = this.invalidEntries.get(path);
     const removed = this.clearPath(path);
-    return { touched: [...removed].map(splitKey) };
+    const touched = new Set(removed);
+
+    const noteInfo = this.unregisterNoteId(path);
+    if (noteInfo?.becameUnknown) {
+      for (const k of this.rederiveReferencing(noteInfo.id)) touched.add(k);
+    }
+
+    const invalidChanged = !sameInvalidEntries(invalidBefore, undefined);
+    const knownNotesChanged = noteInfo !== null;
+
+    return { touched: [...touched].map(splitKey), invalidChanged, knownNotesChanged };
   }
 
   ledgers(): Ledger[] {
-    return [...this.ledgerObjects.values()];
+    return [...this.ledgerObjects.values()].map((l) => this.cleanLedger(l));
   }
 
   ledgersFor(entityId: string, as: LedgersAs): Ledger[] {
@@ -159,6 +288,7 @@ export class RelationshipsStore {
   invalid(): InvalidDirectiveEntry[] {
     const all: InvalidDirectiveEntry[] = [];
     for (const entries of this.invalidEntries.values()) all.push(...entries);
+    all.push(...this.setConflictInvalidEntries());
     return all.sort((a, b) => {
       if (a.path !== b.path) return a.path < b.path ? -1 : 1;
       return (a.ordinal ?? -1) - (b.ordinal ?? -1);
@@ -172,6 +302,50 @@ export class RelationshipsStore {
       const cached = this.parsedByPath.get(path);
       return { path, title: cached?.title, directives: cached?.directives ?? [] };
     });
+  }
+
+  /**
+   * A ledger with more than one undated (note-declared) `set` delta among
+   * different files: only one note may set a relationship, so every such
+   * delta is excluded here — surfaced instead via setConflictInvalidEntries().
+   */
+  private conflictingDeltaKeys(ledger: Ledger): Set<string> {
+    const undatedSets = ledger.deltas.filter((d) => d.op === 'set' && d.at === null);
+    if (undatedSets.length <= 1) return new Set();
+    return new Set(undatedSets.map(deltaIdentity));
+  }
+
+  private cleanLedger(ledger: Ledger): Ledger {
+    const conflictKeys = this.conflictingDeltaKeys(ledger);
+    if (conflictKeys.size === 0) return ledger;
+    return { ...ledger, deltas: ledger.deltas.filter((d) => !conflictKeys.has(deltaIdentity(d))) };
+  }
+
+  private directiveRange(path: string, ordinal: number): { from: number; to: number } {
+    const directive = this.parsedByPath.get(path)?.directives[ordinal];
+    return directive ? { from: directive.from, to: directive.to } : { from: 0, to: 0 };
+  }
+
+  private setConflictInvalidEntries(): InvalidDirectiveEntry[] {
+    const out: InvalidDirectiveEntry[] = [];
+    for (const ledger of this.ledgerObjects.values()) {
+      const undatedSets = ledger.deltas.filter((d) => d.op === 'set' && d.at === null);
+      if (undatedSets.length <= 1) continue;
+      for (const d of undatedSets) {
+        const others = [
+          ...new Set(undatedSets.filter((o) => o !== d).map((o) => o.declaredIn.path)),
+        ];
+        const range = this.directiveRange(d.declaredIn.path, d.declaredIn.ordinal);
+        out.push({
+          path: d.declaredIn.path,
+          ordinal: d.declaredIn.ordinal,
+          from: range.from,
+          to: range.to,
+          messages: [`Only one note may set this relationship; also set in ${others.join(', ')}`],
+        });
+      }
+    }
+    return out;
   }
 
   /** Removes any deltas this path previously contributed (direct or mirrored) and forgets its metadata. */
@@ -192,7 +366,35 @@ export class RelationshipsStore {
     this.fileInputs.delete(path);
     this.invalidEntries.delete(path);
     this.parsedByPath.delete(path);
+
+    const referencedIds = this.referencedIdsByPath.get(path);
+    if (referencedIds) {
+      for (const id of referencedIds) {
+        const set = this.referencedBy.get(id);
+        if (!set) continue;
+        set.delete(path);
+        if (set.size === 0) this.referencedBy.delete(id);
+      }
+      this.referencedIdsByPath.delete(path);
+    }
+
     return touched;
+  }
+
+  private addReferencedBy(noteId: string, path: string): void {
+    let set = this.referencedBy.get(noteId);
+    if (!set) {
+      set = new Set();
+      this.referencedBy.set(noteId, set);
+    }
+    set.add(path);
+
+    let ids = this.referencedIdsByPath.get(path);
+    if (!ids) {
+      ids = new Set();
+      this.referencedIdsByPath.set(path, ids);
+    }
+    ids.add(noteId);
   }
 
   /** Parses and interprets one file's directives, adding their deltas (and mirrors) to the store. */
@@ -215,6 +417,16 @@ export class RelationshipsStore {
     const noDate = isEvent && (epochSeconds === null || epochSeconds === undefined);
 
     for (const d of directives) {
+      // Track every note referenced by a holder/observer role — regardless
+      // of whether the directive is otherwise valid — so a later change to
+      // that note's known-ness (created/deleted) knows to re-derive this file.
+      for (const role of ['holder', 'observer'] as const) {
+        const raw = roleValue(d, role);
+        if (raw === undefined) continue;
+        const noteId = noteIdOf(raw);
+        if (noteId !== null) this.addReferencedBy(noteId, path);
+      }
+
       if (noDate) {
         invalid.push({
           path,
@@ -229,7 +441,7 @@ export class RelationshipsStore {
       const at = isEvent ? (epochSeconds as number) : null;
       const interpreted = interpretDirective(d, {
         resolveTrack: (id) => resolveTrack(id, this.library),
-        isKnownNote: (id) => this.knownNoteIds.has(id),
+        isKnownNote: (id) => this.isKnownNote(id),
         // Notes have no order — Change/Shift/Remove are event-only. See
         // src/shared/relationships/AGENTS.md.
         undated: !isEvent,
@@ -256,42 +468,19 @@ export class RelationshipsStore {
       pushTo(additions, key, delta);
 
       const track = resolveTrack(trackId, this.library);
-      if (track && track.kind === 'categorical') {
-        const mirrorKey = ledgerKey(observer, holder, trackId);
-
-        if (op.op === 'add' || op.op === 'remove') {
-          const optSpec = track.optionFor(op.key);
-          if (optSpec?.mutual) {
-            const mirrorDelta: RelationshipDelta = {
-              ...op,
-              at,
-              declaredIn: { path, ordinal: d.ordinal },
-              mirrored: true,
-            };
-            if (reason) mirrorDelta.reason = reason;
-            touched.add(mirrorKey);
-            pushTo(additions, mirrorKey, mirrorDelta);
-          }
-        } else if (op.op === 'set') {
-          // Defensive: no track can define a categorical Set action (see
-          // AGENTS.md), so directive interpretation never produces this op
-          // here — kept for any non-directive caller that might.
-          const setKeys = Array.isArray(op.value) ? op.value : [String(op.value)];
-          for (const optSpec of track.options) {
-            if (!optSpec.mutual) continue;
-            const mirrorOp: DeltaOp = setKeys.includes(optSpec.key)
-              ? { op: 'add', key: optSpec.key }
-              : { op: 'remove', key: optSpec.key };
-            const mirrorDelta: RelationshipDelta = {
-              ...mirrorOp,
-              at,
-              declaredIn: { path, ordinal: d.ordinal },
-              mirrored: true,
-            };
-            if (reason) mirrorDelta.reason = reason;
-            touched.add(mirrorKey);
-            pushTo(additions, mirrorKey, mirrorDelta);
-          }
+      if (track && track.kind === 'categorical' && (op.op === 'add' || op.op === 'remove')) {
+        const optSpec = track.optionFor(op.key);
+        if (optSpec?.mutual) {
+          const mirrorKey = ledgerKey(observer, holder, trackId);
+          const mirrorDelta: RelationshipDelta = {
+            ...op,
+            at,
+            declaredIn: { path, ordinal: d.ordinal },
+            mirrored: true,
+          };
+          if (reason) mirrorDelta.reason = reason;
+          touched.add(mirrorKey);
+          pushTo(additions, mirrorKey, mirrorDelta);
         }
       }
     }

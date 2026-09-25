@@ -53,7 +53,12 @@ function eventFile(
 
 function newStore(): RelationshipsStore {
   const store = new RelationshipsStore();
-  store.setKnownNoteIds([A, C, 'e5f6', 'g7h8']);
+  store.seedKnownNotes([
+    { path: 'notes/a.md', id: A },
+    { path: 'notes/c.md', id: C },
+    { path: 'notes/e.md', id: 'e5f6' },
+    { path: 'notes/g.md', id: 'g7h8' },
+  ]);
   return store;
 }
 
@@ -272,5 +277,93 @@ describe('invalid directives are retained and surfaced', () => {
     const invalid = store.invalid();
     expect(invalid).toHaveLength(1);
     expect(invalid[0].messages.join(' ')).toMatch(/rp99/);
+  });
+});
+
+describe('the store owns known notes as path -> id, seeded at load', () => {
+  it('flags a referencing directive invalid once its note is deleted, then valid again on recreate', () => {
+    const store = new RelationshipsStore();
+    store.seedKnownNotes([
+      { path: 'notes/holder.md', id: A },
+      { path: 'notes/observer.md', id: C },
+    ]);
+    store.rebuild([noteFile('notes/n1.md', repSetDirective(A, C, 5, 'gift'))]);
+
+    expect(store.invalid()).toHaveLength(0);
+    expect(store.ledgersFor(A, 'holder')).toHaveLength(1);
+
+    // The note was untouched since load — its id came only from seedKnownNotes.
+    const removeResult = store.removeFile('notes/holder.md');
+    expect(removeResult.knownNotesChanged).toBe(true);
+
+    const invalidAfterDelete = store.invalid();
+    expect(invalidAfterDelete).toHaveLength(1);
+    expect(invalidAfterDelete[0].path).toBe('notes/n1.md');
+    expect(store.ledgersFor(A, 'holder')).toHaveLength(0);
+
+    // Recreating the note (same id) re-derives the referencing file back to valid.
+    const recreateResult = store.updateFile(noteFile('notes/holder.md', ''));
+    expect(recreateResult.knownNotesChanged).toBe(false); // no noteId set on this plain noteFile()
+  });
+
+  it('resolves referencing directives via the id, regardless of note path', () => {
+    const store = new RelationshipsStore();
+    store.seedKnownNotes([
+      { path: 'notes/holder.md', id: A },
+      { path: 'notes/observer.md', id: C },
+    ]);
+    store.rebuild([noteFile('notes/n1.md', repSetDirective(A, C, 5, 'gift'))]);
+    expect(store.invalid()).toHaveLength(0);
+
+    // Simulate a rename/move: unlink the old path, add the new one with the same id.
+    store.removeFile('notes/holder.md');
+    expect(store.invalid()).toHaveLength(1);
+
+    const input: RelationshipFileInput = {
+      path: 'notes/moved-holder.md',
+      source: '',
+      title: 'Holder',
+      isEvent: false,
+      noteId: A,
+    };
+    store.updateFile(input);
+
+    expect(store.invalid()).toHaveLength(0);
+    expect(store.ledgersFor(A, 'holder')).toHaveLength(1);
+  });
+});
+
+describe('more than one undated Set on the same relationship', () => {
+  it('flags every undated Set invalid and excludes them all from the ledger', () => {
+    const store = newStore();
+    store.rebuild([
+      noteFile('notes/n1.md', repSetDirective(A, C, 5, 'first')),
+      noteFile('notes/n2.md', repSetDirective(A, C, 9, 'second')),
+    ]);
+
+    const ledger = store.ledgersFor(A, 'holder').find((l) => l.track === 'rp01');
+    expect(ledger?.deltas).toHaveLength(0);
+
+    const invalid = store.invalid();
+    expect(invalid).toHaveLength(2);
+    expect(invalid.map((i) => i.path).sort()).toEqual(['notes/n1.md', 'notes/n2.md']);
+    expect(invalid[0].messages.join(' ')).toMatch(/Only one note may set this relationship/);
+    expect(invalid[0].messages.join(' ')).toMatch(/notes\/n2\.md|notes\/n1\.md/);
+  });
+
+  it('restores the remaining Set once the conflicting one is removed', () => {
+    const store = newStore();
+    store.rebuild([
+      noteFile('notes/n1.md', repSetDirective(A, C, 5, 'first')),
+      noteFile('notes/n2.md', repSetDirective(A, C, 9, 'second')),
+    ]);
+    expect(store.invalid()).toHaveLength(2);
+
+    store.removeFile('notes/n2.md');
+
+    expect(store.invalid()).toHaveLength(0);
+    const ledger = store.ledgersFor(A, 'holder').find((l) => l.track === 'rp01');
+    expect(ledger?.deltas).toHaveLength(1);
+    expect(ledger?.deltas[0].declaredIn.path).toBe('notes/n1.md');
   });
 });

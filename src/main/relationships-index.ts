@@ -3,8 +3,47 @@ import * as path from 'node:path';
 import type { TrackLibrary } from '../shared/relationships/index.js';
 import { parseNote } from '../shared/frontmatter.js';
 import { parseEventFile, SAFE_FILENAME_RE } from './timelineIpcHandlers.js';
-import { getRelationshipsStore, type RelationshipFileInput } from './relationships-store.js';
+import {
+  getRelationshipsStore,
+  type KnownNote,
+  type RelationshipFileInput,
+} from './relationships-store.js';
 import type { InvalidDirectiveEntry } from './relationships-store.js';
+
+/**
+ * Reads one campaign-relative file (a note under `notes/` or an event under
+ * `timeline/`) and returns it as a `RelationshipFileInput`, the single shape
+ * both the initial campaign scan and the file watcher hand to the store.
+ */
+export function readRelationshipFileInput(
+  campaignPath: string,
+  relPath: string,
+): RelationshipFileInput {
+  const full = path.join(campaignPath, relPath);
+
+  if (relPath.startsWith('timeline/')) {
+    const filename = path.basename(relPath);
+    const { event } = parseEventFile(full, filename);
+    return {
+      path: relPath,
+      source: event.body,
+      title: event.title,
+      isEvent: true,
+      epochSeconds: event.epochSeconds ?? null,
+    };
+  }
+
+  const content = fs.readFileSync(full, 'utf-8');
+  const fallbackTitle = path.basename(relPath, '.md');
+  const { frontmatter, body } = parseNote(content, fallbackTitle);
+  return {
+    path: relPath,
+    source: body,
+    title: frontmatter.title,
+    isEvent: false,
+    noteId: frontmatter.id,
+  };
+}
 
 function countMdFiles(dir: string): number {
   if (!fs.existsSync(dir)) return 0;
@@ -18,6 +57,12 @@ function countMdFiles(dir: string): number {
     }
   }
   return count;
+}
+
+/** Timeline is flat and only ever contains files matching SAFE_FILENAME_RE — matches what scanTimeline actually reads. */
+function countTimelineFiles(timelineDir: string): number {
+  if (!fs.existsSync(timelineDir)) return 0;
+  return fs.readdirSync(timelineDir).filter((f) => SAFE_FILENAME_RE.test(f)).length;
 }
 
 function scanNotes(
@@ -36,27 +81,21 @@ function scanNotes(
     if (!entry.isFile() || path.extname(entry.name).toLowerCase() !== '.md') continue;
 
     const relPath = `notes/${path.relative(baseDir, full).replace(/\\/g, '/')}`;
-    const content = fs.readFileSync(full, 'utf-8');
-    const fallbackTitle = path.basename(entry.name, '.md');
-    const { frontmatter, body } = parseNote(content, fallbackTitle);
-    files.push({ path: relPath, source: body, title: frontmatter.title, isEvent: false });
+    files.push(readRelationshipFileInput(campaignPath, relPath));
     tick();
   }
 }
 
-function scanTimeline(timelineDir: string, files: RelationshipFileInput[], tick: () => void): void {
+function scanTimeline(
+  timelineDir: string,
+  campaignPath: string,
+  files: RelationshipFileInput[],
+  tick: () => void,
+): void {
   if (!fs.existsSync(timelineDir)) return;
   for (const filename of fs.readdirSync(timelineDir)) {
     if (!SAFE_FILENAME_RE.test(filename)) continue;
-    const full = path.join(timelineDir, filename);
-    const { event } = parseEventFile(full, filename);
-    files.push({
-      path: `timeline/${filename}`,
-      source: event.body,
-      title: event.title,
-      isEvent: true,
-      epochSeconds: event.epochSeconds ?? null,
-    });
+    files.push(readRelationshipFileInput(campaignPath, `timeline/${filename}`));
     tick();
   }
 }
@@ -79,30 +118,30 @@ function summarizeInvalid(invalid: InvalidDirectiveEntry[]): string {
 
 /**
  * Scans `notes/` (recursively) and `timeline/` (flat) for relationship
- * directives and rebuilds the relationship store from scratch. Runs after
- * the entity index task so `knownNoteIds` reflects the freshly-scanned notes.
+ * directives and rebuilds the relationship store from scratch. `knownNotes`
+ * seeds the store's known-notes map before any directive is interpreted, so
+ * a directive referencing a note resolves correctly regardless of scan order.
  */
 export function buildRelationshipIndex(
   campaignPath: string,
   library: TrackLibrary,
-  knownNoteIds: Iterable<string>,
+  knownNotes: Iterable<KnownNote>,
   onProgress?: (completed: number, total: number) => void,
 ): string {
   const notesDir = path.join(campaignPath, 'notes');
   const timelineDir = path.join(campaignPath, 'timeline');
 
-  const total = countMdFiles(notesDir) + countMdFiles(timelineDir);
+  const total = countMdFiles(notesDir) + countTimelineFiles(timelineDir);
   let completed = 0;
   const tick = () => onProgress?.(++completed, total);
 
   const files: RelationshipFileInput[] = [];
   if (fs.existsSync(notesDir)) scanNotes(notesDir, notesDir, campaignPath, files, tick);
-  scanTimeline(timelineDir, files, tick);
+  scanTimeline(timelineDir, campaignPath, files, tick);
 
   const store = getRelationshipsStore();
-  store.setKnownNoteIds(knownNoteIds);
-  store.setLibrary(library);
-  store.rebuild(files);
+  store.seedKnownNotes(knownNotes);
+  store.rebuild(files, library);
 
   const ledgerDirectiveKeys = new Set<string>();
   for (const ledger of store.ledgers()) {

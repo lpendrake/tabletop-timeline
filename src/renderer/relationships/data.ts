@@ -54,4 +54,12 @@ export const relationshipsData = {
   onChanged(callback: (data: { paths: string[] }) => void): () => void {
     return window.fsApi.onRelationshipsChanged(callback);
   },
+
+  onLibraryChanged(callback: () => void): () => void {
+    return window.fsApi.onRelationshipLibraryChanged(callback);
+  },
+
+  onDefaultHolderChanged(callback: (id: string | null) => void): () => void {
+    return window.fsApi.onRelationshipDefaultHolderChanged(callback);
+  },
 };

@@ -35,7 +35,12 @@ export function registerRelationshipsIpcHandlers() {
       const result = addOption(rootDir, trackId, input);
       if (result.ok) {
         getRelationshipsStore().setLibrary(result.library);
-        windowManager.getMainWindow()?.webContents.send('relationships:changed', { paths: [] });
+        const win = windowManager.getMainWindow();
+        // libraryChanged is the precise event; relationships:changed (empty
+        // paths) is kept alongside it so existing "reload on any change"
+        // listeners (e.g. useRelationshipLibrary) still refresh.
+        win?.webContents.send('relationships:libraryChanged');
+        win?.webContents.send('relationships:changed', { paths: [] });
       }
       return result;
     },
@@ -59,5 +64,6 @@ export function registerRelationshipsIpcHandlers() {
     const campaignPath = getCampaignPath();
     if (!campaignPath) return;
     setDefaultReputationHolder(campaignPath, id);
+    windowManager.getMainWindow()?.webContents.send('relationships:defaultHolderChanged', id);
   });
 }

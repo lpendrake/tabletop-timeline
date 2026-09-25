@@ -174,4 +174,14 @@ contextBridge.exposeInMainWorld('fsApi', {
     ipcRenderer.on('relationships:changed', listener);
     return () => ipcRenderer.removeListener('relationships:changed', listener);
   },
+  onRelationshipLibraryChanged: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on('relationships:libraryChanged', listener);
+    return () => ipcRenderer.removeListener('relationships:libraryChanged', listener);
+  },
+  onRelationshipDefaultHolderChanged: (callback: (id: string | null) => void) => {
+    const listener = (_event: unknown, id: string | null) => callback(id);
+    ipcRenderer.on('relationships:defaultHolderChanged', listener);
+    return () => ipcRenderer.removeListener('relationships:defaultHolderChanged', listener);
+  },
 });

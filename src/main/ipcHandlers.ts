@@ -23,31 +23,11 @@ import { setCampaignVersion } from './migration/campaign-version.js';
 import { LATEST_VERSION } from './migration/registry.js';
 import { writeNewFile } from './write-new-file.js';
 import { readRootDir } from './settings/root-dir.js';
+import { getSettings, saveSettings } from './settings/app-config.js';
 import { registerRelationshipsIpcHandlers } from './relationships-ipc-handlers.js';
 import { setDefaultReputationHolder } from './settings/relationship-settings.js';
 
 const { autoUpdater } = pkg;
-
-const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json');
-
-function getSettings() {
-  try {
-    if (fs.existsSync(CONFIG_PATH)) {
-      return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
-    }
-  } catch (e) {
-    console.error('Failed to read config:', e);
-  }
-  return {};
-}
-
-function saveSettings(settings: Record<string, unknown>) {
-  try {
-    fs.writeFileSync(CONFIG_PATH, JSON.stringify(settings, null, 2));
-  } catch (e) {
-    console.error('Failed to save config:', e);
-  }
-}
 
 export function registerIpcHandlers() {
   // Directory Selection
