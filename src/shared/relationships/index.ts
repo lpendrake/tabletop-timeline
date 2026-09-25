@@ -40,7 +40,13 @@ export { validateTrackSpec, compileTrack, resolveTrackSpec } from './resolve.js'
 
 // Current value
 export type { Step, CurrentValueResult, CurrentValueOptions } from './current-value.js';
-export { compareDeltas, applyDelta, currentValue, computeValue } from './current-value.js';
+export {
+  compareDeltas,
+  applyDelta,
+  currentValue,
+  computeValue,
+  computeValueFromSorted,
+} from './current-value.js';
 
 // System tracks
 export {

@@ -104,3 +104,25 @@ export function currentValue(
 export function computeValue(ledger: Ledger, track: ResolvedTrack, now: number): TrackValue {
   return currentValue(ledger, track, now, { withSteps: false }).value;
 }
+
+/**
+ * Value-only fold over deltas that are already sorted (per `compareDeltas`).
+ * Lets a caller sort a ledger's deltas once and re-fold cheaply whenever only
+ * `now` changes, instead of re-sorting on every call as `computeValue` does.
+ */
+export function computeValueFromSorted(
+  sortedDeltas: RelationshipDelta[],
+  track: ResolvedTrack,
+  now: number,
+): TrackValue {
+  let value: TrackValue = track.clamp(track.initial);
+  let runningValue: TrackValue = value;
+
+  for (const delta of sortedDeltas) {
+    const applied = delta.at === null || delta.at <= now;
+    runningValue = applyDelta(runningValue, delta, track);
+    if (applied) value = runningValue;
+  }
+
+  return value;
+}
