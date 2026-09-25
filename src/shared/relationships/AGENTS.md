@@ -12,6 +12,7 @@ time. Directives are parsed elsewhere; this module never reads a note or event b
 3. `resolve.ts` — compiles a spec into `ResolvedTrack`, the only shape consumers should use.
 4. `current-value.ts` — `currentValue`/`computeValue`, the folding engine.
 5. `registry.ts` — `resolveTrack(id, library)`, the single lookup entry-point.
+6. `directives/parse.ts` — the directive parser, serialiser, resolver and readable-sentence model.
 
 ## Invariants
 

@@ -64,3 +64,30 @@ export {
 // Registry
 export type { TrackLibrary } from './registry.js';
 export { resolveTrack, listTracks, withOptionAdditions } from './registry.js';
+
+// Directives (parsing, serialisation, semantic resolution, readable sentences)
+export type {
+  RoleToken,
+  DirectiveSegment,
+  ParsedDirective,
+  DirectiveParseError,
+  DirectiveEdit,
+  DirectiveProblemCode,
+  DirectiveProblem,
+  InterpretedDirective,
+  InterpretContext,
+  ReadablePart,
+  ReadableContext,
+} from './directives/index.js';
+export {
+  parseDirectives,
+  roleValue,
+  isUnfinished,
+  noteIdOf,
+  noteRoleValue,
+  serialiseDirective,
+  serialiseTemplate,
+  setRoleValueChange,
+  interpretDirective,
+  readableParts,
+} from './directives/index.js';
