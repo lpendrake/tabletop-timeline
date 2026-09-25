@@ -73,6 +73,25 @@ vi.mock('../../../shared/markdown-editor', () => ({
     isEditable: boolean;
     viewRef: unknown;
   }) => <div data-testid="format-toolbar">{footerSlot}</div>,
+  composeExtraItems:
+    (...fns: (((ctx: unknown) => unknown[]) | undefined)[]) =>
+    (ctx: unknown) =>
+      fns.flatMap((fn) => fn?.(ctx) ?? []),
+}));
+
+vi.mock('../../../relationships/data', () => ({
+  relationshipsData: {
+    getTracks: () => Promise.resolve({ custom: [], optionAdditions: {} }),
+    getAllLedgers: () => Promise.resolve([]),
+    getDefaultHolder: () => Promise.resolve(null),
+    setDefaultHolder: vi.fn().mockResolvedValue(undefined),
+    addOption: vi.fn().mockResolvedValue({ ok: false, reason: 'unknown-track' }),
+    onChanged: () => () => {},
+  },
+}));
+
+vi.mock('../../../relationships/editor-menu', () => ({
+  buildRelationshipMenuItems: () => [],
 }));
 
 // FooterPortal renders inline so portal contents are in the same container.

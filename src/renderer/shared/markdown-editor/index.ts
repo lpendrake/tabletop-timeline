@@ -21,4 +21,6 @@ export type {
   EditorMenuExtraItems,
   EditorContextMenuConfig,
 } from './extensions/editor-context-menu';
+export { insertDirective } from './extensions/relationship-bubble-state';
+export { composeExtraItems } from './compose-extra-items';
 export * from './commands';

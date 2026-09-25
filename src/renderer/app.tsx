@@ -23,6 +23,7 @@ import {
 import { applyWorkspaceDefaultTheme, applyCampaignTheme } from './views/settings/apply-theme';
 import { defaultViewSettingsData } from './views/settings/default-view-settings-data';
 import { resolveDefaultView } from './views/settings/domain/resolve-default-view';
+import { useRelationshipLibrary } from './relationships/hooks/use-relationship-library';
 import '../../src/index.css';
 
 export default function App() {
@@ -84,6 +85,9 @@ export default function App() {
   const entityIndexRef = useRef<EntityIndexEntry[]>([]);
   const [entityLabelMap, setEntityLabelMap] = useState<Map<string, string>>(new Map());
   const [entityTagLabelMap, setEntityTagLabelMap] = useState<Map<string, string>>(new Map());
+  const relationshipLibrary = useRelationshipLibrary();
+  const relationshipLibraryRef = useRef(relationshipLibrary);
+  relationshipLibraryRef.current = relationshipLibrary;
 
   useEffect(() => {
     if (!activeCampaign) return;
@@ -144,6 +148,7 @@ export default function App() {
       },
       getEntityIndex: () => entityIndexRef.current,
       onOpenById: handleOpenById,
+      getRelationshipLibrary: () => relationshipLibraryRef.current,
     });
     return () => teardownPeek();
   }, [activeCampaign?.path]); // eslint-disable-line react-hooks/exhaustive-deps

@@ -2,7 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { EditorView } from '@codemirror/view';
 import { EditorSelection } from '@codemirror/state';
 import { useNotesController } from './hooks/useNotesController';
-import { MarkdownEditor, FormatToolbar, type SavedEditorInstance } from '../shared/markdown-editor';
+import {
+  MarkdownEditor,
+  FormatToolbar,
+  composeExtraItems,
+  type SavedEditorInstance,
+  type EditorMenuContext,
+} from '../shared/markdown-editor';
 import {
   makeImagePasteConfig,
   makeDropLinkConfig,
@@ -13,6 +19,10 @@ import { buildEntityLabelMap } from '../../shared/entity-labels';
 import { revealInExplorer } from '../shared/reveal-in-explorer';
 import { buildEntityLink, buildAssetLink } from '../shared/entity-link';
 import { copyToClipboard } from '../shared/clipboard';
+import { findEntityIdByNotePath } from './domain/link-resolution';
+import { useRelationshipEditorConfig } from '../relationships/hooks/use-relationship-editor-config';
+import { buildRelationshipMenuItems } from '../relationships/editor-menu';
+import { useConfirm } from '../shared/confirm-dialog/confirm-provider';
 import { NoteContextMenu } from './components/note-context-menu.tsx';
 import { LabelOverrideEditor } from '../shared/components/label-override-editor';
 import { EditorTabs } from './components/editor-tabs.tsx';
@@ -75,6 +85,40 @@ export function NotesApp({
     entityIndex: ctrl.entityIndex,
     onCreated: ctrl.handleNoteCreatedFromEditor,
   });
+
+  const { confirm } = useConfirm();
+  const activeNotePath = ctrl.activeTab
+    ? `notes/${ctrl.activeTab.folder}/${ctrl.activeTab.path}`
+    : null;
+  const relationshipDirectivesConfig = useRelationshipEditorConfig({
+    entityIndex: ctrl.entityIndex,
+    defaultReason: 'Unspecified',
+    onOpenNote: ctrl.handleOpenLink,
+    currentNoteId: () =>
+      ctrl.activeTab
+        ? findEntityIdByNotePath(ctrl.entityIndex, ctrl.activeTab.folder, ctrl.activeTab.path)
+        : null,
+    currentPath: () => activeNotePath,
+    at: () => null,
+    getDocText: () => ctrl.activeFile?.content ?? '',
+    confirm,
+  });
+  const relationshipMenuConfig = useMemo(
+    () => ({
+      extraItems: (ctx: EditorMenuContext) =>
+        buildRelationshipMenuItems(ctx, { library: relationshipDirectivesConfig.library }),
+    }),
+    [relationshipDirectivesConfig.library],
+  );
+  const editorContextMenu = useMemo(
+    () => ({
+      extraItems: composeExtraItems(
+        newNoteMenuConfig.extraItems,
+        relationshipMenuConfig.extraItems,
+      ),
+    }),
+    [newNoteMenuConfig, relationshipMenuConfig],
+  );
 
   // Open a note from the search overlay, then scroll to the match position.
   // Both steps are sequenced here so the scroll happens only after the note's
@@ -213,7 +257,8 @@ export function NotesApp({
                 mdLinks={{ onOpenInternal: ctrl.openMarkdownLink }}
                 imagePaste={imagePasteConfig}
                 dropLink={dropLinkConfig}
-                contextMenu={newNoteMenuConfig}
+                contextMenu={editorContextMenu}
+                relationshipDirectives={relationshipDirectivesConfig}
               />
             ) : ctrl.activeTab ? (
               <div className="editor-placeholder">Loading...</div>

@@ -73,6 +73,7 @@ import { copyToClipboard } from '../../shared/clipboard';
 import { entityIndex } from '../../shared/entity-index';
 import { LabelOverrideEditor } from '../../shared/components/label-override-editor';
 import { useConfirm } from '../../shared/confirm-dialog/confirm-provider';
+import { useRelationshipLibrary } from '../../relationships/hooks/use-relationship-library';
 import '../../timeline/session-editor/session-mode.css';
 import './timeline-view.css';
 
@@ -106,6 +107,7 @@ export function TimelineView({
 }: TimelineViewProps) {
   const weekdays = ThemeProvider.get().timeline.days;
   const { confirm } = useConfirm();
+  const relationshipLibrary = useRelationshipLibrary();
   const [viewState, setViewState] = useState<ViewState>({
     centerSeconds: 0,
     secondsPerPixel: DEFAULT_SECONDS_PER_PIXEL,
@@ -803,6 +805,7 @@ export function TimelineView({
           onTagContextMenu={sessionModeActiveRef.current ? undefined : handleTagContextMenu}
           entityLabelMap={entityLabelMap}
           entityTagLabelMap={entityTagLabelMap}
+          relationshipLibrary={relationshipLibrary}
         />
         {inGameNow && (
           <NowMarker

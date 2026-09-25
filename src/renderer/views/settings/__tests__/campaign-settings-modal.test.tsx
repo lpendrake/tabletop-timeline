@@ -57,6 +57,11 @@ function setupFsApiMocks() {
       getCampaignThemeOverrides: vi.fn().mockResolvedValue({}),
       getCampaignDefaultView: vi.fn().mockResolvedValue(null),
       setCampaignDefaultView: vi.fn().mockResolvedValue(undefined),
+      buildIndex: vi.fn().mockResolvedValue([]),
+      getDefaultReputationHolder: vi.fn().mockResolvedValue(null),
+      setDefaultReputationHolder: vi.fn().mockResolvedValue(undefined),
+      getRelationshipTracks: vi.fn().mockResolvedValue({ custom: [], optionAdditions: {} }),
+      onRelationshipsChanged: vi.fn().mockReturnValue(() => {}),
     },
   });
 }
@@ -310,6 +315,11 @@ describe('CampaignSettingsModal', () => {
         getCampaignThemeOverrides: vi.fn().mockResolvedValue({ '/campaigns/alpha': 'lightfinder' }),
         getCampaignDefaultView: vi.fn().mockResolvedValue(null),
         setCampaignDefaultView: vi.fn().mockResolvedValue(undefined),
+        buildIndex: vi.fn().mockResolvedValue([]),
+        getDefaultReputationHolder: vi.fn().mockResolvedValue(null),
+        setDefaultReputationHolder: vi.fn().mockResolvedValue(undefined),
+        getRelationshipTracks: vi.fn().mockResolvedValue({ custom: [], optionAdditions: {} }),
+        onRelationshipsChanged: vi.fn().mockReturnValue(() => {}),
       },
     });
 
