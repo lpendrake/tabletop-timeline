@@ -28,3 +28,13 @@ export type {
   ChipsDisplay,
 } from './value-display';
 export { valueDisplay } from './value-display';
+
+export { outerRowStateKey, innerRowStateKey } from './row-keys';
+export { toggleInSet } from './toggle-set';
+export { pathsNeededForExpandedTracks } from './paths-to-fetch';
+
+export type { ParsedFile, StepSentence } from './step-sentence';
+export { buildStepSentence, isEventPath } from './step-sentence';
+
+export type { StepOpenTarget } from './step-open-target';
+export { resolveStepOpenTarget } from './step-open-target';

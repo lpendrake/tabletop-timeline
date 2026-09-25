@@ -13,6 +13,7 @@ import {
   type ViewportSize,
 } from '../../timeline/math/zoom';
 import { CalendarProvider } from '../../timeline/calendar/provider';
+import { deriveInGameNowSeconds } from '../../shared/in-game-now';
 import { createCalendar, resolveCalendar, GOLARION_ID } from '../../../shared/calendar';
 import { addInGameDuration, type ExtendUnit } from '../../timeline/calendar/add-in-game-duration';
 import { buildRescheduleFrontmatter } from './reschedule-domain';
@@ -734,17 +735,7 @@ export function TimelineView({
     },
   });
 
-  const inGameNowSeconds = (() => {
-    if (loadedData.gameState?.in_game_now_seconds != null) {
-      return loadedData.gameState.in_game_now_seconds;
-    }
-    // Fallback for older campaigns that only have the string form.
-    const legacyStr = loadedData.gameState?.in_game_now;
-    if (!legacyStr) return Infinity;
-    const cal = CalendarProvider.get();
-    const parsed = cal.tryParse(legacyStr);
-    return parsed ? cal.toEpochSeconds(parsed) : Infinity;
-  })();
+  const inGameNowSeconds = deriveInGameNowSeconds(loadedData.gameState, CalendarProvider.get());
   // Derive the formatted "now" string from seconds for display purposes.
   const inGameNow = (() => {
     if (inGameNowSeconds !== Infinity) {

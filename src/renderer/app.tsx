@@ -265,7 +265,15 @@ export default function App() {
             />
           );
         case 'relationships':
-          return <RelationshipsView />;
+          return (
+            <RelationshipsView
+              campaignPath={activeCampaign.path}
+              entityLabelMap={entityLabelMap}
+              getEntityIndex={() => entityIndexRef.current}
+              onOpenById={handleOpenById}
+              onOpenEvent={handleJumpToEvent}
+            />
+          );
         default:
           return (
             <NotesView
