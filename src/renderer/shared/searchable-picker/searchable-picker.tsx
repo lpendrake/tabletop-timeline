@@ -37,6 +37,18 @@ export interface SearchablePickerProps {
   /** Caps the option list's height (px), e.g. so a caller-computed placement fits on screen. Omit to use the list's own CSS default. */
   listMaxHeight?: number;
   /**
+   * Overrides the default `rankPickerOptions` ranking — e.g. `NotePickerField`
+   * passes one built on `shared/entity-match.ts`'s title/id matcher, so note
+   * pickers find notes the same way the `@` link search does instead of via
+   * `rankPickerOptions`'s file-path matching (built for the New Note folder
+   * picker). Defaults to `rankPickerOptions` when omitted.
+   */
+  rank?: (
+    options: readonly PickerOption[],
+    query: string,
+    recentIds?: readonly string[],
+  ) => PickerOption[];
+  /**
    * Attached to the rendered option list element — lets a caller (e.g.
    * `relationship-bubble-view-plugin.ts`, which measures the list's and its
    * first row's real height to plan the bubble's placement) hold a
@@ -74,15 +86,13 @@ export function SearchablePicker({
   createRow,
   listMaxHeight,
   listRef,
+  rank = rankPickerOptions,
 }: SearchablePickerProps) {
   const [query, setQuery] = useState('');
   const [highlight, setHighlight] = useState(0);
   const internalListRef = useRef<HTMLDivElement>(null);
 
-  const results = useMemo(
-    () => rankPickerOptions(options, query, recentIds),
-    [options, query, recentIds],
-  );
+  const results = useMemo(() => rank(options, query, recentIds), [rank, options, query, recentIds]);
   const showCreateRow = Boolean(createRow?.show);
   const rowCount = results.length + (showCreateRow ? 1 : 0);
 

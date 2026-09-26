@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { sanitiseValue, type Role, type ResolvedTrack } from '../../../../shared/relationships';
-import { SearchablePicker, type PickerOption } from '../../searchable-picker';
+import { compareRanked, rankEntityMatch, type MatchRank } from '../../entity-match';
+import { SearchablePicker, recentsFirst, type PickerOption } from '../../searchable-picker';
 import {
   buildNotePickerRecents,
   decideBubbleKey,
@@ -371,6 +372,37 @@ function usePickerTabHandler(
   };
 }
 
+interface RankedNoteOption {
+  option: PickerOption;
+  index: number;
+  rank: MatchRank;
+}
+
+/**
+ * Ranks note options the same way the `@` link search does (title/id
+ * substring matching via `shared/entity-match.ts`'s `rankEntityMatch`), not
+ * `rankPickerOptions`'s file-path-segment matching — a note titled "The
+ * Whispering Claw" needs to be found by typing its title, not by segments
+ * of its file path. Passed to `SearchablePicker`'s `rank` prop by
+ * `NotePickerField` below; the folder picker (and every other
+ * `SearchablePicker` caller) keeps `rankPickerOptions` by not passing this.
+ */
+export function rankNoteOptions(
+  options: readonly PickerOption[],
+  query: string,
+  recentIds?: readonly string[],
+): PickerOption[] {
+  const q = query.trim();
+  if (!q) return recentsFirst(options, recentIds);
+  const ranked: RankedNoteOption[] = [];
+  options.forEach((option, index) => {
+    const rank = rankEntityMatch(option.label ?? option.path, option.id, q);
+    if (rank !== null) ranked.push({ option, index, rank });
+  });
+  ranked.sort(compareRanked);
+  return ranked.map((entry) => entry.option);
+}
+
 function NotePickerField(props: RelationshipBubbleProps) {
   const {
     value,
@@ -423,6 +455,7 @@ function NotePickerField(props: RelationshipBubbleProps) {
         ariaLabel={role}
         listMaxHeight={listMaxHeight ?? undefined}
         listRef={listRef}
+        rank={rankNoteOptions}
         onCancel={onClose}
         onPick={(option) => void commitPick(option.id, 'advance')}
       />

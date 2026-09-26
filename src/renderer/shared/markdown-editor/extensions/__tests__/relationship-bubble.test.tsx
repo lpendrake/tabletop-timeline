@@ -6,7 +6,11 @@ import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
 import { fireEvent } from '@testing-library/react';
-import { RelationshipBubble, type RelationshipBubbleProps } from '../relationship-bubble';
+import {
+  RelationshipBubble,
+  rankNoteOptions,
+  type RelationshipBubbleProps,
+} from '../relationship-bubble';
 import { computeCaretPlacement } from '../../../context-menu/caret-position';
 import { resolveTrackSpec } from '../../../../../shared/relationships';
 import {
@@ -358,6 +362,67 @@ describe('holder/observer note pickers', () => {
       await Promise.resolve();
     });
     expect(onCommit).toHaveBeenCalledWith('a1b2', 'advance');
+  });
+});
+
+describe('rankNoteOptions — note pickers find notes by title, the same way @ links do', () => {
+  const NOTE_OPTIONS = [
+    { id: 'n1', path: 'npcs/random-goblin', label: 'A Random Goblin' },
+    { id: 'n2', path: 'items/claw-of-the-beast', label: 'Claw of the Beast' },
+    { id: 'n3', path: 'factions/silent-order', label: 'The Silent Order' },
+    { id: 'n4', path: 'npcs/whispering-claw', label: 'The Whispering Claw' },
+    { id: 'n5', path: 'locations/whisper-caves', label: 'Whisper Caves' },
+  ];
+
+  it('"claw" returns only titles containing claw, including The Whispering Claw', () => {
+    const ids = rankNoteOptions(NOTE_OPTIONS, 'claw').map((o) => o.id);
+    expect(ids.sort()).toEqual(['n2', 'n4']);
+  });
+
+  it('"whispering" ranks The Whispering Claw near the top', () => {
+    const ids = rankNoteOptions(NOTE_OPTIONS, 'whispering').map((o) => o.id);
+    expect(ids[0]).toBe('n4');
+  });
+
+  it('"whispering claw" and the full title both match The Whispering Claw', () => {
+    expect(rankNoteOptions(NOTE_OPTIONS, 'whispering claw').map((o) => o.id)).toEqual(['n4']);
+    expect(rankNoteOptions(NOTE_OPTIONS, 'The Whispering Claw').map((o) => o.id)).toEqual(['n4']);
+  });
+
+  it('does not use file-path segment matching — a query matching only the path, not the title/id, finds nothing', () => {
+    // "npcs" is a path segment for several options above but not part of
+    // any title or id, so it must not match (unlike rankPickerOptions).
+    expect(rankNoteOptions(NOTE_OPTIONS, 'npcs')).toEqual([]);
+  });
+
+  it('empty query keeps recents-first ordering', () => {
+    const ids = rankNoteOptions(NOTE_OPTIONS, '', ['n5', 'n1']).map((o) => o.id);
+    expect(ids).toEqual(['n5', 'n1', 'n2', 'n3', 'n4']);
+  });
+});
+
+describe('holder/observer note picker (component) — title search via SearchablePicker', () => {
+  const NOTE_OPTIONS = [
+    { id: 'n2', path: 'items/claw-of-the-beast', label: 'Claw of the Beast' },
+    { id: 'n3', path: 'factions/silent-order', label: 'The Silent Order' },
+    { id: 'n4', path: 'npcs/whispering-claw', label: 'The Whispering Claw' },
+  ];
+
+  it('typing the note title finds it, even though it does not match the file path', () => {
+    tracked();
+    render(
+      baseProps({
+        role: 'holder',
+        value: '',
+        track: REP_TRACK,
+        noteOptions: NOTE_OPTIONS,
+      }),
+    );
+    fireEvent.change(input(), { target: { value: 'whispering claw' } });
+    const rows = Array.from(container.querySelectorAll('.searchable-picker-row')).map(
+      (r) => r.textContent,
+    );
+    expect(rows).toEqual(['The Whispering Claw']);
   });
 });
 
