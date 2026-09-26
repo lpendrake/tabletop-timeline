@@ -1,7 +1,6 @@
 import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { sanitiseValue, type Role, type ResolvedTrack } from '../../../../shared/relationships';
-import { compareRanked, rankEntityMatch, type MatchRank } from '../../entity-match';
-import { SearchablePicker, recentsFirst, type PickerOption } from '../../searchable-picker';
+import { SearchablePicker, type PickerOption } from '../../searchable-picker';
 import {
   buildNotePickerRecents,
   decideBubbleKey,
@@ -10,6 +9,7 @@ import {
   isAllowedNumberInputText,
   pickForTab,
   prefillNoteValue,
+  rankNoteOptions,
   shouldNotifyHolderChosen,
   shouldOfferCreateOption,
   stepAmount,
@@ -361,47 +361,24 @@ function usePickerTabHandler(
   recentIds: readonly string[] | undefined,
   value: string | null | undefined,
   onCommit: (value: string, direction: BubbleCommitDirection) => void,
+  ranker?: (
+    options: readonly PickerOption[],
+    query: string,
+    recentIds?: readonly string[],
+  ) => PickerOption[],
 ) {
   return (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key !== 'Tab') return;
     e.preventDefault();
     e.stopPropagation();
     const target = e.target as HTMLInputElement;
-    const picked = pickForTab(options, target.value ?? '', recentIds, value);
+    const picked = pickForTab(options, target.value ?? '', recentIds, value, ranker);
     if (picked) onCommit(picked.id, e.shiftKey ? 'back' : 'advance');
   };
 }
 
-interface RankedNoteOption {
-  option: PickerOption;
-  index: number;
-  rank: MatchRank;
-}
-
-/**
- * Ranks note options the same way the `@` link search does (title/id
- * substring matching via `shared/entity-match.ts`'s `rankEntityMatch`), not
- * `rankPickerOptions`'s file-path-segment matching — a note titled "The
- * Whispering Claw" needs to be found by typing its title, not by segments
- * of its file path. Passed to `SearchablePicker`'s `rank` prop by
- * `NotePickerField` below; the folder picker (and every other
- * `SearchablePicker` caller) keeps `rankPickerOptions` by not passing this.
- */
-export function rankNoteOptions(
-  options: readonly PickerOption[],
-  query: string,
-  recentIds?: readonly string[],
-): PickerOption[] {
-  const q = query.trim();
-  if (!q) return recentsFirst(options, recentIds);
-  const ranked: RankedNoteOption[] = [];
-  options.forEach((option, index) => {
-    const rank = rankEntityMatch(option.label ?? option.path, option.id, q);
-    if (rank !== null) ranked.push({ option, index, rank });
-  });
-  ranked.sort(compareRanked);
-  return ranked.map((entry) => entry.option);
-}
+// Re-export rankNoteOptions for backwards compatibility
+export { rankNoteOptions } from './relationship-bubble-logic';
 
 function NotePickerField(props: RelationshipBubbleProps) {
   const {
@@ -442,6 +419,7 @@ function NotePickerField(props: RelationshipBubbleProps) {
     recents,
     prefilled,
     (id, direction) => void commitPick(id, direction),
+    rankNoteOptions,
   );
 
   return (

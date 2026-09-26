@@ -7,7 +7,8 @@
  */
 import type { ParsedDirective, Role, ResolvedTrack } from '../../../../shared/relationships';
 import { validateRoleValue, noteIdOf } from '../../../../shared/relationships';
-import { rankPickerOptions, type PickerOption } from '../../searchable-picker';
+import { rankPickerOptions, recentsFirst, type PickerOption } from '../../searchable-picker';
+import { compareRanked, rankEntityMatch, type MatchRank } from '../../entity-match';
 
 /** How a bubble field commit should move the bubble: to the next/previous blank, or hop over a filled one. */
 export type BubbleCommitDirection = 'advance' | 'back' | 'hop-next' | 'hop-prev';
@@ -199,18 +200,56 @@ export function prefillNoteValue(
   return role === 'holder' && !currentId ? (defaultHolderId ?? undefined) : currentId;
 }
 
+interface RankedNoteOption {
+  option: PickerOption;
+  index: number;
+  rank: MatchRank;
+}
+
+/**
+ * Ranks note options the same way the `@` link search does (title/id
+ * substring matching via `shared/entity-match.ts`'s `rankEntityMatch`), not
+ * `rankPickerOptions`'s file-path-segment matching — a note titled "The
+ * Whispering Claw" needs to be found by typing its title, not by segments
+ * of its file path. Passed to `SearchablePicker`'s `rank` prop by
+ * `NotePickerField` below; the folder picker (and every other
+ * `SearchablePicker` caller) keeps `rankPickerOptions` by not passing this.
+ */
+export function rankNoteOptions(
+  options: readonly PickerOption[],
+  query: string,
+  recentIds?: readonly string[],
+): PickerOption[] {
+  const q = query.trim();
+  if (!q) return recentsFirst(options, recentIds);
+  const ranked: RankedNoteOption[] = [];
+  options.forEach((option, index) => {
+    const rank = rankEntityMatch(option.label ?? option.path, option.id, q);
+    if (rank !== null) ranked.push({ option, index, rank });
+  });
+  ranked.sort(compareRanked);
+  return ranked.map((entry) => entry.option);
+}
+
 /**
  * The option Tab should commit for a picker-backed field: the query's top
  * ranked match, or (an empty query) the currently-selected value if it still
- * ranks among the recents/options shown.
+ * ranks among the recents/options shown. The `ranker` function determines
+ * how options are ranked (e.g., `rankNoteOptions` for note pickers,
+ * `rankPickerOptions` for others).
  */
 export function pickForTab(
   options: readonly PickerOption[],
   query: string,
   recentIds: readonly string[] | undefined,
   value: string | null | undefined,
+  ranker: (
+    options: readonly PickerOption[],
+    query: string,
+    recentIds?: readonly string[],
+  ) => PickerOption[] = rankPickerOptions,
 ): PickerOption | null {
-  const ranked = rankPickerOptions(options, query, recentIds);
+  const ranked = ranker(options, query, recentIds);
   if (!query.trim() && value) {
     const matched = ranked.find((o) => o.id === value);
     if (matched) return matched;

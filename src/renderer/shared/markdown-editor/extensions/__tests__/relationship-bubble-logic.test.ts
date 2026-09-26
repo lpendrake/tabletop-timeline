@@ -18,6 +18,7 @@ import {
   buildNotePickerRecents,
   prefillNoteValue,
   pickForTab,
+  rankNoteOptions,
   initialNumberFieldValue,
   allowsFraction,
   isAllowedNumberInputText,
@@ -209,13 +210,46 @@ describe('prefillNoteValue (pure)', () => {
   });
 });
 
+describe('rankNoteOptions (pure)', () => {
+  const options = [
+    { id: 'a1', path: 'notes/factions/twc.md', label: 'The Whispering Claw' },
+    { id: 'b2', path: 'notes/places/claws.md', label: 'Claw Hammer Inn' },
+    { id: 'c3', path: 'notes/npcs/whisper.md', label: 'Whisper the Spy' },
+  ];
+
+  it('ranks by title using entity-match semantics (title/id substring)', () => {
+    const ranked = rankNoteOptions(options, 'whispering');
+    // Should find "The Whispering Claw" by title substring
+    expect(ranked[0]?.id).toBe('a1');
+  });
+
+  it('finds options by title when path does not match', () => {
+    const ranked = rankNoteOptions(options, 'hammer');
+    // "Claw Hammer Inn" matches by title, not by path
+    expect(ranked[0]?.id).toBe('b2');
+  });
+
+  it('an empty query returns recents first', () => {
+    const ranked = rankNoteOptions(options, '', ['c3', 'a1']);
+    // With recents, c3 should come first, then a1
+    expect(ranked[0]?.id).toBe('c3');
+    expect(ranked[1]?.id).toBe('a1');
+    expect(ranked[2]?.id).toBe('b2');
+  });
+
+  it('returns all options when there is no query', () => {
+    const ranked = rankNoteOptions(options, '');
+    expect(ranked.length).toBe(3);
+  });
+});
+
 describe('pickForTab (pure)', () => {
   const options = [
     { id: 'a1', path: 'npcs/mira', label: 'Mira' },
     { id: 'c3', path: 'factions/party', label: 'The Party' },
   ];
 
-  it('picks the top ranked match for a non-empty query', () => {
+  it('picks the top ranked match for a non-empty query using default ranker', () => {
     expect(pickForTab(options, 'mira', undefined, null)?.id).toBe('a1');
   });
 
@@ -229,6 +263,17 @@ describe('pickForTab (pure)', () => {
 
   it('returns null when there are no options at all', () => {
     expect(pickForTab([], '', undefined, null)).toBeNull();
+  });
+
+  it('picks the first visible option using a custom ranker (note picker scenario)', () => {
+    const noteOptions = [
+      { id: 'a1', path: 'notes/factions/twc.md', label: 'The Whispering Claw' },
+      { id: 'b2', path: 'notes/places/claws.md', label: 'Claw Hammer Inn' },
+      { id: 'c3', path: 'notes/npcs/whisper.md', label: 'Whisper the Spy' },
+    ];
+    // Query "whispering" with rankNoteOptions should pick "The Whispering Claw" (first visible)
+    const picked = pickForTab(noteOptions, 'whispering', undefined, null, rankNoteOptions);
+    expect(picked?.id).toBe('a1');
   });
 });
 
