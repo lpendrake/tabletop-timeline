@@ -378,13 +378,22 @@ describe('relationship directives — Ctrl/Cmd+click reliability on a value', ()
     expect(event.defaultPrevented).toBe(true);
   });
 
-  it('a plain pointerdown on a value is left alone (only Ctrl/Cmd is guarded)', () => {
+  it('a plain pointerdown on a value is also guarded — see bug 12 below: CodeMirror must never get first crack at it', () => {
     const setup = track(makeView(FULL_CHANGE_DIRECTIVE, {}, { labels: LABELS }));
     const { view } = setup;
     const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
 
     const event = firePointerDown(holderValue);
-    expect(event.defaultPrevented).toBe(false);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('a plain pointerdown on the block wording (not a value) is guarded too', () => {
+    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, {}, { labels: LABELS }));
+    const { view } = setup;
+    const el = block(view);
+    // Fire on the block root itself (the "wording" click target), not a `.cm-directive-value` child.
+    const event = firePointerDown(el);
+    expect(event.defaultPrevented).toBe(true);
   });
 
   it('Ctrl/Cmd+click reliably opens the note — pointerdown guarded, click never lands on the wrong thing', () => {
@@ -405,6 +414,51 @@ describe('relationship directives — Ctrl/Cmd+click reliability on a value', ()
     // The selection was never hijacked by CodeMirror along the way.
     expect(view.state.selection.main.from).toBe(0);
     expect(view.state.selection.main.to).toBe(0);
+  });
+
+  // Bug 12's root cause is the same mechanism the test above already proves
+  // for Ctrl/Cmd+click: an unguarded mousedown on the atomic block — plain
+  // or modified — snaps the selection over the whole directive before any
+  // `click` fires. On a real browser that selection-driven update forces
+  // CodeMirror to rebuild the block's widget DOM mid-gesture, detaching the
+  // exact node the mousedown landed on; since a `click` is only synthesised
+  // when mousedown and mouseup share a target, the click is silently
+  // dropped and the first click on a directive never opens its bubble —
+  // only a second click (mousedown on the now-settled, already-rebuilt
+  // node) succeeds. These tests prove the fix: guarding every plain
+  // pointerdown on the block (not just modified ones) keeps CodeMirror from
+  // ever touching the selection, so a single click is reliable.
+  it('fixes bug 12: guarding the plain pointerdown keeps the selection untouched, so a single click reliably opens the bubble', () => {
+    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, {}, { labels: LABELS }));
+    const { view } = setup;
+    const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
+
+    // The guarded pointerdown is prevented, so on a real browser the
+    // compatibility mousedown is never dispatched at all — simulated here by
+    // simply never firing `fireMouseDown`, exactly like the existing
+    // Ctrl/Cmd+click regression test above.
+    const pointerDown = firePointerDown(holderValue);
+    expect(pointerDown.defaultPrevented).toBe(true);
+    fireClick(holderValue);
+
+    expect(view.state.field(bubbleStateField)).toEqual({ anchor: 0, role: 'holder' });
+    // The selection was never hijacked by CodeMirror along the way, so there
+    // is no widget rebuild for the click to race against.
+    expect(view.state.selection.main.from).toBe(0);
+    expect(view.state.selection.main.to).toBe(0);
+  });
+
+  it('fixes bug 12: guarding a plain pointerdown on the wording (no value under the cursor) also keeps a single click working', () => {
+    const setup = track(makeView(UNFINISHED_CHANGE_DIRECTIVE, {}, { labels: LABELS }));
+    const { view } = setup;
+    const el = block(view);
+
+    const pointerDown = firePointerDown(el);
+    expect(pointerDown.defaultPrevented).toBe(true);
+    fireClick(el);
+
+    // UNFINISHED_CHANGE_DIRECTIVE's first empty blank is `amount`.
+    expect(view.state.field(bubbleStateField)).toEqual({ anchor: 0, role: 'amount' });
   });
 
   it('plain click still opens the fill-in bubble; Ctrl/Cmd+click never does', () => {

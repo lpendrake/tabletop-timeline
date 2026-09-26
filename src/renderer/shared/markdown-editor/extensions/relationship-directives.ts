@@ -564,16 +564,28 @@ export function relationshipDirectives(config: RelationshipDirectivesConfig = {}
     directiveTheme,
     makeDirectiveDeleteKeymap(),
     makeDirectiveEnterKeymap(config),
-    // Ctrl/Cmd+left-click on a value is meant to open its note, not place a
-    // caret. Because the directive block is an atomic `Decoration.replace`
-    // range with `ignoreEvent() === false`, CodeMirror handles the mousedown
-    // itself first — snapping the selection to cover the whole block — before
-    // the browser's own click ever reaches the value span's listener. That
-    // race is what makes plain Ctrl/Cmd+click unreliable (see this module's
-    // AGENTS.md and its tests). `makePointerGuard` swallows the modified
-    // pointerdown in the capture phase — exactly the trick `wiki-links.ts`
-    // uses for `.cm-note-link` — so CodeMirror never gets to move the caret,
-    // and the click (handled in `buildValueSpan`) fires reliably every time.
-    makePointerGuard('.cm-directive-value'),
+    // Any left-click anywhere in a directive block (its wording, a value, or
+    // Ctrl/Cmd+click on a value to open its note) is meant to be handled by
+    // this file's own `click` listeners, never CodeMirror's own caret
+    // placement. Because the block is an atomic `Decoration.replace` range
+    // with `ignoreEvent() === false`, CodeMirror otherwise handles the
+    // mousedown itself first — snapping the selection to the atomic range's
+    // boundary — before the browser's own click ever reaches a listener
+    // inside the block. On a real browser that selection-snap also has to
+    // rebuild the block's widget DOM (its border class/content can depend on
+    // the resulting selection-driven layout pass), which detaches the exact
+    // node the mousedown landed on: since the browser only synthesises a
+    // `click` when mousedown and mouseup share a target, the click is then
+    // silently dropped, and the very first click on a directive never opens
+    // its bubble — see this module's AGENTS.md and its tests, and
+    // `relationship-bubble-view-plugin.ts`'s `scheduleMeasure` for the
+    // related churn this same rebuild causes on the bubble's placement.
+    // `makePointerGuard` with `anyLeftClick: true` swallows every plain (and
+    // modified) pointerdown on the block in the capture phase — exactly the
+    // trick `wiki-links.ts` uses for `.cm-note-link` — so CodeMirror never
+    // gets to move the caret or rebuild anything, and the block's own click
+    // handlers (wording, value, Ctrl/Cmd+click) fire reliably on the very
+    // first click every time.
+    makePointerGuard('.cm-directive', { anyLeftClick: true }),
   ];
 }

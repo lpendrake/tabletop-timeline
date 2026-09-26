@@ -8,6 +8,7 @@ import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { history } from '@codemirror/commands';
 import { relationshipDirectives, setDirectiveContext } from '../relationship-directives';
+import * as relationshipDirectivesModule from '../relationship-directives';
 import {
   isRelationshipBubbleOpen,
   relationshipBubble,
@@ -592,5 +593,113 @@ describe('relationship bubble — recent notes are shared across editor instance
 
     const firstRow = document.querySelector<HTMLElement>('.searchable-picker-row');
     expect(firstRow?.textContent).toBe('White Tigers');
+  });
+});
+
+describe('relationship bubble — placement over the clicked value (#262 bug 13)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function mockLineRect(view: EditorView, left: number, right: number): void {
+    vi.spyOn(view, 'coordsAtPos').mockReturnValue({
+      left,
+      right,
+      top: 100,
+      bottom: 120,
+    } as ReturnType<EditorView['coordsAtPos']>);
+  }
+
+  /** Gives `el` a `getBoundingClientRect` distinct from the directive's own line rect. */
+  function mockBlankRect(el: HTMLElement, left: number, right: number): void {
+    vi.spyOn(el, 'getBoundingClientRect').mockReturnValue({
+      left,
+      right,
+      top: 100,
+      bottom: 118,
+      width: right - left,
+      height: 18,
+      x: left,
+      y: 100,
+      toJSON: () => ({}),
+    } as DOMRect);
+  }
+
+  it('places the bubble over the clicked (already-filled) value, not the directive line start', async () => {
+    const setup = track(makeView(FULL_CHANGE_DIRECTIVE));
+    const { view } = setup;
+    // The line/directive start is far to the left of where the observer
+    // value is actually rendered — this is the fallback rect the bug fell
+    // back to when `getDirectiveRoleElement` missed.
+    mockLineRect(view, 20, 40);
+    const observerValue = view.dom.querySelector<HTMLElement>('.cm-directive-value-role-observer')!;
+    mockBlankRect(observerValue, 300, 360);
+
+    act(() => {
+      observerValue.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }),
+      );
+    });
+    await flushBubbleOpen();
+
+    const bubble = document.querySelector<HTMLElement>('.relationship-bubble')!;
+    // `clampBubbleLeft` anchors the bubble at the blank's own left edge
+    // (clamped to the viewport) — it must not fall back to the line's rect.
+    expect(bubble.style.left).toBe('300px');
+  });
+
+  it('still places the bubble correctly even when the registry lookup transiently misses once (settles on retry)', async () => {
+    const setup = track(makeView(FULL_CHANGE_DIRECTIVE));
+    const { view } = setup;
+    mockLineRect(view, 20, 40);
+    const observerValue = view.dom.querySelector<HTMLElement>('.cm-directive-value-role-observer')!;
+    mockBlankRect(observerValue, 300, 360);
+
+    // Simulate the root cause: CodeMirror's own settling pass leaves the
+    // widget registry transiently empty for one microtask right after the
+    // directive's block re-renders, before `scheduleMeasure`'s retry gives
+    // it another chance.
+    const real = relationshipDirectivesModule.getDirectiveRoleElement;
+    let calls = 0;
+    vi.spyOn(relationshipDirectivesModule, 'getDirectiveRoleElement').mockImplementation(
+      (...args) => {
+        calls += 1;
+        if (calls === 1) return null;
+        return real(...args);
+      },
+    );
+
+    act(() => {
+      observerValue.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }),
+      );
+    });
+    await flushBubbleOpen();
+
+    expect(calls).toBeGreaterThan(1);
+    const bubble = document.querySelector<HTMLElement>('.relationship-bubble')!;
+    expect(bubble.style.left).toBe('300px');
+  });
+
+  it('falls back to the directive line start only once retries are exhausted (a genuinely unrendered blank)', async () => {
+    const setup = track(makeView(FULL_CHANGE_DIRECTIVE));
+    const { view } = setup;
+    mockLineRect(view, 20, 40);
+    const observerValue = view.dom.querySelector<HTMLElement>('.cm-directive-value-role-observer')!;
+    mockBlankRect(observerValue, 300, 360);
+
+    // Always miss — a directive that really isn't (and never will be) rendered.
+    vi.spyOn(relationshipDirectivesModule, 'getDirectiveRoleElement').mockReturnValue(null);
+
+    act(() => {
+      observerValue.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }),
+      );
+    });
+    await flushBubbleOpen();
+
+    const bubble = document.querySelector<HTMLElement>('.relationship-bubble')!;
+    // Falls back to the (clamped) line rect — never hangs waiting forever.
+    expect(bubble.style.left).toBe('20px');
   });
 });

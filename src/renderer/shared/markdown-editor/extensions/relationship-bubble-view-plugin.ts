@@ -43,6 +43,13 @@ import { getRecentNoteIds, rememberRecentNote } from './relationship-recent-note
 const DEFAULT_TAIL_OFFSET = 16;
 
 /**
+ * How many extra microtasks `scheduleMeasure` will wait for the clicked
+ * blank's own element to reappear in `getDirectiveRoleElement` before giving
+ * up and falling back to the directive line's own rect. See its doc comment.
+ */
+const MAX_MEASURE_ATTEMPTS = 3;
+
+/**
  * The query the bubble sends to the host's `heldOptions` resolver: which
  * (track, holder, observer) ledger to fold, the blank's directive anchor
  * (to exclude that directive's own delta from the fold), and the buffer's
@@ -349,10 +356,33 @@ class RelationshipBubblePlugin {
       DEFAULT_TAIL_OFFSET,
       null,
     );
+    this.scheduleMeasure(anchor, role, base, 0);
+  }
+
+  /**
+   * Measures and paints the bubble in its real position, deferred to a
+   * microtask because `EditorView.coordsAtPos` throws if called
+   * synchronously inside a CodeMirror update.
+   *
+   * Right after the directive's own block re-renders (e.g. the block that
+   * was just filled in), CodeMirror can still be mid-way through its own
+   * measure-and-redraw cycle for that line: the directive widget's `toDOM`
+   * has fired but a further internal pass hasn't settled yet, so
+   * `getDirectiveRoleElement` can transiently find nothing even though the
+   * widget is about to be there. One retry on a second microtask is enough
+   * to land after that settles — MAX_MEASURE_ATTEMPTS bounds it so a blank
+   * that's genuinely not rendered (an off-screen or stale directive) still
+   * falls back to the line's own rect instead of retrying forever.
+   */
+  private scheduleMeasure(anchor: number, role: Role, base: BaseProps, attempt: number): void {
     queueMicrotask(() => {
       if (!this.root || !this.host) return;
       const currentState = this.view.state.field(bubbleStateField, false);
       if (!currentState || currentState.anchor !== anchor || currentState.role !== role) return;
+      if (attempt < MAX_MEASURE_ATTEMPTS && !getDirectiveRoleElement(this.view, anchor, role)) {
+        this.scheduleMeasure(anchor, role, base, attempt + 1);
+        return;
+      }
       const { style, side, tailOffset, listMaxHeight } = this.computePlacement(anchor, role);
       if (style) this.paint(base, style, side, true, tailOffset, listMaxHeight);
     });
