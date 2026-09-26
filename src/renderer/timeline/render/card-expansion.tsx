@@ -1,5 +1,6 @@
 import { useRef, useCallback, type CSSProperties, type ReactElement } from 'react';
 import { MarkdownPreview } from '../../shared/markdown-editor';
+import type { RelationshipDirectivesHostConfig } from '../../shared/markdown-editor';
 import type { PreviewSize } from '../interactions/usePreviewSize';
 import type { CardExpansionState } from '../interactions/useCardExpansion';
 
@@ -21,6 +22,7 @@ interface CardExpansionProps {
   onResizeDragChange: (active: boolean) => void;
   onOpenById?: (id: string) => void;
   entityLabelMap?: Map<string, string>;
+  relationshipDirectives?: RelationshipDirectivesHostConfig;
 }
 
 export function CardExpansion({
@@ -33,6 +35,7 @@ export function CardExpansion({
   onResizeDragChange,
   onOpenById,
   entityLabelMap,
+  relationshipDirectives,
 }: CardExpansionProps): ReactElement {
   // Ref to the expansion container element (owns the height we resize)
   const expRef = useRef<HTMLDivElement>(null);
@@ -125,6 +128,7 @@ export function CardExpansion({
               ? { onOpen: onOpenById, entityLabels: entityLabelMap }
               : undefined
           }
+          relationshipDirectives={relationshipDirectives}
         />
       ) : status === 'error' ? (
         <div className="exp-body">

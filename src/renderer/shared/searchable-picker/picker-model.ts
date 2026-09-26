@@ -38,7 +38,13 @@ export function rankPickerOptions(
   return limit !== undefined ? result.slice(0, limit) : result;
 }
 
-function recentsFirst(
+/**
+ * Options whose id is in `recentIds` first (in `recentIds` order), then the
+ * rest in their original input order. Exported so a caller with its own
+ * `rank` (e.g. `NotePickerField`'s note-title ranker) can reuse the same
+ * empty-query behaviour instead of reimplementing it.
+ */
+export function recentsFirst(
   options: readonly PickerOption[],
   recentIds?: readonly string[],
 ): PickerOption[] {

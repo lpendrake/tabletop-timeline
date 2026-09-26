@@ -3,6 +3,7 @@ import './cards.css';
 import type { EventListItem } from '../data/types';
 import type { WeekdayColors } from '../../theme';
 import { resolveEntityTagLabel, isValidCustomTag } from '../../../shared/entity-tags';
+import { NOTE_DEFAULT_REASON } from '../../../shared/relationships';
 import type { ViewState, ViewportSize } from '../math/zoom';
 import { formatCardFace } from '../calendar/format';
 import {
@@ -18,6 +19,7 @@ import {
 import type { CardExpansionState } from '../interactions/useCardExpansion';
 import type { PreviewSize } from '../interactions/usePreviewSize';
 import { CardExpansion } from './card-expansion';
+import type { TrackLibrary } from '../../../shared/relationships';
 
 // MIT-licensed Heroicons v1 paths
 const ICON_EDIT = (
@@ -54,6 +56,7 @@ interface CardsProps {
   onTagContextMenu?: (filename: string, tag: string, clientX: number, clientY: number) => void;
   entityLabelMap?: Map<string, string>;
   entityTagLabelMap?: Map<string, string>;
+  relationshipLibrary?: TrackLibrary;
 }
 
 export function Cards({
@@ -75,6 +78,7 @@ export function Cards({
   onTagContextMenu,
   entityLabelMap,
   entityTagLabelMap,
+  relationshipLibrary,
 }: CardsProps): ReactElement | null {
   const laidOut = useMemo(
     () => layoutCards(events, view, size, inGameNowSeconds),
@@ -146,6 +150,7 @@ export function Cards({
             onTagContextMenu={onTagContextMenu}
             entityLabelMap={entityLabelMap}
             entityTagLabelMap={entityTagLabelMap}
+            relationshipLibrary={relationshipLibrary}
           />
         );
       })}
@@ -173,6 +178,7 @@ interface CardItemProps {
   onTagContextMenu?: (filename: string, tag: string, clientX: number, clientY: number) => void;
   entityLabelMap?: Map<string, string>;
   entityTagLabelMap?: Map<string, string>;
+  relationshipLibrary?: TrackLibrary;
 }
 
 function CardItem({
@@ -195,6 +201,7 @@ function CardItem({
   onTagContextMenu,
   entityLabelMap,
   entityTagLabelMap,
+  relationshipLibrary,
 }: CardItemProps): ReactElement {
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
@@ -225,6 +232,15 @@ function CardItem({
       onResizeDragChange={onResizeDragChange}
       onOpenById={onOpenById}
       entityLabelMap={entityLabelMap}
+      relationshipDirectives={
+        relationshipLibrary
+          ? {
+              library: relationshipLibrary,
+              defaultReason: card.event.title || NOTE_DEFAULT_REASON,
+              onOpenNote: onOpenById,
+            }
+          : undefined
+      }
     />
   ) : null;
 

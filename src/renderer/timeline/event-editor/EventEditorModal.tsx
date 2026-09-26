@@ -38,6 +38,11 @@ import { entityIndex as entityIndexStore } from '../../shared/entity-index';
 import { buildEntityLink } from '../../shared/entity-link';
 import { copyToClipboard } from '../../shared/clipboard';
 import { useNewNoteMenuConfig, entityFromCreatedNote, type CreatedNote } from '../../notes/public';
+import { useRelationshipEditorConfig } from '../../relationships/hooks/use-relationship-editor-config';
+import { isRelationshipBubbleOpen } from '../../shared/markdown-editor/extensions/relationship-bubble-view-plugin';
+import { eventRelationshipDefaultReason } from './relationship-default-reason';
+import { bufferEpochSeconds } from './domain/buffer-epoch-seconds';
+import { CalendarProvider } from '../calendar/provider';
 import './EventEditorModal.css';
 
 function TagChipList({
@@ -175,6 +180,19 @@ export function EventEditorModal({
 
   const viewRef = useRef<EditorView | null>(null);
   const autoSaveTimerRef = useRef<number | null>(null);
+
+  const { relationshipDirectives: relationshipDirectivesConfig, contextMenu: editorContextMenu } =
+    useRelationshipEditorConfig({
+      entityIndex,
+      defaultReason: eventRelationshipDefaultReason(buffer),
+      onOpenNote: onOpenById,
+      place: 'event',
+      currentPath: () => (filenameRef.current ? `timeline/${filenameRef.current}` : null),
+      at: () => bufferEpochSeconds(bufferRef.current, CalendarProvider.get()),
+      getDocText: () => bufferRef.current.body,
+      confirm,
+      extraMenuItems: newNoteMenuConfig.extraItems,
+    });
 
   // Clear pending timers if the modal unmounts mid-flight
   useEffect(() => {
@@ -379,6 +397,11 @@ export function EventEditorModal({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        // A relationship bubble handles its own Escape (closing itself,
+        // leaving remaining blanks as-is) — the modal must not also close
+        // on the same keypress. Checked by containment against the
+        // bubble's own host element, never a DOM data read.
+        if (isRelationshipBubbleOpen(e.target)) return;
         e.stopPropagation();
         requestClose();
         return;
@@ -559,7 +582,8 @@ export function EventEditorModal({
                     knownIds,
                     entityLabels: entityLabelMap,
                   }}
-                  contextMenu={newNoteMenuConfig}
+                  contextMenu={editorContextMenu}
+                  relationshipDirectives={relationshipDirectivesConfig}
                 />
               </div>
 

@@ -21,6 +21,7 @@ import {
   type DecorationSet,
 } from '@codemirror/view';
 import { makePointerGuard } from './pointer-guard';
+import { parsedDirectivesField, directiveRanges } from './parsed-directives';
 import { showContextMenu, type ContextMenuItem } from '../../context-menu';
 import '../../context-menu/context-menu.css';
 import { copyToClipboard } from '../../clipboard';
@@ -145,6 +146,7 @@ export function wikiLinks(config: WikiLinksConfig = {}): Extension {
   return [
     knownIdsField,
     entityLabelMapField,
+    parsedDirectivesField,
     field,
     makeWikiLinkPointerGuard(config),
     wikiLinkEditKeymap(config),
@@ -406,6 +408,13 @@ function makeWikiLinkPointerGuard(config: WikiLinksConfig): Extension {
   ];
 }
 
+function isWithinDirective(
+  range: { from: number; to: number },
+  directives: { from: number; to: number }[],
+): boolean {
+  return directives.some((d) => range.from >= d.from && range.to <= d.to);
+}
+
 export function buildDecorations(state: EditorState, _config: WikiLinksConfig): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const doc = state.doc;
@@ -413,12 +422,17 @@ export function buildDecorations(state: EditorState, _config: WikiLinksConfig): 
   const knownIds = state.field(knownIdsField, false) ?? new Set<string>();
   const entityLabelMap = state.field(entityLabelMapField, false) ?? new Map<string, string>();
   const hasIndex = knownIds.size > 0;
+  // A directive's own {{...}} body can contain [[id]] role values (e.g.
+  // {holder:[[c3d4]]}) — those are rendered as part of the directive's form
+  // block, never as an independent wiki-link decoration.
+  const directives = directiveRanges(state);
 
   for (let i = 1; i <= doc.lines; i++) {
     const line = doc.line(i);
     const links = findWikiLinksInLine(line.text, line.from);
 
     for (const link of links) {
+      if (isWithinDirective(link, directives)) continue;
       const broken = hasIndex && !knownIds.has(link.id);
 
       // Split rendering: the raw [[…]] source stays real, editable, cursor-navigable

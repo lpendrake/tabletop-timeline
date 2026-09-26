@@ -12,6 +12,14 @@ import type {
 } from '../renderer/timeline/data/types';
 export type { EntityIndexEntry, EntityIndexDelta } from '../shared/entity-index-entry';
 import type { CalendarSpec } from '../shared/calendar';
+import type {
+  AddOptionResult,
+  InvalidDirectiveEntry,
+  Ledger,
+  LedgersAs,
+  ParsedDirective,
+  TrackLibrary,
+} from '../shared/relationships';
 
 export interface Campaign {
   id: string;
@@ -138,6 +146,24 @@ declare global {
       saveCustomCalendar: (rootDir: string, spec: CalendarSpec) => Promise<void>;
       deleteCustomCalendar: (rootDir: string, id: string) => Promise<void>;
       listSystemCalendars: () => Promise<CalendarSpec[]>;
+
+      // Relationships
+      getRelationshipLedgers: (entityId: string, as: LedgersAs) => Promise<Ledger[]>;
+      getAllRelationshipLedgers: () => Promise<Ledger[]>;
+      getRelationshipTracks: () => Promise<TrackLibrary>;
+      addRelationshipOption: (
+        trackId: string,
+        input: { label: string; mutual: boolean },
+      ) => Promise<AddOptionResult>;
+      getInvalidRelationshipDirectives: () => Promise<InvalidDirectiveEntry[]>;
+      getRelationshipDirectives: (
+        paths: string[],
+      ) => Promise<Array<{ path: string; title?: string; directives: ParsedDirective[] }>>;
+      getDefaultReputationHolder: () => Promise<string | null>;
+      setDefaultReputationHolder: (id: string | null) => Promise<void>;
+      onRelationshipsChanged: (callback: (data: { paths: string[] }) => void) => () => void;
+      onRelationshipLibraryChanged: (callback: () => void) => () => void;
+      onRelationshipDefaultHolderChanged: (callback: (id: string | null) => void) => () => void;
     };
   }
 }

@@ -13,6 +13,7 @@ import {
   type ViewportSize,
 } from '../../timeline/math/zoom';
 import { CalendarProvider } from '../../timeline/calendar/provider';
+import { deriveInGameNowSeconds } from '../../shared/in-game-now';
 import { createCalendar, resolveCalendar, GOLARION_ID } from '../../../shared/calendar';
 import { addInGameDuration, type ExtendUnit } from '../../timeline/calendar/add-in-game-duration';
 import { buildRescheduleFrontmatter } from './reschedule-domain';
@@ -72,6 +73,7 @@ import { copyToClipboard } from '../../shared/clipboard';
 import { entityIndex } from '../../shared/entity-index';
 import { LabelOverrideEditor } from '../../shared/components/label-override-editor';
 import { useConfirm } from '../../shared/confirm-dialog/confirm-provider';
+import { useRelationshipLibraryContext } from '../../relationships/library-context';
 import '../../timeline/session-editor/session-mode.css';
 import './timeline-view.css';
 
@@ -105,6 +107,7 @@ export function TimelineView({
 }: TimelineViewProps) {
   const weekdays = ThemeProvider.get().timeline.days;
   const { confirm } = useConfirm();
+  const relationshipLibrary = useRelationshipLibraryContext();
   const [viewState, setViewState] = useState<ViewState>({
     centerSeconds: 0,
     secondsPerPixel: DEFAULT_SECONDS_PER_PIXEL,
@@ -734,17 +737,7 @@ export function TimelineView({
     },
   });
 
-  const inGameNowSeconds = (() => {
-    if (loadedData.gameState?.in_game_now_seconds != null) {
-      return loadedData.gameState.in_game_now_seconds;
-    }
-    // Fallback for older campaigns that only have the string form.
-    const legacyStr = loadedData.gameState?.in_game_now;
-    if (!legacyStr) return Infinity;
-    const cal = CalendarProvider.get();
-    const parsed = cal.tryParse(legacyStr);
-    return parsed ? cal.toEpochSeconds(parsed) : Infinity;
-  })();
+  const inGameNowSeconds = deriveInGameNowSeconds(loadedData.gameState, CalendarProvider.get());
   // Derive the formatted "now" string from seconds for display purposes.
   const inGameNow = (() => {
     if (inGameNowSeconds !== Infinity) {
@@ -812,6 +805,7 @@ export function TimelineView({
           onTagContextMenu={sessionModeActiveRef.current ? undefined : handleTagContextMenu}
           entityLabelMap={entityLabelMap}
           entityTagLabelMap={entityTagLabelMap}
+          relationshipLibrary={relationshipLibrary}
         />
         {inGameNow && (
           <NowMarker

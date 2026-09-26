@@ -155,4 +155,33 @@ contextBridge.exposeInMainWorld('fsApi', {
   deleteCustomCalendar: (rootDir: string, id: string) =>
     ipcRenderer.invoke('calendar:deleteCustom', rootDir, id),
   listSystemCalendars: () => ipcRenderer.invoke('calendar:listSystem'),
+
+  // Relationships
+  getRelationshipLedgers: (entityId: string, as: 'holder' | 'observer' | 'both') =>
+    ipcRenderer.invoke('relationships:getLedgers', entityId, as),
+  getAllRelationshipLedgers: () => ipcRenderer.invoke('relationships:getAllLedgers'),
+  getRelationshipTracks: () => ipcRenderer.invoke('relationships:getTracks'),
+  addRelationshipOption: (trackId: string, input: { label: string; mutual: boolean }) =>
+    ipcRenderer.invoke('relationships:addOption', trackId, input),
+  getInvalidRelationshipDirectives: () => ipcRenderer.invoke('relationships:getInvalid'),
+  getRelationshipDirectives: (paths: string[]) =>
+    ipcRenderer.invoke('relationships:getDirectives', paths),
+  getDefaultReputationHolder: () => ipcRenderer.invoke('relationships:getDefaultHolder'),
+  setDefaultReputationHolder: (id: string | null) =>
+    ipcRenderer.invoke('relationships:setDefaultHolder', id),
+  onRelationshipsChanged: (callback: (data: { paths: string[] }) => void) => {
+    const listener = (_event: unknown, data: { paths: string[] }) => callback(data);
+    ipcRenderer.on('relationships:changed', listener);
+    return () => ipcRenderer.removeListener('relationships:changed', listener);
+  },
+  onRelationshipLibraryChanged: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on('relationships:libraryChanged', listener);
+    return () => ipcRenderer.removeListener('relationships:libraryChanged', listener);
+  },
+  onRelationshipDefaultHolderChanged: (callback: (id: string | null) => void) => {
+    const listener = (_event: unknown, id: string | null) => callback(id);
+    ipcRenderer.on('relationships:defaultHolderChanged', listener);
+    return () => ipcRenderer.removeListener('relationships:defaultHolderChanged', listener);
+  },
 });

@@ -35,7 +35,15 @@ import { imagePaste, type ImagePasteConfig } from './extensions/image-paste';
 import { imageDecorations, type ImageDecorationsOptions } from './extensions/image-decorations';
 import { dropLink, type DropLinkConfig } from './extensions/drop-link';
 import { editorContextMenu, type EditorMenuExtraItems } from './extensions/editor-context-menu';
+import { relationshipDirectives, setDirectiveContext } from './extensions/relationship-directives';
+import {
+  relationshipBubble,
+  type RelationshipBubbleHostContext,
+  type RelationshipBubbleOptions,
+} from './extensions/relationship-bubble-view-plugin';
 import { formattingKeymap } from './commands';
+import { EMPTY_TRACK_LIBRARY, NOTE_DEFAULT_REASON } from '../../../shared/relationships';
+import type { TrackLibrary } from '../../../shared/relationships';
 
 /**
  * Pairs an EditorState with the Compartment instance embedded in it.
@@ -57,6 +65,21 @@ export interface WikiLinksHostConfig {
   onHoverEnd?: (relatedTarget: Element | null) => void;
   /** Hides local-label-editing context-menu items even when the editor itself is editable. */
   readOnly?: boolean;
+}
+
+export interface RelationshipDirectivesHostConfig {
+  library: TrackLibrary;
+  defaultReason: string;
+  onOpenNote?: (id: string) => void;
+  /**
+   * Whether this document is a note (undated) or an event. Passed through
+   * to `interpretDirective` as `undated: place === 'note'` — a note may only
+   * Set/Add, never Change/Shift/Remove (see `src/shared/relationships/AGENTS.md`).
+   * Defaults to `'event'` (the permissive context) when omitted.
+   */
+  place?: 'note' | 'event';
+  /** Data and callbacks the built-in fill-in bubble needs. Omit to still get a bubble with no note/option pickers wired up. */
+  bubbles?: RelationshipBubbleOptions;
 }
 
 export interface MarkdownEditorProps {
@@ -93,11 +116,33 @@ export interface MarkdownEditorProps {
   contextMenu?: { extraItems?: EditorMenuExtraItems };
 
   /**
+   * Renders relationship directives (`{{trackId.action ...}}`) as readable
+   * blocks in live mode. Omit to render blocks with built-in tracks only and
+   * `Unspecified` as the default reason (no field-editing callbacks).
+   */
+  relationshipDirectives?: RelationshipDirectivesHostConfig;
+
+  /**
    * Document offset at which to place the caret when the editor first mounts
    * with fresh content (i.e. no `savedInstance`). Clamped to [0, doc.length].
    * Omit (or pass `undefined`) to keep the default behaviour of caret at 0.
    */
   initialCursor?: number;
+}
+
+function makeBubbleHostContext(
+  config: RelationshipDirectivesHostConfig | undefined,
+): RelationshipBubbleHostContext {
+  return {
+    library: config?.library ?? EMPTY_TRACK_LIBRARY,
+    defaultReason: config?.defaultReason ?? NOTE_DEFAULT_REASON,
+    noteOptions: () => config?.bubbles?.noteOptions() ?? [],
+    defaultHolderId: () => config?.bubbles?.defaultHolderId?.() ?? null,
+    currentNoteId: () => config?.bubbles?.currentNoteId?.() ?? null,
+    onHolderChosenWithoutDefault: config?.bubbles?.onHolderChosenWithoutDefault,
+    createOption: config?.bubbles?.createOption,
+    heldOptions: config?.bubbles?.heldOptions,
+  };
 }
 
 export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
@@ -114,6 +159,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   dropLink: dropLinkConfig,
   mdLinks: mdLinksConfig,
   contextMenu: contextMenuConfig,
+  relationshipDirectives: relationshipDirectivesConfig,
   initialCursor,
 }) => {
   const editorRef = useRef<HTMLDivElement>(null);
@@ -128,6 +174,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   const imagesRef = useRef(imagesConfig);
   const mdLinksRef = useRef(mdLinksConfig);
   const contextMenuRef = useRef(contextMenuConfig);
+  const relationshipDirectivesRef = useRef(relationshipDirectivesConfig);
   onChangeRef.current = onChange;
   onSaveInstanceRef.current = onSaveInstance;
   isSourceModeRef.current = isSourceMode;
@@ -136,6 +183,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   imagesRef.current = imagesConfig;
   mdLinksRef.current = mdLinksConfig;
   contextMenuRef.current = contextMenuConfig;
+  relationshipDirectivesRef.current = relationshipDirectivesConfig;
 
   const modeCompartmentRef = useRef<Compartment>(
     savedInstance?.modeCompartment ?? new Compartment(),
@@ -158,7 +206,15 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         onOpenExternal: (u) => mdLinksRef.current?.onOpenExternal?.(u),
         onOpenInternal: (u) => mdLinksRef.current?.onOpenInternal?.(u),
       }),
+      relationshipDirectives({
+        readOnly: readOnlyRef.current,
+        onOpenNote: (id) => relationshipDirectivesRef.current?.onOpenNote?.(id),
+        place: relationshipDirectivesRef.current?.place,
+      }),
     ];
+    if (!readOnlyRef.current) {
+      exts.push(relationshipBubble(() => makeBubbleHostContext(relationshipDirectivesRef.current)));
+    }
     return exts;
   }
 
@@ -291,6 +347,23 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       view.dispatch({ effects: setEntityLabels.of(wikiLinksConfig.entityLabels) });
     }
   }, [wikiLinksConfig?.entityLabels, isSourceMode]);
+
+  // Keep relationship-directive blocks aware of the current track library and default reason.
+  useEffect(() => {
+    const view = internalViewRef.current;
+    if (view && !isSourceMode) {
+      view.dispatch({
+        effects: setDirectiveContext.of({
+          library: relationshipDirectivesConfig?.library ?? EMPTY_TRACK_LIBRARY,
+          defaultReason: relationshipDirectivesConfig?.defaultReason ?? NOTE_DEFAULT_REASON,
+        }),
+      });
+    }
+  }, [
+    relationshipDirectivesConfig?.library,
+    relationshipDirectivesConfig?.defaultReason,
+    isSourceMode,
+  ]);
 
   return <div ref={editorRef} className="markdown-editor-container" />;
 };

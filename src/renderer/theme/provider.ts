@@ -53,17 +53,19 @@ function applyCssVars(theme: Theme): void {
     danger: theme.chrome.danger,
     'danger-hover': theme.chrome.dangerHover,
     'dotted-future': theme.chrome.dottedFuture,
+    warning: theme.chrome.warning,
   };
 
   for (const [key, value] of Object.entries(chromeMap)) {
     root.setProperty(`--theme-${key}`, value);
   }
 
-  const rgbKeys = ['accent-gold', 'accent-warm', 'danger'] as const;
+  const rgbKeys = ['accent-gold', 'accent-warm', 'danger', 'warning'] as const;
   const rgbSources: Record<(typeof rgbKeys)[number], string> = {
     'accent-gold': theme.chrome.accentGold,
     'accent-warm': theme.chrome.accentWarm,
     danger: theme.chrome.danger,
+    warning: theme.chrome.warning,
   };
   for (const key of rgbKeys) {
     root.setProperty(`--theme-${key}-rgb`, hexToRgb(rgbSources[key]));
@@ -77,6 +79,35 @@ function applyCssVars(theme: Theme): void {
   root.setProperty('--notes-error', theme.notes.errorToast);
 
   root.setProperty('--editor-selection-rgb', hexToRgb(theme.editor.selection));
+
+  const directiveMap: Record<string, string> = {
+    'directive-background': theme.editor.directiveBackground,
+    'directive-border': theme.editor.directiveBorder,
+    'directive-hover': theme.editor.directiveHover,
+    'directive-value-highlight': theme.editor.directiveValueHighlight,
+  };
+
+  for (const [key, value] of Object.entries(directiveMap)) {
+    root.setProperty(`--theme-${key}`, value);
+  }
+
+  const relationshipsMap: Record<string, string> = {
+    'relationships-bar-track': theme.relationships.barTrack,
+    'relationships-bar-fill': theme.relationships.barFill,
+    'relationships-band-tick': theme.relationships.bandTick,
+    'relationships-rung-inactive': theme.relationships.rungInactive,
+    'relationships-rung-active': theme.relationships.rungActive,
+    'relationships-chip-background': theme.relationships.chipBackground,
+    'relationships-chip-text': theme.relationships.chipText,
+    'relationships-chip-mutual-border': theme.relationships.chipMutualBorder,
+    'relationships-row-hover': theme.relationships.rowHover,
+    'relationships-drop-indicator': theme.relationships.dropIndicator,
+    'relationships-step-set-break': theme.relationships.stepSetBreak,
+  };
+
+  for (const [key, value] of Object.entries(relationshipsMap)) {
+    root.setProperty(`--theme-${key}`, value);
+  }
 }
 
 function deepMerge(base: Theme, overrides: DeepPartial<Theme>): Theme {

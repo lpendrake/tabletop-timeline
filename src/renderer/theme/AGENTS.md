@@ -77,8 +77,9 @@ unsubscribe(); // call the returned function to remove the listener
 | `chrome` | App-wide shell: backgrounds, surfaces, panels, text, accents, links, borders, danger. These are the tokens exposed as `--theme-*` CSS variables. |
 | `timeline` | Day-of-week colors (`days`), session band palette (`sessions[]`), event color presets (`eventColorPresets[]`). Used by timeline render and editor code, not in CSS variables. |
 | `notes` | Note-kind accent colors (`kinds.*`) exposed as `--kind-*` CSS variables; `savedIndicator` and `errorToast` exposed as `--notes-saved` / `--notes-error`. |
-| `editor` | CodeMirror-specific tokens (`foldPlaceholder`, `invalid`, `selection`). `selection` is emitted as `--editor-selection-rgb` and drives the CodeMirror selection highlight color. |
+| `editor` | CodeMirror-specific tokens. `foldPlaceholder`, `invalid` and `selection` are read via `ThemeProvider.get()` (`selection` is also emitted as `--editor-selection-rgb`, driving the CodeMirror selection highlight color). The `directive*` tokens (`directiveBackground`, `directiveBorder`, `directiveHover`, `directiveValueHighlight`) style relationship-directive blocks and ARE exposed as `--theme-directive-*` CSS vars — see "CSS variable mapping" below. Directive error/attention/delete states reuse `chrome.danger`/`chrome.warning` (`--theme-danger`/`--theme-warning`) rather than their own tokens. |
 | `bootstrap` | Campaign-selector / pre-campaign screens only. A darker, higher-contrast palette for the app before a campaign is loaded. **Do not use `bootstrap` tokens inside campaign views.** |
+| `relationships` | Relationships-view specific tokens (progress bars, ladder rungs, chips, drag/drop, row hover, step-set dividers). Exposed as `--theme-relationships-*` CSS vars — see "CSS variable mapping" below. Relationship error text reuses `chrome.danger` (`--theme-danger`), not its own token. |
 
 ## Consuming colors
 
@@ -133,15 +134,39 @@ const sessionColor = ThemeProvider.get().timeline.sessions[0];
 --theme-danger           chrome.danger
 --theme-danger-hover     chrome.dangerHover
 --theme-dotted-future    chrome.dottedFuture
+--theme-warning          chrome.warning
 ```
 
-RGB triplet variants (space-separated, suitable for `rgba()`):
+RGB triplet variants (space-separated, suitable for `rgb(var(--theme-x-rgb) / <alpha>)`):
 ```
 --theme-accent-gold-rgb    chrome.accentGold
 --theme-accent-warm-rgb    chrome.accentWarm
 --theme-danger-rgb         chrome.danger
+--theme-warning-rgb        chrome.warning
 --editor-selection-rgb     editor.selection   (base color for CodeMirror selection highlights)
 ```
+
+`applyCssVars` also maps the `editor.directive*` and `relationships.*` tokens straight through to CSS vars (camelCase → kebab-case, same as `chrome`):
+```
+--theme-directive-background          editor.directiveBackground
+--theme-directive-border              editor.directiveBorder
+--theme-directive-hover               editor.directiveHover
+--theme-directive-value-highlight     editor.directiveValueHighlight
+
+--theme-relationships-bar-track           relationships.barTrack
+--theme-relationships-bar-fill            relationships.barFill
+--theme-relationships-band-tick           relationships.bandTick
+--theme-relationships-rung-inactive       relationships.rungInactive
+--theme-relationships-rung-active         relationships.rungActive
+--theme-relationships-chip-background     relationships.chipBackground
+--theme-relationships-chip-text           relationships.chipText
+--theme-relationships-chip-mutual-border  relationships.chipMutualBorder
+--theme-relationships-row-hover           relationships.rowHover
+--theme-relationships-drop-indicator      relationships.dropIndicator
+--theme-relationships-step-set-break      relationships.stepSetBreak
+```
+
+There are deliberately no `directive-error`/`directive-delete`/`directive-attention`/`relationships-error-text` tokens — error, delete and attention states in directive blocks and the Relationships view reuse the existing `--theme-danger` (errors, the delete cross) and `--theme-warning` (attention/unfinished prompts) chrome tokens instead of duplicating them.
 
 Note-kind and indicator variables:
 ```
@@ -157,4 +182,5 @@ Note-kind and indicator variables:
 - **Don't use `bootstrap` tokens in campaign views.** `bootstrap` is for pre-load screens (campaign selector, setup) only.
 - **Don't import from sub-files directly.** Use the barrel: `import { ThemeProvider } from 'src/renderer/theme'`.
 - **Don't call `ThemeProvider.set()` in a render path.** It re-applies all CSS variables — call it only in response to explicit user action or at startup.
-- **Don't reach into `timeline` or `editor` tokens via CSS variables** — they are not exposed as CSS vars; read them through `ThemeProvider.get()` in TypeScript.
+- **Don't reach into `timeline` tokens, or `editor.foldPlaceholder`/`editor.invalid`/`editor.selection`, via CSS variables** — those are not exposed as CSS vars; read them through `ThemeProvider.get()` in TypeScript. (`editor.directive*` and `relationships.*` are the exception — they ARE exposed as `--theme-directive-*` / `--theme-relationships-*`, see "CSS variable mapping" above.)
+- **Don't add a new `directive*`/`relationships.*` color for an error, delete or attention state.** Reuse `chrome.danger` (`--theme-danger`) or `chrome.warning` (`--theme-warning`) instead of duplicating them into a section-specific token.

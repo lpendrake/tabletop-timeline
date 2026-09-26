@@ -253,3 +253,34 @@
   color: var(--theme-text-muted);
   font-style: italic;
 }
+
+/* ============================================================
+   Generic settings button / default-holder row
+   ============================================================ */
+
+.settings-button {
+  background: var(--theme-background);
+  border: 1px solid var(--theme-border);
+  border-radius: 3px;
+  color: var(--theme-text-primary);
+  font-size: 12px;
+  font-family: inherit;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.settings-button:hover {
+  border-color: var(--theme-accent-gold);
+}
+
+.default-holder-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.default-holder-row__value {
+  font-size: 13px;
+  color: var(--theme-text-primary);
+  min-width: 100px;
+}

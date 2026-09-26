@@ -18,7 +18,7 @@ import type {
   ConflictResult,
 } from '../renderer/timeline/data/types.js';
 
-const SAFE_FILENAME_RE = /^[A-Za-z0-9._-]+\.md$/;
+export const SAFE_FILENAME_RE = /^[A-Za-z0-9._-]+\.md$/;
 
 function assertSafeFilename(dir: string, filename: string): void {
   if (!SAFE_FILENAME_RE.test(filename)) {
@@ -43,7 +43,7 @@ function fileMtime(filePath: string): string {
   return fs.statSync(filePath).mtime.toISOString();
 }
 
-function parseEventFile(
+export function parseEventFile(
   filePath: string,
   filename: string,
 ): { event: Event; lastModified: string } {

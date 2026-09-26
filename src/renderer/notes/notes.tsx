@@ -13,6 +13,9 @@ import { buildEntityLabelMap } from '../../shared/entity-labels';
 import { revealInExplorer } from '../shared/reveal-in-explorer';
 import { buildEntityLink, buildAssetLink } from '../shared/entity-link';
 import { copyToClipboard } from '../shared/clipboard';
+import { useRelationshipEditorConfig } from '../relationships/hooks/use-relationship-editor-config';
+import { NOTE_DEFAULT_REASON } from '../../shared/relationships';
+import { useConfirm } from '../shared/confirm-dialog/confirm-provider';
 import { NoteContextMenu } from './components/note-context-menu.tsx';
 import { LabelOverrideEditor } from '../shared/components/label-override-editor';
 import { EditorTabs } from './components/editor-tabs.tsx';
@@ -75,6 +78,25 @@ export function NotesApp({
     entityIndex: ctrl.entityIndex,
     onCreated: ctrl.handleNoteCreatedFromEditor,
   });
+
+  const { confirm } = useConfirm();
+  const activeTabRef = useRef(ctrl.activeTab);
+  activeTabRef.current = ctrl.activeTab;
+  const { relationshipDirectives: relationshipDirectivesConfig, contextMenu: editorContextMenu } =
+    useRelationshipEditorConfig({
+      entityIndex: ctrl.entityIndex,
+      defaultReason: NOTE_DEFAULT_REASON,
+      onOpenNote: ctrl.handleOpenLink,
+      place: 'note',
+      activeNote: () =>
+        activeTabRef.current
+          ? { folder: activeTabRef.current.folder, path: activeTabRef.current.path }
+          : null,
+      at: () => null,
+      getDocText: () => ctrl.activeFile?.content ?? '',
+      confirm,
+      extraMenuItems: newNoteMenuConfig.extraItems,
+    });
 
   // Open a note from the search overlay, then scroll to the match position.
   // Both steps are sequenced here so the scroll happens only after the note's
@@ -213,7 +235,8 @@ export function NotesApp({
                 mdLinks={{ onOpenInternal: ctrl.openMarkdownLink }}
                 imagePaste={imagePasteConfig}
                 dropLink={dropLinkConfig}
-                contextMenu={newNoteMenuConfig}
+                contextMenu={editorContextMenu}
+                relationshipDirectives={relationshipDirectivesConfig}
               />
             ) : ctrl.activeTab ? (
               <div className="editor-placeholder">Loading...</div>
