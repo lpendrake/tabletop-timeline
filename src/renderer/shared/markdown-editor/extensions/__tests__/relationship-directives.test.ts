@@ -8,6 +8,7 @@ import {
   setDirectiveContext,
   firstEditRole,
   crossEnd,
+  directiveBorderClass,
   getDirectiveRoleElement,
   type RelationshipDirectivesConfig,
 } from '../relationship-directives';
@@ -133,6 +134,38 @@ function fireClick(target: HTMLElement, opts: { ctrlKey?: boolean; metaKey?: boo
     metaKey: opts.metaKey ?? false,
   });
   target.dispatchEvent(event);
+}
+
+/** Fires a real `pointerdown` (as the browser does ahead of `mousedown`/`click`) and returns it so callers can inspect `defaultPrevented`. */
+function firePointerDown(
+  target: HTMLElement,
+  opts: { ctrlKey?: boolean; metaKey?: boolean } = {},
+): PointerEvent {
+  const event = new PointerEvent('pointerdown', {
+    bubbles: true,
+    cancelable: true,
+    button: 0,
+    ctrlKey: opts.ctrlKey ?? false,
+    metaKey: opts.metaKey ?? false,
+  });
+  target.dispatchEvent(event);
+  return event;
+}
+
+/** Fires a real `mousedown`, as CodeMirror itself listens for, and returns it. */
+function fireMouseDown(
+  target: HTMLElement,
+  opts: { ctrlKey?: boolean; metaKey?: boolean } = {},
+): MouseEvent {
+  const event = new MouseEvent('mousedown', {
+    bubbles: true,
+    cancelable: true,
+    button: 0,
+    ctrlKey: opts.ctrlKey ?? false,
+    metaKey: opts.metaKey ?? false,
+  });
+  target.dispatchEvent(event);
+  return event;
 }
 
 function fireKey(view: EditorView, key: string): void {
@@ -295,6 +328,92 @@ describe('firstEditRole (pure)', () => {
   });
 });
 
+describe('directiveBorderClass (pure)', () => {
+  it('maps each interpreted status to its outline class', () => {
+    expect(directiveBorderClass('unfinished')).toBe('cm-directive-unfinished');
+    expect(directiveBorderClass('invalid')).toBe('cm-directive-error');
+    expect(directiveBorderClass('ok')).toBeNull();
+  });
+});
+
+describe('relationship directives — Ctrl/Cmd+click reliability on a value', () => {
+  it('root-causes the flakiness: an unguarded mousedown on a value snaps the selection over the whole block before any click fires', () => {
+    // This is what makes acting only on `click` unreliable: `ignoreEvent()`
+    // is `false` for the atomic directive decoration, so CodeMirror's own
+    // mousedown handling runs first and (since the block is atomic) expands
+    // the selection to cover the entire directive — a real, observable
+    // mutation that happens strictly between mousedown and click, in a
+    // browser sometimes racing with (or pre-empting) the click that would
+    // otherwise reach the value span's own listener.
+    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, {}, { labels: LABELS }));
+    const { view } = setup;
+    const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
+
+    expect(view.state.selection.main.from).toBe(0);
+    expect(view.state.selection.main.to).toBe(0);
+    fireMouseDown(holderValue, { ctrlKey: true });
+    expect(view.state.selection.main.from).toBe(0);
+    expect(view.state.selection.main.to).toBe(FULL_CHANGE_DIRECTIVE.length);
+  });
+
+  it('guards the modified pointerdown so CodeMirror never gets a chance to move the caret', () => {
+    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, {}, { labels: LABELS }));
+    const { view } = setup;
+    const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
+
+    const event = firePointerDown(holderValue, { ctrlKey: true });
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('a plain pointerdown on a value is left alone (only Ctrl/Cmd is guarded)', () => {
+    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, {}, { labels: LABELS }));
+    const { view } = setup;
+    const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
+
+    const event = firePointerDown(holderValue);
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it('Ctrl/Cmd+click reliably opens the note — pointerdown guarded, click never lands on the wrong thing', () => {
+    const onOpenNote = vi.fn();
+    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, { onOpenNote }, { labels: LABELS }));
+    const { view } = setup;
+    const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
+
+    // The real fixed sequence: the guarded pointerdown prevents CodeMirror's
+    // compatibility mousedown from ever being dispatched, so only pointerdown
+    // then click occur — never a selection-moving mousedown in between.
+    firePointerDown(holderValue, { ctrlKey: true });
+    fireClick(holderValue, { ctrlKey: true });
+
+    expect(onOpenNote).toHaveBeenCalledWith('c3d4');
+    expect(onOpenNote).toHaveBeenCalledTimes(1);
+    expect(view.state.field(bubbleStateField)).toBeNull();
+    // The selection was never hijacked by CodeMirror along the way.
+    expect(view.state.selection.main.from).toBe(0);
+    expect(view.state.selection.main.to).toBe(0);
+  });
+
+  it('plain click still opens the fill-in bubble; Ctrl/Cmd+click never does', () => {
+    const onOpenNote = vi.fn();
+    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, { onOpenNote }, { labels: LABELS }));
+    const { view } = setup;
+    const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
+
+    firePointerDown(holderValue);
+    fireClick(holderValue);
+    expect(view.state.field(bubbleStateField)).toEqual({ anchor: 0, role: 'holder' });
+    expect(onOpenNote).not.toHaveBeenCalled();
+
+    view.dispatch({ effects: closeBubbleEffect.of(null) });
+
+    firePointerDown(holderValue, { ctrlKey: true });
+    fireClick(holderValue, { ctrlKey: true });
+    expect(onOpenNote).toHaveBeenCalledWith('c3d4');
+    expect(view.state.field(bubbleStateField)).toBeNull();
+  });
+});
+
 describe('relationship directives — editing callbacks', () => {
   it('clicking a value opens the bubble on its role; clicking wording targets the first empty blank', () => {
     const setup = track(makeView(UNFINISHED_CHANGE_DIRECTIVE, {}, { labels: LABELS }));
@@ -325,13 +444,22 @@ describe('relationship directives — editing callbacks', () => {
     expect(view.state.field(bubbleStateField)).toBeNull();
   });
 
-  it('unfinished blanks show their prompt with the attention class', () => {
+  it('unfinished blanks show their prompt with the attention class, and the block outlined in warning', () => {
     const setup = track(makeView(UNFINISHED_CHANGE_DIRECTIVE, {}, { labels: LABELS }));
-    const amountValue = block(setup.view).querySelector<HTMLElement>(
-      '.cm-directive-value-role-amount',
-    )!;
+    const el = block(setup.view);
+    const amountValue = el.querySelector<HTMLElement>('.cm-directive-value-role-amount')!;
     expect(amountValue.classList.contains('cm-directive-value-attention')).toBe(true);
     expect(amountValue.textContent).toBe('Reputation change');
+
+    expect(el.classList.contains('cm-directive-unfinished')).toBe(true);
+    expect(el.classList.contains('cm-directive-error')).toBe(false);
+  });
+
+  it('a complete, valid directive gets neither the warning nor the danger outline class', () => {
+    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, {}, { labels: LABELS }));
+    const el = block(setup.view);
+    expect(el.classList.contains('cm-directive-unfinished')).toBe(false);
+    expect(el.classList.contains('cm-directive-error')).toBe(false);
   });
 
   it('empty reason shows the host default reason', () => {
@@ -362,10 +490,10 @@ describe('relationship directives — errors', () => {
     expect(el.title).toBe('Relationship track rp99 not found');
   });
 
-  it('unknown option shows the sentence with the bad value marked', () => {
+  it('unknown option shows the sentence with the bad value marked, and the block outlined in danger', () => {
     const setup = track(makeView(UNKNOWN_OPTION_DIRECTIVE, {}, { labels: LABELS }));
     const el = block(setup.view);
-    expect(el.classList.contains('cm-directive-error')).toBe(false);
+    expect(el.classList.contains('cm-directive-error')).toBe(true);
     expect(el.textContent).toContain('is now boss with');
 
     const optionValue = el.querySelector<HTMLElement>('.cm-directive-value-role-option')!;

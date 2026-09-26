@@ -30,6 +30,7 @@ import {
   resolveTrack,
   EMPTY_TRACK_LIBRARY,
   NOTE_DEFAULT_REASON,
+  type InterpretedDirective,
   type ParsedDirective,
   type ReadablePart,
   type Role,
@@ -40,6 +41,7 @@ import { entityLabelMapField, setEntityLabels } from './wiki-links';
 import { openDirectiveBubble } from './relationship-bubble-state';
 import { firstOf } from './relationship-bubble-logic';
 import { parsedDirectivesField, directivesIn } from './parsed-directives';
+import { makePointerGuard } from './pointer-guard';
 
 export interface RelationshipDirectivesConfig {
   readOnly?: boolean;
@@ -76,7 +78,23 @@ const directiveContextField = StateField.define<DirectiveContext>({
   },
 });
 
-type DirectiveView = { kind: 'error'; title: string } | { kind: 'sentence'; parts: ReadablePart[] };
+type DirectiveView =
+  | { kind: 'error'; title: string; status: InterpretedDirective['status'] }
+  | { kind: 'sentence'; parts: ReadablePart[]; status: InterpretedDirective['status'] };
+
+/**
+ * Which outline class (if any) a directive block gets, purely from its
+ * interpreted status: unfinished (an empty required blank) gets the warning
+ * outline, invalid (unknown track/action, or any value problem) gets the
+ * danger outline, and a complete, valid directive keeps the default
+ * `--theme-directive-border` outline (no extra class). Kept pure and
+ * unit-tested — see `extensions/__tests__/relationship-directives.test.ts`.
+ */
+export function directiveBorderClass(status: InterpretedDirective['status']): string | null {
+  if (status === 'unfinished') return 'cm-directive-unfinished';
+  if (status === 'invalid') return 'cm-directive-error';
+  return null;
+}
 
 type ValuePart = Extract<ReadablePart, { kind: 'value' }>;
 
@@ -116,12 +134,12 @@ function buildDirectiveView(
     const blocking = interpreted.problems.find(
       (p) => p.code === 'unknown-track' || p.code === 'unknown-action',
     );
-    if (blocking) return { kind: 'error', title: blocking.message };
+    if (blocking) return { kind: 'error', title: blocking.message, status: 'invalid' };
   }
 
   const problems = interpreted.status === 'invalid' ? interpreted.problems : [];
   const parts = readableParts(d, { track, labelForNote, defaultReason, problems });
-  return { kind: 'sentence', parts };
+  return { kind: 'sentence', parts, status: interpreted.status };
 }
 
 function labelForNoteFrom(state: EditorState): (id: string) => string {
@@ -217,8 +235,8 @@ class DirectiveWidget extends WidgetType {
 
   override toDOM(view: EditorView): HTMLElement {
     const root = document.createElement('span');
-    root.className =
-      this.built.kind === 'error' ? 'cm-directive cm-directive-error' : 'cm-directive';
+    const borderClass = directiveBorderClass(this.built.status);
+    root.className = borderClass ? `cm-directive ${borderClass}` : 'cm-directive';
 
     if (this.built.kind === 'error') {
       root.title = this.built.title;
@@ -459,6 +477,9 @@ const directiveTheme = EditorView.theme({
   '.cm-directive-error': {
     borderColor: 'var(--theme-danger)',
   },
+  '.cm-directive-unfinished': {
+    borderColor: 'var(--theme-warning)',
+  },
   '.cm-directive-value': {
     borderRadius: '3px',
     padding: '0 2px',
@@ -538,5 +559,16 @@ export function relationshipDirectives(config: RelationshipDirectivesConfig = {}
     directiveTheme,
     makeDirectiveDeleteKeymap(),
     makeDirectiveEnterKeymap(config),
+    // Ctrl/Cmd+left-click on a value is meant to open its note, not place a
+    // caret. Because the directive block is an atomic `Decoration.replace`
+    // range with `ignoreEvent() === false`, CodeMirror handles the mousedown
+    // itself first — snapping the selection to cover the whole block — before
+    // the browser's own click ever reaches the value span's listener. That
+    // race is what makes plain Ctrl/Cmd+click unreliable (see this module's
+    // AGENTS.md and its tests). `makePointerGuard` swallows the modified
+    // pointerdown in the capture phase — exactly the trick `wiki-links.ts`
+    // uses for `.cm-note-link` — so CodeMirror never gets to move the caret,
+    // and the click (handled in `buildValueSpan`) fires reliably every time.
+    makePointerGuard('.cm-directive-value'),
   ];
 }
