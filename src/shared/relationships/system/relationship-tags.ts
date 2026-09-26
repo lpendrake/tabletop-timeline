@@ -19,13 +19,13 @@ export const relationshipTagsSpec: CategoricalTrackSpec = {
       key: 'gains',
       label: 'Gains',
       kind: 'add',
-      template: '{holder} is now {option} with {observer} — {reason}',
+      template: 'Give {holder} relationship: {option} → {observer} — {reason}',
     },
     {
       key: 'loses',
       label: 'Loses',
       kind: 'remove',
-      template: '{holder} is no longer {option} with {observer} — {reason}',
+      template: "Remove {holder}'s relationship: {option} → {observer} — {reason}",
     },
   ],
 };

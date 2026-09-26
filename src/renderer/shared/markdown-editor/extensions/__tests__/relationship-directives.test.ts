@@ -56,6 +56,19 @@ const UNKNOWN_OPTION_DIRECTIVE = serialiseTemplate('tg01', 'gains', GAINS_TEMPLA
   reason: 'x',
 });
 
+const EMPTY_REASON_TAG_DIRECTIVE = serialiseTemplate('tg01', 'gains', GAINS_TEMPLATE, {
+  holder: '[[c3d4]]',
+  option: 'member',
+  observer: '[[a1b2]]',
+});
+
+const FILLED_REASON_TAG_DIRECTIVE = serialiseTemplate('tg01', 'gains', GAINS_TEMPLATE, {
+  holder: '[[c3d4]]',
+  option: 'member',
+  observer: '[[a1b2]]',
+  reason: 'signed the deal',
+});
+
 const LABELS = new Map([
   ['a1b2', 'White Tigers'],
   ['c3d4', 'The Party'],
@@ -479,6 +492,38 @@ describe('relationship directives — editing callbacks', () => {
     )!;
     expect(defaultReasonValue.textContent).toBe('Unspecified');
   });
+
+  it('a note with an empty reason ends at the observer, with no reason and no dash', () => {
+    const setup = track(
+      makeView(EMPTY_REASON_TAG_DIRECTIVE, { place: 'note' }, { labels: LABELS }),
+    );
+    const el = block(setup.view);
+    expect(el.querySelector('.cm-directive-value-role-reason')).toBeNull();
+    expect(el.textContent).not.toContain('—');
+    expect(el.textContent?.trimEnd().endsWith('White Tigers')).toBe(true);
+  });
+
+  it('a note with a filled reason still shows it', () => {
+    const setup = track(
+      makeView(FILLED_REASON_TAG_DIRECTIVE, { place: 'note' }, { labels: LABELS }),
+    );
+    const el = block(setup.view);
+    const reasonValue = el.querySelector<HTMLElement>('.cm-directive-value-role-reason');
+    expect(reasonValue?.textContent).toBe('signed the deal');
+  });
+
+  it('an event with an empty reason still shows the event title', () => {
+    const setup = track(
+      makeView(
+        EMPTY_REASON_TAG_DIRECTIVE,
+        { place: 'event' },
+        { labels: LABELS, defaultReason: 'Battle of Dawn' },
+      ),
+    );
+    const el = block(setup.view);
+    const reasonValue = el.querySelector<HTMLElement>('.cm-directive-value-role-reason');
+    expect(reasonValue?.textContent).toBe('Battle of Dawn');
+  });
 });
 
 describe('relationship directives — errors', () => {
@@ -494,7 +539,7 @@ describe('relationship directives — errors', () => {
     const setup = track(makeView(UNKNOWN_OPTION_DIRECTIVE, {}, { labels: LABELS }));
     const el = block(setup.view);
     expect(el.classList.contains('cm-directive-error')).toBe(true);
-    expect(el.textContent).toContain('is now boss with');
+    expect(el.textContent).toContain('relationship: boss →');
 
     const optionValue = el.querySelector<HTMLElement>('.cm-directive-value-role-option')!;
     expect(optionValue.classList.contains('cm-directive-value-error')).toBe(true);

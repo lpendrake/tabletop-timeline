@@ -336,7 +336,7 @@ describe('serialiseTemplate for empty, partly filled and filled roles', () => {
       reason: 'signed the deal',
     });
     expect(gains).toBe(
-      '{{tg01.gains {holder:[[e5f6]]} is now {option:business-partner} with {observer:[[b7c8]]} — {reason:signed the deal}}}',
+      '{{tg01.gains Give {holder:[[e5f6]]} relationship: {option:business-partner} → {observer:[[b7c8]]} — {reason:signed the deal}}}',
     );
 
     const loses = serialiseTemplate('tg01', 'loses', relationshipTags.action('loses')!.template, {
@@ -345,7 +345,7 @@ describe('serialiseTemplate for empty, partly filled and filled roles', () => {
       observer: '[[b7c8]]',
     });
     expect(loses).toBe(
-      '{{tg01.loses {holder:[[e5f6]]} is no longer {option:business-partner} with {observer:[[b7c8]]} — {reason:}}}',
+      "{{tg01.loses Remove {holder:[[e5f6]]}'s relationship: {option:business-partner} → {observer:[[b7c8]]} — {reason:}}}",
     );
   });
 });
@@ -697,6 +697,35 @@ describe('readable parts resolve labels, default reason, prompts', () => {
     });
     const reason = parts.find((p) => p.kind === 'value' && p.role === 'reason');
     expect(reason).toMatchObject({ display: 'Session 12', isDefaultReason: true, empty: false });
+  });
+
+  it('hideEmptyReason drops an empty reason and its leading separator, ending at the observer', () => {
+    const raw =
+      '{{tg01.gains Give {holder:[[c3d4]]} relationship: {option:member} → {observer:[[a1b2]]} — {reason:}}}';
+    const { directives } = parseDirectives(raw);
+    const parts = readableParts(directives[0], {
+      track: relationshipTags,
+      labelForNote,
+      defaultReason: 'Unspecified',
+      hideEmptyReason: true,
+    });
+    expect(parts.some((p) => p.kind === 'value' && p.role === 'reason')).toBe(false);
+    const last = parts[parts.length - 1];
+    expect(last).toMatchObject({ kind: 'value', role: 'observer', display: 'Mira' });
+  });
+
+  it('hideEmptyReason still shows a filled reason', () => {
+    const raw =
+      '{{tg01.gains Give {holder:[[c3d4]]} relationship: {option:member} → {observer:[[a1b2]]} — {reason:signed the deal}}}';
+    const { directives } = parseDirectives(raw);
+    const parts = readableParts(directives[0], {
+      track: relationshipTags,
+      labelForNote,
+      defaultReason: 'Unspecified',
+      hideEmptyReason: true,
+    });
+    const reason = parts.find((p) => p.kind === 'value' && p.role === 'reason');
+    expect(reason).toMatchObject({ display: 'signed the deal', empty: false });
   });
 
   it('an empty non-reason role shows its template prompt', () => {

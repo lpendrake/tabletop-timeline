@@ -138,7 +138,13 @@ function buildDirectiveView(
   }
 
   const problems = interpreted.status === 'invalid' ? interpreted.problems : [];
-  const parts = readableParts(d, { track, labelForNote, defaultReason, problems });
+  const parts = readableParts(d, {
+    track,
+    labelForNote,
+    defaultReason,
+    problems,
+    hideEmptyReason: place === 'note',
+  });
   return { kind: 'sentence', parts, status: interpreted.status };
 }
 
