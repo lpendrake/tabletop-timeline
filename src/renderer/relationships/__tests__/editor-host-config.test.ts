@@ -49,6 +49,23 @@ describe('makeHolderChosenHandler', () => {
 
     expect(setDefaultHolder).not.toHaveBeenCalled();
   });
+
+  it('returns a promise that resolves only once the dialog is answered and (on yes) the save has completed', async () => {
+    const confirm = vi.fn().mockResolvedValue(true);
+    const handler = makeHolderChosenHandler(confirm, (id) => id);
+
+    await handler('npc-1');
+
+    expect(setDefaultHolder).toHaveBeenCalledWith('npc-1');
+  });
+
+  it('resolves without saving when the dialog is declined', async () => {
+    const confirm = vi.fn().mockResolvedValue(false);
+    const handler = makeHolderChosenHandler(confirm, (id) => id);
+
+    await expect(handler('npc-1')).resolves.toBeUndefined();
+    expect(setDefaultHolder).not.toHaveBeenCalled();
+  });
 });
 
 describe('makeHeldOptionsResolver', () => {

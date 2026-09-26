@@ -39,6 +39,7 @@ import { buildEntityLink } from '../../shared/entity-link';
 import { copyToClipboard } from '../../shared/clipboard';
 import { useNewNoteMenuConfig, entityFromCreatedNote, type CreatedNote } from '../../notes/public';
 import { useRelationshipEditorConfig } from '../../relationships/hooks/use-relationship-editor-config';
+import { isRelationshipBubbleOpen } from '../../shared/markdown-editor/extensions/relationship-bubble-view-plugin';
 import { eventRelationshipDefaultReason } from './relationship-default-reason';
 import { bufferEpochSeconds } from './domain/buffer-epoch-seconds';
 import { CalendarProvider } from '../calendar/provider';
@@ -396,6 +397,11 @@ export function EventEditorModal({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        // A relationship bubble handles its own Escape (closing itself,
+        // leaving remaining blanks as-is) — the modal must not also close
+        // on the same keypress. Checked by containment against the
+        // bubble's own host element, never a DOM data read.
+        if (isRelationshipBubbleOpen(e.target)) return;
         e.stopPropagation();
         requestClose();
         return;

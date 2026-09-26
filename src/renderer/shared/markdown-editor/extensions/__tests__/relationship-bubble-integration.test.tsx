@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { act } from 'react';
 import { fireEvent } from '@testing-library/react';
 import { EditorState } from '@codemirror/state';
@@ -9,6 +9,7 @@ import { EditorView } from '@codemirror/view';
 import { history } from '@codemirror/commands';
 import { relationshipDirectives, setDirectiveContext } from '../relationship-directives';
 import {
+  isRelationshipBubbleOpen,
   relationshipBubble,
   type RelationshipBubbleHostContext,
 } from '../relationship-bubble-view-plugin';
@@ -236,6 +237,78 @@ describe('relationship bubble — async heldOptions', () => {
   });
 });
 
+describe('relationship bubble — close on click-outside', () => {
+  it('isRelationshipBubbleOpen reflects whether a bubble is currently open', () => {
+    const setup = track(makeView(FULL_CHANGE_DIRECTIVE));
+    const { view } = setup;
+    expect(isRelationshipBubbleOpen()).toBe(false);
+
+    const amountValue = view.dom.querySelector<HTMLElement>('.cm-directive-value-role-amount')!;
+    act(() => {
+      amountValue.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }),
+      );
+    });
+    expect(isRelationshipBubbleOpen()).toBe(true);
+    expect(isRelationshipBubbleOpen(bubbleInput())).toBe(true);
+    expect(isRelationshipBubbleOpen(view.dom)).toBe(false);
+
+    act(() => {
+      fireEvent.keyDown(bubbleInput(), { key: 'Escape' });
+    });
+    expect(isRelationshipBubbleOpen()).toBe(false);
+  });
+
+  it('a pointerdown outside the bubble closes it without eating the click', () => {
+    const setup = track(makeView(FULL_CHANGE_DIRECTIVE));
+    const { view, container } = setup;
+    const amountValue = view.dom.querySelector<HTMLElement>('.cm-directive-value-role-amount')!;
+    act(() => {
+      amountValue.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }),
+      );
+    });
+    expect(view.state.field(bubbleStateField)).not.toBeNull();
+
+    const outsideTarget = document.createElement('button');
+    let clicked = false;
+    outsideTarget.addEventListener('click', () => {
+      clicked = true;
+    });
+    container.appendChild(outsideTarget);
+
+    act(() => {
+      outsideTarget.dispatchEvent(
+        new PointerEvent('pointerdown', { bubbles: true, cancelable: true }),
+      );
+      outsideTarget.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
+
+    expect(view.state.field(bubbleStateField)).toBeNull();
+    expect(clicked).toBe(true); // the click still did its own thing
+
+    outsideTarget.remove();
+  });
+
+  it('a pointerdown inside the bubble does not close it', () => {
+    const setup = track(makeView(FULL_CHANGE_DIRECTIVE));
+    const { view } = setup;
+    const amountValue = view.dom.querySelector<HTMLElement>('.cm-directive-value-role-amount')!;
+    act(() => {
+      amountValue.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }),
+      );
+    });
+
+    act(() => {
+      bubbleInput().dispatchEvent(
+        new PointerEvent('pointerdown', { bubbles: true, cancelable: true }),
+      );
+    });
+    expect(view.state.field(bubbleStateField)).not.toBeNull();
+  });
+});
+
 describe('relationship bubble — focus', () => {
   it('takes keyboard focus after a directive is inserted via the same path the / menu uses', async () => {
     const setup = track(makeView(''));
@@ -271,5 +344,87 @@ describe('relationship bubble — focus', () => {
     await flushBubbleOpen();
 
     expect(document.activeElement).toBe(bubbleInput());
+  });
+});
+
+describe('relationship bubble — placement fit via list ref', () => {
+  /**
+   * `computePlacement` in `relationship-bubble-view-plugin.ts` measures the
+   * option list (and its first row) off the `listRef` it hands the
+   * `SearchablePicker` — never a `.searchable-picker-list` /
+   * `.searchable-picker-row` selector. These tests mock the real geometry
+   * (`coordsAtPos`, the host/list/row heights, the viewport) that plan is
+   * built from, so a passing assertion here can only mean the plugin read
+   * those mocked heights off the held reference.
+   */
+  function mockLineRect(view: EditorView, top: number, bottom: number): void {
+    vi.spyOn(view, 'coordsAtPos').mockReturnValue({
+      left: 100,
+      right: 150,
+      top,
+      bottom,
+    } as ReturnType<EditorView['coordsAtPos']>);
+  }
+
+  function mockGeometry(innerHeight: number): void {
+    vi.stubGlobal('innerHeight', innerHeight);
+    const host = document.querySelector<HTMLElement>('.relationship-bubble-host')!;
+    const list = document.querySelector<HTMLElement>('.searchable-picker-list')!;
+    const row = list.firstElementChild as HTMLElement;
+    Object.defineProperty(host, 'offsetHeight', { value: 300, configurable: true });
+    Object.defineProperty(list, 'offsetHeight', { value: 250, configurable: true });
+    Object.defineProperty(row, 'offsetHeight', { value: 20, configurable: true });
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('shrinks the option list, but stays above, when only a shrunk list fits', async () => {
+    const setup = track(makeView(FULL_CHANGE_DIRECTIVE));
+    const { view } = setup;
+    mockLineRect(view, 160, 180);
+    const holderValue = view.dom.querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
+
+    act(() => {
+      holderValue.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }),
+      );
+    });
+    mockGeometry(500);
+    await flushBubbleOpen();
+
+    const list = document.querySelector<HTMLElement>('.searchable-picker-list')!;
+    // space.above = 160 - GAP(2) - EDGE_MARGIN(8) = 150; chromeHeight =
+    // host(300) - list(250) = 50 → shrunk max height = 150 - 50 = 100.
+    expect(list.style.maxHeight).toBe('100px');
+    const bubble = document.querySelector<HTMLElement>('.relationship-bubble')!;
+    // Stays above: positioned via `bottom`, not `top`.
+    expect(bubble.style.bottom).not.toBe('');
+    expect(bubble.style.top).toBe('');
+  });
+
+  it('flips below the line when even a shrunk list would not fit above', async () => {
+    const setup = track(makeView(FULL_CHANGE_DIRECTIVE));
+    const { view } = setup;
+    mockLineRect(view, 20, 40);
+    const holderValue = view.dom.querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
+
+    act(() => {
+      holderValue.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }),
+      );
+    });
+    mockGeometry(500);
+    await flushBubbleOpen();
+
+    const bubble = document.querySelector<HTMLElement>('.relationship-bubble')!;
+    // space.above = 20 - 2 - 8 = 10, too small even shrunk to the minimum
+    // visible rows → flips below, where the full (unshrunk) list fits.
+    expect(bubble.style.top).not.toBe('');
+    expect(bubble.style.bottom).toBe('');
+    const list = document.querySelector<HTMLElement>('.searchable-picker-list')!;
+    expect(list.style.maxHeight).toBe('');
   });
 });

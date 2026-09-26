@@ -71,6 +71,26 @@ function numericStep(track: ResolvedTrack): number {
   return track.kind === 'numeric' ? track.step || 1 : 1;
 }
 
+/** Whether a numeric field for `track` accepts a decimal point — mirrors `validateRoleValue`'s integer-step requirement (an ordinal track never reaches here; it uses `RungField` instead). */
+export function allowsFraction(track: ResolvedTrack | null): boolean {
+  return !!track && track.kind === 'numeric' && !Number.isInteger(track.step || 1);
+}
+
+/**
+ * Whether typed text is composed only of a numeric field's allowed
+ * characters — an optional leading sign, digits, and (only when `track`
+ * allows fractional values) a single decimal point. This doesn't require
+ * the text to already be a complete, valid number (e.g. a lone `-` or a
+ * trailing `.` while still typing) — `validateAmount`/`validateNumericValue`
+ * (both backed by the shared `validateRoleValue`) are what reject an
+ * incomplete or out-of-range value at commit time. This is only the
+ * keystroke-level filter that keeps letters and other junk out.
+ */
+export function isAllowedNumberInputText(text: string, track: ResolvedTrack | null): boolean {
+  const pattern = allowsFraction(track) ? /^[+-]?\d*\.?\d*$/ : /^[+-]?\d*$/;
+  return pattern.test(text);
+}
+
 /** Steps `amount` by the track's step (direction: +1 = up, -1 = down). No clamping — amount is unbounded. */
 export function stepAmount(raw: string, track: ResolvedTrack, dir: 1 | -1): string {
   const step = numericStep(track);
@@ -198,6 +218,23 @@ export function pickForTab(
   return ranked[0] ?? null;
 }
 
+/**
+ * The value a numeric field (`amount`, or `value` on a numeric track) should
+ * start with when the directive's blank is empty: `1`, or — for `value` on a
+ * numeric track when `1` falls outside its `[min, max]` — the track's own
+ * `clamp(1)`, i.e. whichever bound of the range is nearest to `1`. `amount`
+ * is unbounded (see `stepAmount`), so it always starts at a plain `1`.
+ */
+export function initialNumberFieldValue(
+  role: Role,
+  value: string,
+  track: ResolvedTrack | null,
+): string {
+  if (value !== '') return value;
+  if (role === 'value' && track && track.kind === 'numeric') return String(track.clamp(1));
+  return '1';
+}
+
 /** Minimum distance kept between the bubble's tail and either of its own edges. */
 export const TAIL_EDGE_INSET = 14;
 
@@ -219,4 +256,96 @@ export function computeTailOffset(
   const raw = blankCenterX - bubbleLeft;
   const max = Math.max(inset, bubbleWidth - inset);
   return Math.min(max, Math.max(inset, raw));
+}
+
+/**
+ * Geometry for fitting the bubble (and its scrollable option list) above or
+ * below its anchor line. Deliberately separate from
+ * `../../context-menu/caret-position`'s `computeCaretPlacement`: that
+ * helper only ever flips wholesale between a side that fits and one that
+ * doesn't, with no notion of a shrinkable list — it can't be reused (or
+ * edited; it's shared by other popups) for "shrink the list first, flip only
+ * if that's not enough either". `EDGE_MARGIN`/`GAP` are duplicated from that
+ * file's own (unexported) constants of the same name and meaning.
+ */
+const EDGE_MARGIN = 8;
+const GAP = 2;
+
+/** How many rows of the option list must stay visible after a shrink. */
+export const MIN_VISIBLE_LIST_ROWS = 3;
+
+export interface BubbleVerticalAnchors {
+  /** CSS `top` (px, viewport coords) the bubble would use when placed below the line. */
+  belowTop: number;
+  /** Space available below the line (px), after margins. */
+  below: number;
+  /** CSS `bottom` (px, distance from the viewport's bottom edge) the bubble would use when placed above the line. */
+  aboveBottom: number;
+  /** Space available above the line (px), after margins. */
+  above: number;
+}
+
+/** The vertical anchor points and available space on both sides of the anchor line. */
+export function bubbleVerticalAnchors(
+  lineTop: number,
+  lineBottom: number,
+  viewportHeight: number,
+): BubbleVerticalAnchors {
+  const belowTop = lineBottom + GAP;
+  const aboveBottom = viewportHeight - lineTop + GAP;
+  return {
+    belowTop,
+    below: Math.max(0, viewportHeight - EDGE_MARGIN - belowTop),
+    aboveBottom,
+    above: Math.max(0, lineTop - GAP - EDGE_MARGIN),
+  };
+}
+
+export type BubbleSide = 'above' | 'below';
+
+export interface BubbleFitPlan {
+  side: BubbleSide;
+  /** Max height (px) to give the option list so the whole bubble fits, or `null` when the list needs no shrinking. */
+  listMaxHeight: number | null;
+}
+
+/**
+ * Decides where the bubble should open and how much (if at all) to shrink
+ * its option list, given the space available above/below its anchor line
+ * (`bubbleVerticalAnchors`), the bubble's natural full height (list
+ * unshrunk), the height everything but the list takes up ("chrome"), the
+ * height of one list row, and the minimum rows that must stay visible after
+ * a shrink (`MIN_VISIBLE_LIST_ROWS`).
+ *
+ * 1. Fits above at full height → stays above, no shrink.
+ * 2. Doesn't fit above, but shrinking the list to `minVisibleRows` rows
+ *    does → stays above, shrunk to exactly the space available.
+ * 3. Still doesn't fit above → flips below: full height if there's room,
+ *    otherwise shrunk to whatever's left (which may be under
+ *    `minVisibleRows` — below is the last resort, there's nowhere else to
+ *    flip to).
+ */
+export function planBubbleFit(
+  space: Pick<BubbleVerticalAnchors, 'above' | 'below'>,
+  fullHeight: number,
+  chromeHeight: number,
+  rowHeight: number,
+  minVisibleRows: number = MIN_VISIBLE_LIST_ROWS,
+): BubbleFitPlan {
+  if (fullHeight <= space.above) return { side: 'above', listMaxHeight: null };
+
+  const minAboveHeight = chromeHeight + rowHeight * minVisibleRows;
+  if (minAboveHeight <= space.above) {
+    return { side: 'above', listMaxHeight: space.above - chromeHeight };
+  }
+
+  if (fullHeight <= space.below) return { side: 'below', listMaxHeight: null };
+
+  return { side: 'below', listMaxHeight: Math.max(0, space.below - chromeHeight) };
+}
+
+/** Clamps the bubble's `left` so it stays within the viewport, mirroring `caret-position.ts`'s own (unexported) `clampLeft`. */
+export function clampBubbleLeft(caretX: number, popupWidth: number, viewportWidth: number): number {
+  const max = viewportWidth - popupWidth - EDGE_MARGIN;
+  return Math.max(EDGE_MARGIN, Math.min(caretX, max));
 }

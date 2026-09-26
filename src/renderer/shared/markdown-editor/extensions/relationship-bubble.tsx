@@ -5,6 +5,8 @@ import {
   buildNotePickerRecents,
   decideBubbleKey,
   filterHeldOptions,
+  initialNumberFieldValue,
+  isAllowedNumberInputText,
   pickForTab,
   prefillNoteValue,
   shouldNotifyHolderChosen,
@@ -21,6 +23,8 @@ import './relationship-bubble.css';
 export type { BubbleCommitDirection };
 
 export interface RelationshipBubbleProps {
+  /** The directive's `from` — identifies which directive this blank belongs to (used to key the field, see `RelationshipBubble` below). */
+  anchor: number;
   role: Role;
   value: string;
   prompt: string;
@@ -34,7 +38,8 @@ export interface RelationshipBubbleProps {
   heldOptionKeys: string[] | null;
   /** True while an async `heldOptions` lookup for this exact blank is in flight — see `relationship-bubble-view-plugin.ts`. */
   heldOptionsLoading: boolean;
-  onHolderChosenWithoutDefault?: (id: string) => void;
+  /** May return a `Promise` (e.g. a confirm dialog) — awaited before advancing, see `NotePickerField.commitPick`. */
+  onHolderChosenWithoutDefault?: (id: string) => void | Promise<void>;
   createOption?: (
     trackId: string,
     label: string,
@@ -44,6 +49,15 @@ export interface RelationshipBubbleProps {
   onClose: () => void;
   style: React.CSSProperties;
   tailSide: 'above' | 'below';
+  /** Max height (px) to give a picker's option list so the whole bubble fits on screen, or `null` for no cap beyond the picker's own default — see `planBubbleFit`. */
+  listMaxHeight: number | null;
+  /**
+   * Held by `relationship-bubble-view-plugin.ts` and passed straight to
+   * whichever field renders a `SearchablePicker`, so the plugin can measure
+   * the list's (and its first row's) real height off this reference instead
+   * of querying the DOM. Unused by fields that don't render a picker.
+   */
+  listRef: React.Ref<HTMLDivElement>;
   /**
    * False for the initial hidden measuring pass (see
    * `relationship-bubble-view-plugin.ts`'s `render`), true once
@@ -72,8 +86,13 @@ function inputBounds(el: HTMLInputElement): { atStart: boolean; atEnd: boolean }
  * `restoreFocus`) steals it back in between. No-op while hidden — a
  * `visibility: hidden` element can't take real browser focus, so this
  * waits for the visible pass instead of racing it.
+ *
+ * Also selects any existing text in the field, so moving to a blank that
+ * already has a value (stepping back to re-edit it, or a numeric field's
+ * own default-to-`1`) leaves it selected — typing replaces it outright
+ * rather than appending.
  */
-function useBubbleFocus<T extends HTMLElement>(
+function useBubbleFocus<T extends HTMLInputElement>(
   ref: React.RefObject<T | null>,
   visible: boolean,
 ): void {
@@ -82,8 +101,12 @@ function useBubbleFocus<T extends HTMLElement>(
     const el = ref.current;
     if (!el) return undefined;
     el.focus();
+    el.select();
     const raf = requestAnimationFrame(() => {
-      if (document.activeElement !== el) el.focus();
+      if (document.activeElement !== el) {
+        el.focus();
+        el.select();
+      }
     });
     return () => cancelAnimationFrame(raf);
   }, [visible, ref]);
@@ -96,11 +119,19 @@ function useBubbleFocus<T extends HTMLElement>(
  * check) is a pure function from `relationship-bubble-logic.ts`.
  */
 export function RelationshipBubble(props: RelationshipBubbleProps) {
-  const { style, tailSide, tailOffset } = props;
+  const { style, tailSide, tailOffset, anchor, role } = props;
   return (
     <div className="relationship-bubble" style={style}>
       <div className="relationship-bubble-prompt">{props.prompt}</div>
-      <Field {...props} />
+      {/*
+       * Keyed by (anchor, role) so moving to a different blank always
+       * mounts a fresh field instance instead of reusing one across roles
+       * (e.g. NotePickerField backs both `holder` and `observer` — without
+       * this key, React would keep the same component instance and its own
+       * uncontrolled query text would carry over from one field to the
+       * next).
+       */}
+      <Field key={`${anchor}:${role}`} {...props} />
       <div
         className={`relationship-bubble-tail relationship-bubble-tail-${tailSide}`}
         style={{ left: tailOffset }}
@@ -146,8 +177,17 @@ interface NumberFieldProps extends RelationshipBubbleProps {
   step: (raw: string, dir: 1 | -1) => string;
 }
 
-function NumberField({ value, onCommit, onClose, validate, step, visible }: NumberFieldProps) {
-  const [text, setText] = useState(value);
+function NumberField({
+  role,
+  value,
+  track,
+  onCommit,
+  onClose,
+  validate,
+  step,
+  visible,
+}: NumberFieldProps) {
+  const [text, setText] = useState(() => initialNumberFieldValue(role, value, track));
   const [error, setError] = useState<string | null>(null);
   const ref = useRef<HTMLInputElement>(null);
   useBubbleFocus(ref, visible);
@@ -162,6 +202,12 @@ function NumberField({ value, onCommit, onClose, validate, step, visible }: Numb
     onCommit(result.value, direction);
   }
 
+  function applyStep(dir: 1 | -1) {
+    const stepped = step(text || '0', dir);
+    setText(stepped);
+    setError(null);
+  }
+
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     const el = ref.current;
     const action: BubbleKeyAction = decideBubbleKey(e.key, {
@@ -171,6 +217,7 @@ function NumberField({ value, onCommit, onClose, validate, step, visible }: Numb
     switch (action.type) {
       case 'close':
         e.preventDefault();
+        e.stopPropagation();
         onClose();
         return;
       case 'advance':
@@ -189,13 +236,10 @@ function NumberField({ value, onCommit, onClose, validate, step, visible }: Numb
         e.preventDefault();
         commit('hop-prev');
         return;
-      case 'step': {
+      case 'step':
         e.preventDefault();
-        const stepped = step(text || '0', action.dir);
-        setText(stepped);
-        setError(null);
+        applyStep(action.dir);
         return;
-      }
       default:
         return;
     }
@@ -203,18 +247,44 @@ function NumberField({ value, onCommit, onClose, validate, step, visible }: Numb
 
   return (
     <div className="relationship-bubble-field">
-      <input
-        ref={ref}
-        className="relationship-bubble-input"
-        type="text"
-        inputMode="decimal"
-        value={text}
-        onChange={(e) => {
-          setText(e.target.value);
-          setError(null);
-        }}
-        onKeyDown={handleKeyDown}
-      />
+      <div className="relationship-bubble-number-row">
+        <input
+          ref={ref}
+          className="relationship-bubble-input"
+          type="text"
+          inputMode="decimal"
+          value={text}
+          onChange={(e) => {
+            const next = e.target.value;
+            if (!isAllowedNumberInputText(next, track)) return;
+            setText(next);
+            setError(null);
+          }}
+          onKeyDown={handleKeyDown}
+        />
+        <div className="relationship-bubble-stepper">
+          <button
+            type="button"
+            className="relationship-bubble-stepper-button"
+            tabIndex={-1}
+            aria-label="Increase"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => applyStep(1)}
+          >
+            ▲
+          </button>
+          <button
+            type="button"
+            className="relationship-bubble-stepper-button"
+            tabIndex={-1}
+            aria-label="Decrease"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => applyStep(-1)}
+          >
+            ▼
+          </button>
+        </div>
+      </div>
       {error && <div className="relationship-bubble-message">{error}</div>}
     </div>
   );
@@ -243,6 +313,7 @@ function ReasonField({
     });
     if (action.type === 'close') {
       e.preventDefault();
+      e.stopPropagation();
       onClose();
     } else if (action.type === 'advance' || action.type === 'hop-next') {
       e.preventDefault();
@@ -297,6 +368,8 @@ function NotePickerField(props: RelationshipBubbleProps) {
     defaultHolderId,
     currentNoteId,
     role,
+    listMaxHeight,
+    listRef,
     onCommit,
     onClose,
     visible,
@@ -307,12 +380,26 @@ function NotePickerField(props: RelationshipBubbleProps) {
   const recents = buildNotePickerRecents(recentNoteIds, currentNoteId);
   const prefilled = prefillNoteValue(role, value, defaultHolderId);
 
-  function commitPick(id: string, direction: BubbleCommitDirection): void {
-    if (shouldNotifyHolderChosen(role, defaultHolderId)) props.onHolderChosenWithoutDefault?.(id);
+  /**
+   * When choosing this holder is the first one (no default set yet), the
+   * host may show a confirm dialog (`onHolderChosenWithoutDefault`) before
+   * the value is committed — awaited here so the bubble only advances (and
+   * moves focus to the next blank) once that dialog is gone, rather than
+   * having the dialog steal focus back from a field that already advanced.
+   */
+  async function commitPick(id: string, direction: BubbleCommitDirection): Promise<void> {
+    if (shouldNotifyHolderChosen(role, defaultHolderId)) {
+      await props.onHolderChosenWithoutDefault?.(id);
+    }
     onCommit(id, direction);
   }
 
-  const handleTab = usePickerTabHandler(noteOptions, recents, prefilled, commitPick);
+  const handleTab = usePickerTabHandler(
+    noteOptions,
+    recents,
+    prefilled,
+    (id, direction) => void commitPick(id, direction),
+  );
 
   return (
     <div className="relationship-bubble-field" onKeyDownCapture={handleTab}>
@@ -323,8 +410,10 @@ function NotePickerField(props: RelationshipBubbleProps) {
         inputRef={ref}
         placeholder={role === 'holder' ? 'Holder…' : 'Observer…'}
         ariaLabel={role}
+        listMaxHeight={listMaxHeight ?? undefined}
+        listRef={listRef}
         onCancel={onClose}
-        onPick={(option) => commitPick(option.id, 'advance')}
+        onPick={(option) => void commitPick(option.id, 'advance')}
       />
     </div>
   );
@@ -333,7 +422,7 @@ function NotePickerField(props: RelationshipBubbleProps) {
 function RungField(
   props: RelationshipBubbleProps & { track: Extract<ResolvedTrack, { kind: 'ordinal' }> },
 ) {
-  const { value, track, onCommit, onClose, visible } = props;
+  const { value, track, listMaxHeight, listRef, onCommit, onClose, visible } = props;
   const ref = useRef<HTMLInputElement>(null);
   useBubbleFocus(ref, visible);
   const options: PickerOption[] = track.rungs.map((r) => ({
@@ -352,6 +441,8 @@ function RungField(
         inputRef={ref}
         placeholder="Choose a level…"
         ariaLabel="value"
+        listMaxHeight={listMaxHeight ?? undefined}
+        listRef={listRef}
         onCancel={onClose}
         onPick={(option) => onCommit(option.id, 'advance')}
       />
@@ -373,6 +464,8 @@ function OptionField(
     trackId,
     heldOptionKeys,
     heldOptionsLoading,
+    listMaxHeight,
+    listRef,
     createOption,
     onCommit,
     onClose,
@@ -422,6 +515,8 @@ function OptionField(
         placeholder="Choose an option…"
         ariaLabel="option"
         emptyText="No matching option"
+        listMaxHeight={listMaxHeight ?? undefined}
+        listRef={listRef}
         onQueryChange={setQuery}
         onCancel={onClose}
         onPick={(option) => onCommit(option.id, 'advance')}

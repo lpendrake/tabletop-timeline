@@ -18,6 +18,13 @@ import {
   buildNotePickerRecents,
   prefillNoteValue,
   pickForTab,
+  initialNumberFieldValue,
+  allowsFraction,
+  isAllowedNumberInputText,
+  bubbleVerticalAnchors,
+  planBubbleFit,
+  clampBubbleLeft,
+  MIN_VISIBLE_LIST_ROWS,
 } from '../relationship-bubble-logic';
 import {
   parseDirectives,
@@ -228,6 +235,119 @@ describe('pickForTab (pure)', () => {
 describe('sanitiseValue (pure, shared)', () => {
   it('strips braces and collapses line breaks', () => {
     expect(sanitiseValue('a {b} c\nd')).toBe('a b c d');
+  });
+});
+
+describe('initialNumberFieldValue (pure)', () => {
+  const track = resolveTrackSpec(pf2eReputationSpec); // numeric, range [-50, 50]
+
+  it('keeps a non-empty value untouched', () => {
+    expect(initialNumberFieldValue('amount', '-2', track)).toBe('-2');
+    expect(initialNumberFieldValue('value', '10', track)).toBe('10');
+  });
+
+  it("amount starts at plain '1' when empty — it's unbounded", () => {
+    expect(initialNumberFieldValue('amount', '', track)).toBe('1');
+    expect(initialNumberFieldValue('amount', '', null)).toBe('1');
+  });
+
+  it('a numeric value starts at 1 when empty and 1 is in range', () => {
+    expect(initialNumberFieldValue('value', '', track)).toBe('1');
+  });
+
+  it("a numeric value starts at the track's clamp(1) when 1 is out of range", () => {
+    const narrow = resolveTrackSpec({ ...pf2eReputationSpec, min: 5, max: 20, bands: [] });
+    expect(initialNumberFieldValue('value', '', narrow)).toBe('5');
+  });
+});
+
+describe('allowsFraction / isAllowedNumberInputText (pure)', () => {
+  const integerTrack = resolveTrackSpec(pf2eReputationSpec); // integer step
+  const fractionalTrack = resolveTrackSpec({ ...pf2eReputationSpec, step: 0.5 });
+
+  it('an integer-step track does not allow a decimal point', () => {
+    expect(allowsFraction(integerTrack)).toBe(false);
+    expect(isAllowedNumberInputText('2.5', integerTrack)).toBe(false);
+    expect(isAllowedNumberInputText('-2', integerTrack)).toBe(true);
+    expect(isAllowedNumberInputText('2a', integerTrack)).toBe(false);
+  });
+
+  it('a fractional-step track allows one decimal point', () => {
+    expect(allowsFraction(fractionalTrack)).toBe(true);
+    expect(isAllowedNumberInputText('2.5', fractionalTrack)).toBe(true);
+    expect(isAllowedNumberInputText('2.5.1', fractionalTrack)).toBe(false);
+  });
+
+  it('a lone sign or empty string is allowed (still being typed)', () => {
+    expect(isAllowedNumberInputText('', integerTrack)).toBe(true);
+    expect(isAllowedNumberInputText('-', integerTrack)).toBe(true);
+    expect(isAllowedNumberInputText('+', integerTrack)).toBe(true);
+  });
+
+  it('a null track (unknown) falls back to integer-only', () => {
+    expect(isAllowedNumberInputText('2.5', null)).toBe(false);
+    expect(isAllowedNumberInputText('25', null)).toBe(true);
+  });
+});
+
+describe('bubble fit/shrink/flip placement (pure)', () => {
+  it('fits fully above when there is enough room', () => {
+    const space = bubbleVerticalAnchors(300, 320, 600);
+    const plan = planBubbleFit(space, 200, 60, 24, MIN_VISIBLE_LIST_ROWS);
+    expect(plan).toEqual({ side: 'above', listMaxHeight: null });
+  });
+
+  it('shrinks the list above, keeping at least the minimum rows, when the full height does not fit', () => {
+    // 100px available above; full height 200 doesn't fit, but
+    // chrome(60) + 3 rows * 24 = 132... too much — use a smaller chrome/row
+    // so the minimum-rows floor actually fits within 100.
+    const space = { above: 100, below: 400 };
+    const plan = planBubbleFit(space, 200, 40, 15, 3); // min above = 40 + 45 = 85 <= 100
+    expect(plan.side).toBe('above');
+    expect(plan.listMaxHeight).toBe(100 - 40);
+  });
+
+  it('flips below when even the minimum-rows shrink does not fit above', () => {
+    const space = { above: 50, below: 300 };
+    const plan = planBubbleFit(space, 200, 40, 15, 3); // min above = 40 + 45 = 85 > 50
+    expect(plan.side).toBe('below');
+    expect(plan.listMaxHeight).toBeNull(); // 200 fits fully in the 300 available below
+  });
+
+  it('below also clamps when there is nowhere else to go', () => {
+    const space = { above: 20, below: 60 };
+    const plan = planBubbleFit(space, 200, 40, 15, 3); // doesn't fit above OR fully below
+    expect(plan.side).toBe('below');
+    expect(plan.listMaxHeight).toBe(60 - 40); // shrunk to whatever's left, even under 3 rows
+  });
+
+  it('never returns a negative list height below', () => {
+    const space = { above: 0, below: 10 };
+    const plan = planBubbleFit(space, 200, 40, 15, 3);
+    expect(plan.listMaxHeight).toBe(0);
+  });
+});
+
+describe('bubbleVerticalAnchors (pure)', () => {
+  it('computes available space and CSS anchor points on both sides of the line', () => {
+    const anchors = bubbleVerticalAnchors(300, 320, 600);
+    expect(anchors.belowTop).toBe(322); // lineBottom + GAP(2)
+    expect(anchors.below).toBe(600 - 8 - 322); // viewport - EDGE_MARGIN(8) - belowTop
+    expect(anchors.aboveBottom).toBe(600 - 300 + 2);
+    expect(anchors.above).toBe(300 - 2 - 8);
+  });
+
+  it('clamps space to zero rather than going negative near an edge', () => {
+    const anchors = bubbleVerticalAnchors(5, 10, 600);
+    expect(anchors.above).toBe(0);
+  });
+});
+
+describe('clampBubbleLeft (pure)', () => {
+  it('keeps the popup within the viewport, matching caret-position.ts’s own clampLeft', () => {
+    expect(clampBubbleLeft(50, 240, 800)).toBe(50);
+    expect(clampBubbleLeft(-10, 240, 800)).toBe(8);
+    expect(clampBubbleLeft(700, 240, 800)).toBe(800 - 240 - 8);
   });
 });
 

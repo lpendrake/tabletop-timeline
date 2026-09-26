@@ -20,10 +20,16 @@ import {
   type TrackLibrary,
 } from '../../../../shared/relationships';
 import type { PickerOption } from '../../searchable-picker';
-import { computeCaretPlacement } from '../../context-menu/caret-position';
 import { getCaretRect, type CaretRect } from './editor-context-menu';
 import { getDirectiveRoleElement } from './relationship-directives';
-import { computeTailOffset, type BubbleCommitDirection } from './relationship-bubble-logic';
+import {
+  bubbleVerticalAnchors,
+  clampBubbleLeft,
+  computeTailOffset,
+  planBubbleFit,
+  type BubbleCommitDirection,
+  type BubbleSide,
+} from './relationship-bubble-logic';
 import {
   bubbleStateField,
   commitBubbleField,
@@ -64,7 +70,13 @@ export interface RelationshipBubbleOptions {
   noteOptions: () => readonly PickerOption[];
   defaultHolderId?: () => string | null;
   currentNoteId?: () => string | null;
-  onHolderChosenWithoutDefault?: (id: string) => void;
+  /**
+   * May return a `Promise` (e.g. a confirm dialog) — the bubble awaits it
+   * before advancing to the next blank, so focus lands there only once the
+   * dialog is gone rather than being stolen back by it. See
+   * `relationship-bubble.tsx`'s `NotePickerField.commitPick`.
+   */
+  onHolderChosenWithoutDefault?: (id: string) => void | Promise<void>;
   createOption?: (
     trackId: string,
     label: string,
@@ -90,12 +102,54 @@ function noteIdFor(d: ParsedDirective, role: Role): string | null {
   return noteIdOf(roleValue(d, role) ?? '');
 }
 
-type BaseProps = Omit<RelationshipBubbleProps, 'style' | 'tailSide' | 'visible' | 'tailOffset'>;
+/**
+ * Every bubble host currently mounted on `document.body` (normally at most
+ * one, but the editor can host several instances). Membership is
+ * synchronous with `bubbleStateField` closing — `unmount()` removes a host
+ * here immediately, even though the actual DOM node removal is deferred a
+ * microtask — so a check made right after a close (e.g. the event editor's
+ * own Escape handler, in the same keydown) sees the bubble as already
+ * closed.
+ */
+const openBubbleHosts = new Set<HTMLElement>();
+
+/**
+ * Whether a relationship bubble is currently open — used by hosts (e.g.
+ * `EventEditorModal`'s document-level Escape listener) that must not act on
+ * an event the bubble itself is already handling. With `target` given, only
+ * reports open when `target` is actually inside one of the open bubbles'
+ * hosts (not e.g. some unrelated element while a bubble happens to be open
+ * elsewhere in the document). This is a containment check against the
+ * bubble's own host element, never a `data-*` read.
+ */
+export function isRelationshipBubbleOpen(target?: EventTarget | null): boolean {
+  if (openBubbleHosts.size === 0) return false;
+  if (target === undefined) return true;
+  if (!(target instanceof Node)) return false;
+  for (const host of openBubbleHosts) {
+    if (host.contains(target)) return true;
+  }
+  return false;
+}
+
+type BaseProps = Omit<
+  RelationshipBubbleProps,
+  'style' | 'tailSide' | 'visible' | 'tailOffset' | 'listMaxHeight'
+>;
 
 class RelationshipBubblePlugin {
   private host: HTMLDivElement | null = null;
   private root: Root | null = null;
   private recentNoteIds: string[] = [];
+
+  /**
+   * Held reference to the currently-mounted `SearchablePicker`'s option
+   * list (see `RelationshipBubbleProps.listRef`) — `computePlacement` reads
+   * its and its first row's real height off this instead of querying the
+   * DOM. Cleared to `null` automatically by React when the field unmounts
+   * (e.g. a field with no picker, like `NumberField`).
+   */
+  private readonly listRef: { current: HTMLDivElement | null } = { current: null };
 
   /** Bumped on every `heldOptions` request; a response is discarded once it no longer matches. */
   private heldOptionsToken = 0;
@@ -106,6 +160,7 @@ class RelationshipBubblePlugin {
     readonly view: EditorView,
     readonly getContext: () => RelationshipBubbleHostContext,
   ) {
+    document.addEventListener('pointerdown', this.handleOutsidePointerDown);
     this.sync();
   }
 
@@ -118,8 +173,20 @@ class RelationshipBubblePlugin {
   }
 
   destroy(): void {
+    document.removeEventListener('pointerdown', this.handleOutsidePointerDown);
     this.unmount();
   }
+
+  /**
+   * Closes the bubble on a pointerdown outside its host — never calls
+   * `preventDefault`/`stopPropagation`, so the click still does whatever it
+   * would otherwise do (place the editor caret, follow a link, etc).
+   */
+  private handleOutsidePointerDown = (e: PointerEvent): void => {
+    if (!this.host) return;
+    if (e.target instanceof Node && this.host.contains(e.target)) return;
+    closeDirectiveBubble(this.view);
+  };
 
   private rememberNote(id: string | null): void {
     if (!id) return;
@@ -170,6 +237,7 @@ class RelationshipBubblePlugin {
     this.host = document.createElement('div');
     this.host.className = 'relationship-bubble-host';
     document.body.appendChild(this.host);
+    openBubbleHosts.add(this.host);
     this.root = createRoot(this.host);
   }
 
@@ -179,6 +247,7 @@ class RelationshipBubblePlugin {
     const host = this.host;
     this.root = null;
     this.host = null;
+    if (host) openBubbleHosts.delete(host);
     queueMicrotask(() => {
       root.unmount();
       host?.remove();
@@ -239,6 +308,7 @@ class RelationshipBubblePlugin {
         : { keys: null, loading: false };
 
     return {
+      anchor,
       role,
       value,
       prompt,
@@ -251,6 +321,7 @@ class RelationshipBubblePlugin {
       currentNoteId: ctx.currentNoteId?.() ?? null,
       heldOptionKeys,
       heldOptionsLoading,
+      listRef: this.listRef,
       onHolderChosenWithoutDefault: ctx.onHolderChosenWithoutDefault,
       createOption: ctx.createOption,
       onCommit: (v: string, direction: BubbleCommitDirection) =>
@@ -272,22 +343,24 @@ class RelationshipBubblePlugin {
       'above',
       false,
       DEFAULT_TAIL_OFFSET,
+      null,
     );
     queueMicrotask(() => {
       if (!this.root || !this.host) return;
       const currentState = this.view.state.field(bubbleStateField, false);
       if (!currentState || currentState.anchor !== anchor || currentState.role !== role) return;
-      const { style, side, tailOffset } = this.computePlacement(anchor, role);
-      if (style) this.paint(base, style, side, true, tailOffset);
+      const { style, side, tailOffset, listMaxHeight } = this.computePlacement(anchor, role);
+      if (style) this.paint(base, style, side, true, tailOffset, listMaxHeight);
     });
   }
 
   private paint(
     base: BaseProps,
     style: React.CSSProperties,
-    side: 'above' | 'below',
+    side: BubbleSide,
     visible: boolean,
     tailOffset: number,
+    listMaxHeight: number | null,
   ): void {
     if (!this.root) return;
     const el: ReactElement = createElement(RelationshipBubble, {
@@ -296,6 +369,7 @@ class RelationshipBubblePlugin {
       tailSide: side,
       visible,
       tailOffset,
+      listMaxHeight,
     });
     this.root.render(el);
   }
@@ -314,36 +388,43 @@ class RelationshipBubblePlugin {
     role: Role,
   ): {
     style: React.CSSProperties | null;
-    side: 'above' | 'below';
+    side: BubbleSide;
     tailOffset: number;
+    listMaxHeight: number | null;
   } {
-    if (!this.host) return { style: null, side: 'above', tailOffset: DEFAULT_TAIL_OFFSET };
+    const empty = {
+      style: null,
+      side: 'above' as const,
+      tailOffset: DEFAULT_TAIL_OFFSET,
+      listMaxHeight: null,
+    };
+    if (!this.host) return empty;
     const lineCoords = getCaretRect(this.view, anchor);
-    if (!lineCoords) return { style: null, side: 'above', tailOffset: DEFAULT_TAIL_OFFSET };
+    if (!lineCoords) return empty;
 
     const blankRect = this.blankRect(anchor, role);
     const horizontal = blankRect ?? lineCoords;
 
-    const lineRect = {
-      left: horizontal.left,
-      right: horizontal.right,
-      top: lineCoords.top,
-      bottom: lineCoords.bottom,
-      width: horizontal.right - horizontal.left,
-      height: lineCoords.bottom - lineCoords.top,
-    };
     const size = { width: this.host.offsetWidth || 240, height: this.host.offsetHeight || 80 };
     const viewport = { width: window.innerWidth, height: window.innerHeight };
-    const placement = computeCaretPlacement(lineRect, size, viewport, 'above');
+    const anchors = bubbleVerticalAnchors(lineCoords.top, lineCoords.bottom, viewport.height);
+
+    const list = this.listRef.current;
+    const listHeight = list?.offsetHeight ?? 0;
+    const rowHeight = (list?.firstElementChild as HTMLElement | null)?.offsetHeight ?? 0;
+    const chromeHeight = size.height - listHeight;
+
+    const plan = planBubbleFit(anchors, size.height, chromeHeight, rowHeight);
+    const left = clampBubbleLeft(horizontal.left, size.width, viewport.width);
 
     const blankCenterX = (horizontal.left + horizontal.right) / 2;
-    const tailOffset = computeTailOffset(blankCenterX, placement.left, size.width);
+    const tailOffset = computeTailOffset(blankCenterX, left, size.width);
 
     const style: React.CSSProperties =
-      placement.side === 'below'
-        ? { left: placement.left, top: placement.top, visibility: 'visible' }
-        : { left: placement.left, bottom: placement.bottom, visibility: 'visible' };
-    return { style, side: placement.side, tailOffset };
+      plan.side === 'below'
+        ? { left, top: anchors.belowTop, visibility: 'visible' }
+        : { left, bottom: anchors.aboveBottom, visibility: 'visible' };
+    return { style, side: plan.side, tailOffset, listMaxHeight: plan.listMaxHeight };
   }
 
   /** The blank's own rendered rect, from the widget's held element reference — never a DOM query. */

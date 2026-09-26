@@ -34,6 +34,24 @@ export interface SearchablePickerProps {
   ariaLabel?: string;
   /** An extra row appended after the ranked results — see `SearchablePickerCreateRow`. */
   createRow?: SearchablePickerCreateRow;
+  /** Caps the option list's height (px), e.g. so a caller-computed placement fits on screen. Omit to use the list's own CSS default. */
+  listMaxHeight?: number;
+  /**
+   * Attached to the rendered option list element — lets a caller (e.g.
+   * `relationship-bubble-view-plugin.ts`, which measures the list's and its
+   * first row's real height to plan the bubble's placement) hold a
+   * reference to it instead of querying the DOM for `.searchable-picker-list`
+   * or `.searchable-picker-row`. Merged with this component's own internal
+   * ref, so both receive the same node.
+   */
+  listRef?: React.Ref<HTMLDivElement>;
+}
+
+/** Assigns `value` to a ref, whether it's a callback ref or a ref object. */
+function assignRef<T>(ref: React.Ref<T> | undefined, value: T | null): void {
+  if (!ref) return;
+  if (typeof ref === 'function') ref(value);
+  else (ref as React.MutableRefObject<T | null>).current = value;
 }
 
 /**
@@ -54,10 +72,12 @@ export function SearchablePicker({
   emptyText = 'No matches',
   ariaLabel,
   createRow,
+  listMaxHeight,
+  listRef,
 }: SearchablePickerProps) {
   const [query, setQuery] = useState('');
   const [highlight, setHighlight] = useState(0);
-  const listRef = useRef<HTMLDivElement>(null);
+  const internalListRef = useRef<HTMLDivElement>(null);
 
   const results = useMemo(
     () => rankPickerOptions(options, query, recentIds),
@@ -87,7 +107,7 @@ export function SearchablePicker({
 
   useEffect(() => {
     if (highlight < 0) return;
-    const list = listRef.current;
+    const list = internalListRef.current;
     if (!list) return;
     const row = list.children[highlight] as HTMLElement | undefined;
     if (row?.scrollIntoView) row.scrollIntoView({ block: 'nearest' });
@@ -139,7 +159,15 @@ export function SearchablePicker({
         }}
         onKeyDown={onKeyDown}
       />
-      <div className="searchable-picker-list" role="listbox" ref={listRef}>
+      <div
+        className="searchable-picker-list"
+        role="listbox"
+        ref={(node) => {
+          internalListRef.current = node;
+          assignRef(listRef, node);
+        }}
+        style={listMaxHeight !== undefined ? { maxHeight: listMaxHeight } : undefined}
+      >
         {results.length === 0 && !showCreateRow && (
           <div className="searchable-picker-empty">{emptyText}</div>
         )}

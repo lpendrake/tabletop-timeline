@@ -52,6 +52,48 @@
   font-size: 12px;
 }
 
+.relationship-bubble-number-row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.relationship-bubble-number-row .relationship-bubble-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.relationship-bubble-stepper {
+  display: flex;
+  flex-direction: column;
+}
+
+.relationship-bubble-stepper-button {
+  flex: 1;
+  padding: 0 6px;
+  min-width: 20px;
+  background: var(--theme-surface);
+  border: 1px solid var(--theme-border);
+  color: var(--theme-text-secondary);
+  font-size: 9px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.relationship-bubble-stepper-button:first-child {
+  border-radius: 4px 4px 0 0;
+  border-bottom: none;
+}
+
+.relationship-bubble-stepper-button:last-child {
+  border-radius: 0 0 4px 4px;
+}
+
+.relationship-bubble-stepper-button:hover {
+  background: var(--theme-panel);
+  color: var(--theme-text-primary);
+}
+
 .relationship-bubble-loading {
   padding: 8px;
   color: var(--theme-text-muted);

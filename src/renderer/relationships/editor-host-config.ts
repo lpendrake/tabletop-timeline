@@ -19,19 +19,24 @@ export interface ConfirmFn {
  * the holder role and no default reputation holder is set yet. It always
  * offers to make that note the default (there's no "don't ask again"), and
  * saves it via `relationshipsData` on a yes.
+ *
+ * Returns a `Promise` that resolves only once the dialog is answered (and,
+ * on a yes, the save has completed) — the bubble awaits it
+ * (`NotePickerField.commitPick`) before advancing to the next blank, so
+ * focus lands there only after the dialog is gone instead of being stolen
+ * back by it.
  */
 export function makeHolderChosenHandler(
   confirm: ConfirmFn,
   labelFor: (id: string) => string,
-): (id: string) => void {
-  return (id: string) => {
-    void confirm({
+): (id: string) => Promise<void> {
+  return async (id: string) => {
+    const yes = await confirm({
       title: 'Default Reputation Holder',
       message: `Make ${labelFor(id)} the default reputation holder?`,
       confirmLabel: 'Make default',
-    }).then((yes) => {
-      if (yes) return relationshipsData.setDefaultHolder(id);
     });
+    if (yes) await relationshipsData.setDefaultHolder(id);
   };
 }
 
@@ -100,7 +105,7 @@ export interface RelationshipEditorConfigDeps {
   noteOptions: () => readonly PickerOption[];
   defaultHolderId: () => string | null;
   currentNoteId: () => string | null;
-  onHolderChosenWithoutDefault?: (id: string) => void;
+  onHolderChosenWithoutDefault?: (id: string) => void | Promise<void>;
   heldOptions?: HeldOptionsResolver;
 }
 
