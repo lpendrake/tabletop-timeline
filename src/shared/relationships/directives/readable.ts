@@ -33,13 +33,6 @@ export interface ReadableContext {
   /** The event title, or 'Unspecified' when the directive lives in a note. */
   defaultReason: string;
   problems?: DirectiveProblem[];
-  /**
-   * When true, an empty `reason` blank is dropped entirely — along with the
-   * wording immediately before it (the ` — ` separator) — rather than shown
-   * as `defaultReason`. Notes pass this; events keep showing the event's
-   * current title as today.
-   */
-  hideEmptyReason?: boolean;
 }
 
 /** The prompt a blank shows when empty: its template `{role:Prompt}` text, or `choose <role>`. */
@@ -78,11 +71,6 @@ export function readableParts(d: ParsedDirective, ctx: ReadableContext): Readabl
 
     if (role === 'reason') {
       if (value === '') {
-        if (ctx.hideEmptyReason) {
-          const last = parts[parts.length - 1];
-          if (last?.kind === 'text') parts.pop();
-          continue;
-        }
         parts.push({
           kind: 'value',
           role,

@@ -143,7 +143,6 @@ function buildDirectiveView(
     labelForNote,
     defaultReason,
     problems,
-    hideEmptyReason: place === 'note',
   });
   return { kind: 'sentence', parts, status: interpreted.status };
 }

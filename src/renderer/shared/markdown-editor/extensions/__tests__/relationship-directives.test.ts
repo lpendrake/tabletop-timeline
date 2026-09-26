@@ -493,14 +493,15 @@ describe('relationship directives — editing callbacks', () => {
     expect(defaultReasonValue.textContent).toBe('Unspecified');
   });
 
-  it('a note with an empty reason ends at the observer, with no reason and no dash', () => {
+  it('a note with an empty reason renders "Unspecified" with a reason value element', () => {
     const setup = track(
       makeView(EMPTY_REASON_TAG_DIRECTIVE, { place: 'note' }, { labels: LABELS }),
     );
     const el = block(setup.view);
-    expect(el.querySelector('.cm-directive-value-role-reason')).toBeNull();
-    expect(el.textContent).not.toContain('—');
-    expect(el.textContent?.trimEnd().endsWith('White Tigers')).toBe(true);
+    const reasonValue = el.querySelector<HTMLElement>('.cm-directive-value-role-reason');
+    expect(reasonValue).not.toBeNull();
+    expect(reasonValue?.textContent).toBe('Unspecified');
+    expect(el.textContent).toContain('—');
   });
 
   it('a note with a filled reason still shows it', () => {

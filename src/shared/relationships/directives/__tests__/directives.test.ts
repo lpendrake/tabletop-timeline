@@ -699,7 +699,7 @@ describe('readable parts resolve labels, default reason, prompts', () => {
     expect(reason).toMatchObject({ display: 'Session 12', isDefaultReason: true, empty: false });
   });
 
-  it('hideEmptyReason drops an empty reason and its leading separator, ending at the observer', () => {
+  it('in a note an empty reason renders "Unspecified" and has a reason value element', () => {
     const raw =
       '{{tg01.gains Give {holder:[[c3d4]]} relationship: {option:member} → {observer:[[a1b2]]} — {reason:}}}';
     const { directives } = parseDirectives(raw);
@@ -707,25 +707,26 @@ describe('readable parts resolve labels, default reason, prompts', () => {
       track: relationshipTags,
       labelForNote,
       defaultReason: 'Unspecified',
-      hideEmptyReason: true,
     });
-    expect(parts.some((p) => p.kind === 'value' && p.role === 'reason')).toBe(false);
-    const last = parts[parts.length - 1];
-    expect(last).toMatchObject({ kind: 'value', role: 'observer', display: 'Mira' });
+    const reason = parts.find((p) => p.kind === 'value' && p.role === 'reason');
+    expect(reason).toMatchObject({ display: 'Unspecified', isDefaultReason: true, empty: false });
   });
 
-  it('hideEmptyReason still shows a filled reason', () => {
+  it('in an event an empty reason shows the event title', () => {
     const raw =
-      '{{tg01.gains Give {holder:[[c3d4]]} relationship: {option:member} → {observer:[[a1b2]]} — {reason:signed the deal}}}';
+      '{{tg01.gains Give {holder:[[c3d4]]} relationship: {option:member} → {observer:[[a1b2]]} — {reason:}}}';
     const { directives } = parseDirectives(raw);
     const parts = readableParts(directives[0], {
       track: relationshipTags,
       labelForNote,
-      defaultReason: 'Unspecified',
-      hideEmptyReason: true,
+      defaultReason: 'Battle Session 3',
     });
     const reason = parts.find((p) => p.kind === 'value' && p.role === 'reason');
-    expect(reason).toMatchObject({ display: 'signed the deal', empty: false });
+    expect(reason).toMatchObject({
+      display: 'Battle Session 3',
+      isDefaultReason: true,
+      empty: false,
+    });
   });
 
   it('an empty non-reason role shows its template prompt', () => {
