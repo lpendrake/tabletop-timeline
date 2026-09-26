@@ -14,6 +14,7 @@ import {
   type RelationshipBubbleHostContext,
 } from '../relationship-bubble-view-plugin';
 import { bubbleStateField, insertDirective } from '../relationship-bubble-state';
+import { resetRecentNoteIdsForTests } from '../relationship-recent-notes';
 import { serialiseTemplate } from '../../../../../shared/relationships/directives/index';
 import {
   pf2eReputationSpec,
@@ -350,12 +351,23 @@ describe('relationship bubble — focus', () => {
 describe('relationship bubble — placement fit via list ref', () => {
   /**
    * `computePlacement` in `relationship-bubble-view-plugin.ts` measures the
-   * option list (and its first row) off the `listRef` it hands the
-   * `SearchablePicker` — never a `.searchable-picker-list` /
-   * `.searchable-picker-row` selector. These tests mock the real geometry
-   * (`coordsAtPos`, the host/list/row heights, the viewport) that plan is
-   * built from, so a passing assertion here can only mean the plugin read
-   * those mocked heights off the held reference.
+   * bubble's own root (held via `bubbleRef`) and the option list/first row
+   * (held via `listRef`) — never a `.relationship-bubble-host` /
+   * `.searchable-picker-list` / `.searchable-picker-row` selector. These
+   * tests mock the real geometry (`coordsAtPos`, the bubble/list/row
+   * heights, the viewport) that the plan is built from, so a passing
+   * assertion here can only mean the plugin read those mocked heights off
+   * the held references.
+   *
+   * `.relationship-bubble-host` itself is deliberately left unmeasured
+   * (and, in a real browser, collapses to 0×0 — see
+   * `mockGeometryReadsCollapsedHostAsZero` below): it's `position: fixed`
+   * and its only child (`.relationship-bubble`, the actual bubble root) is
+   * `position: fixed` too, so the child never contributes to the host's own
+   * box size. jsdom doesn't compute real layout, so it never reproduced
+   * that collapse — which is why these tests must mock the *bubble root*'s
+   * height, not the host's, to stay honest about which element production
+   * code reads.
    */
   function mockLineRect(view: EditorView, top: number, bottom: number): void {
     vi.spyOn(view, 'coordsAtPos').mockReturnValue({
@@ -368,10 +380,10 @@ describe('relationship bubble — placement fit via list ref', () => {
 
   function mockGeometry(innerHeight: number): void {
     vi.stubGlobal('innerHeight', innerHeight);
-    const host = document.querySelector<HTMLElement>('.relationship-bubble-host')!;
+    const bubble = document.querySelector<HTMLElement>('.relationship-bubble')!;
     const list = document.querySelector<HTMLElement>('.searchable-picker-list')!;
     const row = list.firstElementChild as HTMLElement;
-    Object.defineProperty(host, 'offsetHeight', { value: 300, configurable: true });
+    Object.defineProperty(bubble, 'offsetHeight', { value: 300, configurable: true });
     Object.defineProperty(list, 'offsetHeight', { value: 250, configurable: true });
     Object.defineProperty(row, 'offsetHeight', { value: 20, configurable: true });
   }
@@ -397,7 +409,7 @@ describe('relationship bubble — placement fit via list ref', () => {
 
     const list = document.querySelector<HTMLElement>('.searchable-picker-list')!;
     // space.above = 160 - GAP(2) - EDGE_MARGIN(8) = 150; chromeHeight =
-    // host(300) - list(250) = 50 → shrunk max height = 150 - 50 = 100.
+    // bubble(300) - list(250) = 50 → shrunk max height = 150 - 50 = 100.
     expect(list.style.maxHeight).toBe('100px');
     const bubble = document.querySelector<HTMLElement>('.relationship-bubble')!;
     // Stays above: positioned via `bottom`, not `top`.
@@ -426,5 +438,159 @@ describe('relationship bubble — placement fit via list ref', () => {
     expect(bubble.style.bottom).toBe('');
     const list = document.querySelector<HTMLElement>('.searchable-picker-list')!;
     expect(list.style.maxHeight).toBe('');
+  });
+
+  /**
+   * Regression test for the real-app bug (#262): a directive near the top
+   * of the event editor opened a holder/observer bubble that rendered off
+   * the top of the window. Root cause was `computePlacement` measuring
+   * `.relationship-bubble-host` (which is `position: fixed` and whose only
+   * child, the actual bubble root, is `position: fixed` too — so the child
+   * never contributes to the host's own box, and a real browser collapses
+   * it to 0×0) instead of the bubble's own root. The 0×0 host fell back to
+   * a hardcoded 240×80 "full height" guess, which corrupted the
+   * chrome/list-height split `planBubbleFit` relies on and could place the
+   * (still much taller) real bubble mostly above the top of the viewport.
+   *
+   * jsdom never reproduces that collapse (it doesn't compute real layout),
+   * so this test stubs the host at 0 explicitly — the numbers below are the
+   * real ones measured from the Electron app: a 15-option holder list, an
+   * ~320px unshrunk bubble, an ~27px row, a directive line 54–73px from the
+   * top of a short (260px) window.
+   */
+  it('measures the bubble root, not the collapsed host, so it stays fully on screen', async () => {
+    const setup = track(makeView(FULL_CHANGE_DIRECTIVE));
+    const { view } = setup;
+    mockLineRect(view, 54, 73);
+    const holderValue = view.dom.querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
+
+    act(() => {
+      holderValue.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }),
+      );
+    });
+
+    vi.stubGlobal('innerHeight', 260);
+    const host = document.querySelector<HTMLElement>('.relationship-bubble-host')!;
+    const bubble = document.querySelector<HTMLElement>('.relationship-bubble')!;
+    const list = document.querySelector<HTMLElement>('.searchable-picker-list')!;
+    const row = list.firstElementChild as HTMLElement;
+    // The real, uncollapsed host — a fixed-positioned parent of a
+    // fixed-positioned child always measures 0×0 in a real browser.
+    Object.defineProperty(host, 'offsetWidth', { value: 0, configurable: true });
+    Object.defineProperty(host, 'offsetHeight', { value: 0, configurable: true });
+    Object.defineProperty(bubble, 'offsetWidth', { value: 222, configurable: true });
+    Object.defineProperty(bubble, 'offsetHeight', { value: 320, configurable: true });
+    Object.defineProperty(list, 'offsetHeight', { value: 247, configurable: true });
+    Object.defineProperty(row, 'offsetHeight', { value: 27, configurable: true });
+    await flushBubbleOpen();
+
+    // space.above = 54 - GAP(2) - EDGE_MARGIN(8) = 44, too small even for the
+    // minimum shrunk list (chrome 73 + 3 rows of 27 = 154) → flips below.
+    // space.below = 260 - EDGE_MARGIN(8) - (73 + GAP(2)) = 177; the full
+    // 320px bubble doesn't fit, so the list shrinks to 177 - 73 = 104.
+    expect(bubble.style.top).toBe('75px');
+    expect(bubble.style.bottom).toBe('');
+    expect(list.style.maxHeight).toBe('104px');
+
+    // The whole bubble (chrome + shrunk list) must land fully on screen.
+    const total = 73 + 104;
+    const top = 75;
+    expect(top).toBeGreaterThanOrEqual(0);
+    expect(top + total).toBeLessThanOrEqual(260);
+  });
+});
+
+describe('relationship bubble — recent notes are shared across editor instances (#262 bug 11)', () => {
+  afterEach(() => {
+    resetRecentNoteIdsForTests();
+  });
+
+  it('picking a holder in one editor instance shows up in another instance’s recents', async () => {
+    resetRecentNoteIdsForTests();
+
+    // Two entirely separate mounts — a stand-in for "the note editor" and
+    // "the event editor" (or two open editor tabs): separate EditorViews,
+    // separate ViewPlugin instances, no shared React state between them.
+    // The only thing that can make one see the other's pick is the shared,
+    // non-React `relationship-recent-notes` module.
+    const editorA = track(makeView(FULL_CHANGE_DIRECTIVE));
+    const editorB = track(makeView(FULL_CHANGE_DIRECTIVE));
+
+    const holderInA = editorA.view.dom.querySelector<HTMLElement>(
+      '.cm-directive-value-role-holder',
+    )!;
+    act(() => {
+      holderInA.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }),
+      );
+    });
+    await flushBubbleOpen();
+
+    // Pick "White Tigers" (a1b2) — the directive already holds "The Party"
+    // (c3d4), so this is a genuine change, not a no-op re-commit.
+    fireEvent.change(bubbleInput(), { target: { value: 'a1b2' } });
+    fireEvent.keyDown(bubbleInput(), { key: 'Enter' });
+    await flushBubbleOpen();
+
+    // The shared store already has it, independent of any UI...
+    const { getRecentNoteIds } = await import('../relationship-recent-notes');
+    expect(getRecentNoteIds()[0]).toBe('a1b2');
+
+    // ...and a bubble opened in the OTHER, unrelated editor instance reads
+    // it back: "White Tigers" now ranks first (recents-first ordering; see
+    // `picker-model.ts`'s `recentsFirst`) even though editor B never picked
+    // anything itself.
+    const holderInB = editorB.view.dom.querySelector<HTMLElement>(
+      '.cm-directive-value-role-holder',
+    )!;
+    act(() => {
+      holderInB.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }),
+      );
+    });
+    await flushBubbleOpen();
+
+    const firstRow = document.querySelector<HTMLElement>('.searchable-picker-row');
+    expect(firstRow?.textContent).toBe('White Tigers');
+  });
+
+  it('survives the editor unmounting and remounting (simulating a view switch)', async () => {
+    resetRecentNoteIdsForTests();
+
+    const first = makeView(FULL_CHANGE_DIRECTIVE);
+    const holderValue = first.view.dom.querySelector<HTMLElement>(
+      '.cm-directive-value-role-holder',
+    )!;
+    act(() => {
+      holderValue.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }),
+      );
+    });
+    await flushBubbleOpen();
+    fireEvent.change(bubbleInput(), { target: { value: 'a1b2' } });
+    fireEvent.keyDown(bubbleInput(), { key: 'Enter' });
+    await flushBubbleOpen();
+
+    // Unmount everything (as switching away from this view would) — no
+    // per-instance recents state survives this on its own.
+    destroy(first);
+    document.querySelectorAll('.relationship-bubble-host').forEach((el) => el.remove());
+
+    // Remount fresh and open a bubble again: the shared module (not any
+    // component instance) is what remembers the pick.
+    const second = track(makeView(FULL_CHANGE_DIRECTIVE));
+    const holderAgain = second.view.dom.querySelector<HTMLElement>(
+      '.cm-directive-value-role-holder',
+    )!;
+    act(() => {
+      holderAgain.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }),
+      );
+    });
+    await flushBubbleOpen();
+
+    const firstRow = document.querySelector<HTMLElement>('.searchable-picker-row');
+    expect(firstRow?.textContent).toBe('White Tigers');
   });
 });

@@ -70,6 +70,17 @@ export interface RelationshipBubbleProps {
   visible: boolean;
   /** Horizontal offset (px) of the tail from the bubble's own left edge — see `computeTailOffset`. */
   tailOffset: number;
+  /**
+   * Held by `relationship-bubble-view-plugin.ts` and attached to the root
+   * `.relationship-bubble` element, so the plugin can measure the bubble's
+   * own real width/height off this reference for placement. The mounting
+   * host (`.relationship-bubble-host`) is *not* a usable stand-in for this:
+   * it's `position: fixed` and its only child (this root) is `position:
+   * fixed` too, so the child is out of the host's normal flow and the
+   * host's own `offsetWidth`/`offsetHeight` collapse to 0 — see
+   * `computePlacement`'s size measurement.
+   */
+  bubbleRef: React.Ref<HTMLDivElement>;
 }
 
 function inputBounds(el: HTMLInputElement): { atStart: boolean; atEnd: boolean } {
@@ -119,9 +130,9 @@ function useBubbleFocus<T extends HTMLInputElement>(
  * check) is a pure function from `relationship-bubble-logic.ts`.
  */
 export function RelationshipBubble(props: RelationshipBubbleProps) {
-  const { style, tailSide, tailOffset, anchor, role } = props;
+  const { style, tailSide, tailOffset, anchor, role, bubbleRef } = props;
   return (
-    <div className="relationship-bubble" style={style}>
+    <div className="relationship-bubble" style={style} ref={bubbleRef}>
       <div className="relationship-bubble-prompt">{props.prompt}</div>
       {/*
        * Keyed by (anchor, role) so moving to a different blank always

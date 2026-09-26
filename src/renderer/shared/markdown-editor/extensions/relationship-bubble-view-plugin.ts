@@ -37,11 +37,10 @@ import {
 } from './relationship-bubble-state';
 import { directivesIn, parsedDirectivesField } from './parsed-directives';
 import { RelationshipBubble, type RelationshipBubbleProps } from './relationship-bubble';
+import { getRecentNoteIds, rememberRecentNote } from './relationship-recent-notes';
 
 /** Default tail offset used for the initial hidden measuring paint, before any geometry is known. */
 const DEFAULT_TAIL_OFFSET = 16;
-
-const RECENT_NOTES_LIMIT = 5;
 
 /**
  * The query the bubble sends to the host's `heldOptions` resolver: which
@@ -140,7 +139,6 @@ type BaseProps = Omit<
 class RelationshipBubblePlugin {
   private host: HTMLDivElement | null = null;
   private root: Root | null = null;
-  private recentNoteIds: string[] = [];
 
   /**
    * Held reference to the currently-mounted `SearchablePicker`'s option
@@ -150,6 +148,19 @@ class RelationshipBubblePlugin {
    * (e.g. a field with no picker, like `NumberField`).
    */
   private readonly listRef: { current: HTMLDivElement | null } = { current: null };
+
+  /**
+   * Held reference to the actual rendered `.relationship-bubble` root —
+   * `computePlacement` measures its real width/height off this instead of
+   * `this.host` (the mounting div), which stays 0x0: it's `position:
+   * fixed` and its only child (the bubble root) is `position: fixed` too,
+   * so the child never contributes to the host's own box size. Using the
+   * host's collapsed size fell back to hardcoded 240x80 defaults, which
+   * corrupted the chrome/list-height split `planBubbleFit` relies on and
+   * is why the bubble could still render off the top of the screen even
+   * though the list appeared to shrink.
+   */
+  private readonly bubbleRef: { current: HTMLDivElement | null } = { current: null };
 
   /** Bumped on every `heldOptions` request; a response is discarded once it no longer matches. */
   private heldOptionsToken = 0;
@@ -188,14 +199,6 @@ class RelationshipBubblePlugin {
     closeDirectiveBubble(this.view);
   };
 
-  private rememberNote(id: string | null): void {
-    if (!id) return;
-    this.recentNoteIds = [id, ...this.recentNoteIds.filter((n) => n !== id)].slice(
-      0,
-      RECENT_NOTES_LIMIT,
-    );
-  }
-
   private commit(
     anchor: number,
     role: Role,
@@ -206,7 +209,7 @@ class RelationshipBubblePlugin {
     if (role === 'holder' || role === 'observer') {
       // The bubble's note picker deals in bare ids; directives store `[[id]]`.
       const id = noteIdOf(value) ?? value;
-      this.rememberNote(id || null);
+      rememberRecentNote(id || null);
       written = id ? noteRoleValue(id) : value;
     }
     const outcome = commitBubbleField(this.view, anchor, role, written, direction);
@@ -316,12 +319,13 @@ class RelationshipBubblePlugin {
       trackId: directive.trackId,
       defaultReason: ctx.defaultReason,
       noteOptions: ctx.noteOptions(),
-      recentNoteIds: this.recentNoteIds,
+      recentNoteIds: getRecentNoteIds(),
       defaultHolderId: ctx.defaultHolderId?.() ?? null,
       currentNoteId: ctx.currentNoteId?.() ?? null,
       heldOptionKeys,
       heldOptionsLoading,
       listRef: this.listRef,
+      bubbleRef: this.bubbleRef,
       onHolderChosenWithoutDefault: ctx.onHolderChosenWithoutDefault,
       createOption: ctx.createOption,
       onCommit: (v: string, direction: BubbleCommitDirection) =>
@@ -405,7 +409,9 @@ class RelationshipBubblePlugin {
     const blankRect = this.blankRect(anchor, role);
     const horizontal = blankRect ?? lineCoords;
 
-    const size = { width: this.host.offsetWidth || 240, height: this.host.offsetHeight || 80 };
+    // Measured off the bubble's own root, not `this.host` — see `bubbleRef`'s doc comment.
+    const bubbleEl = this.bubbleRef.current;
+    const size = { width: bubbleEl?.offsetWidth || 240, height: bubbleEl?.offsetHeight || 80 };
     const viewport = { width: window.innerWidth, height: window.innerHeight };
     const anchors = bubbleVerticalAnchors(lineCoords.top, lineCoords.bottom, viewport.height);
 
