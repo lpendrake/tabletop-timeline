@@ -25,7 +25,7 @@ export type {
 export { interpretDirective, allowedActions } from './interpret.js';
 
 export type { ReadablePart, ReadableContext } from './readable.js';
-export { readableParts, promptFor, NOTE_DEFAULT_REASON } from './readable.js';
+export { readableParts, knownValueLabel, promptFor, NOTE_DEFAULT_REASON } from './readable.js';
 
 export type { ValueValidation, ValueValidationCode } from './validate-value.js';
 export { validateRoleValue, STRICT_DECIMAL_RE } from './validate-value.js';

@@ -21,16 +21,16 @@ import {
   type CompletionContext,
   type CompletionResult,
 } from '@codemirror/autocomplete';
-import { Prec, type Extension, type Text } from '@codemirror/state';
-import { keymap, type Command, type EditorView } from '@codemirror/view';
+import { MapMode, Prec, type EditorState, type Extension, type Text } from '@codemirror/state';
+import { EditorView, ViewPlugin, keymap, type Command, type ViewUpdate } from '@codemirror/view';
 import {
   noteIdOf,
   noteRoleValue,
   roleValue,
+  type ActionKind,
   type ParsedDirective,
   type Role,
 } from '../../../../shared/relationships';
-import { UNKNOWN_ENTITY_LABEL } from '../../../../shared/entity-labels';
 import type { PickerOption } from '../../searchable-picker';
 import {
   completionReactivates,
@@ -38,14 +38,8 @@ import {
   editorAutocompletion,
 } from './editor-completions';
 import { directivesIn } from './parsed-directives';
-import {
-  adjacentSlot,
-  directiveSlots,
-  roleHasChoices,
-  valueDisplay,
-} from './relationship-directive-layout';
-import { liveSlotAt, type DirectiveModel } from './relationship-directives';
-import { entityLabelMapField } from './wiki-links';
+import { adjacentSlot, roleHasChoices } from './relationship-directive-layout';
+import { displayFor, liveSlotAt, moveToAdjacentBlank } from './relationship-directives';
 import {
   allowsCreateOption,
   filterHeldOptions,
@@ -199,29 +193,167 @@ function noteCompletions(
   });
 }
 
+// ---------------------------------------------------------------------------
+// Positions that follow the document while something async is in flight.
+// ---------------------------------------------------------------------------
+
+interface TrackedPos {
+  /** Current position, or null once the text around it was deleted. */
+  pos: number | null;
+}
+
+const trackedPositions = new WeakMap<EditorView, Set<TrackedPos>>();
+
+/** Keeps `pos` pointing at the same place through every later edit, until released. */
+function trackPos(view: EditorView, pos: number): { current: TrackedPos; release: () => void } {
+  const current: TrackedPos = { pos };
+  let set = trackedPositions.get(view);
+  if (!set) {
+    set = new Set();
+    trackedPositions.set(view, set);
+  }
+  set.add(current);
+  return { current, release: () => set.delete(current) };
+}
+
+const mapTrackedPositions = ViewPlugin.fromClass(
+  class {
+    update(update: ViewUpdate) {
+      if (!update.docChanged) return;
+      for (const tracked of trackedPositions.get(update.view) ?? []) {
+        if (tracked.pos !== null) {
+          tracked.pos = update.changes.mapPos(tracked.pos, -1, MapMode.TrackDel);
+        }
+      }
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Create rows are only ever picked on purpose.
+// ---------------------------------------------------------------------------
+
+const createRows = new WeakSet<Completion>();
+
+/** Editors where the user has moved the list's highlight since it last changed. */
+const steered = new WeakSet<EditorView>();
+
+const noteSteering = [
+  Prec.highest(
+    EditorView.domEventHandlers({
+      keydown(event, view) {
+        const moves = ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown'];
+        if (moves.includes(event.key) && completionStatus(view.state) === 'active') {
+          steered.add(view);
+        }
+        return false;
+      },
+    }),
+  ),
+  ViewPlugin.fromClass(
+    class {
+      update(update: ViewUpdate) {
+        if (update.docChanged || completionStatus(update.state) !== 'active') {
+          steered.delete(update.view);
+        }
+      }
+    },
+  ),
+];
+
 function createCompletion(
   directive: ParsedDirective,
   query: string,
   mutual: boolean,
-  opts: RelationshipCompletionOptions,
+  createOption: NonNullable<RelationshipCompletionOptions['createOption']>,
 ): Completion {
   const label = query.trim();
-  return completionReactivates({
+  const completion: Completion = completionReactivates({
     label: mutual ? `Create "${label}" (symmetrical)` : `Create "${label}"`,
-    apply: (view, completion) => {
-      const { ordinal, trackId } = directive;
-      void opts.createOption!(trackId, label, mutual).then((created) => {
-        if (!created || !view.dom.isConnected) return;
-        // The document may have moved on while the host was creating it:
-        // find the same directive's tag blank again rather than trusting old positions.
-        const current = directivesIn(view.state).find(
-          (d) => d.ordinal === ordinal && d.trackId === trackId,
-        );
-        const slot = current ? directiveSlots(current).find((s) => s.role === 'option') : null;
-        if (slot) writeAndAdvance(view, completion, slot.from, slot.to, created.key);
+    apply: (view, picked, from) => {
+      // The host may take a while (it writes the track file); keep hold of
+      // this blank's position through any edits made meanwhile.
+      const tracked = trackPos(view, from);
+      void createOption(directive.trackId, label, mutual).then((created) => {
+        tracked.release();
+        const pos = tracked.current.pos;
+        if (!created || pos === null || !view.dom.isConnected) return;
+        const hit = liveSlotAt(view.state, pos);
+        // Only write it if the blank is still the one it was created from.
+        if (!hit || hit.slot.role !== 'option' || hit.slot.value.trim() !== label) return;
+        writeAndAdvance(view, picked, hit.slot.from, hit.slot.to, created.key);
       });
     },
   });
+  createRows.add(completion);
+  return completion;
+}
+
+/**
+ * A blank's choices before any async narrowing, best first. Cheap and
+ * synchronous, so a key press can tell straight away whether a typed query
+ * matches anything at all.
+ */
+function baseChoices(
+  state: EditorState,
+  hit: NonNullable<ReturnType<typeof liveSlotAt>>,
+  opts: RelationshipCompletionOptions,
+): { query: string; choices: PickerOption[] } {
+  const { slot, model } = hit;
+  const track = model.track;
+  const query = displayFor(state, model, slot).kind === 'text' ? slot.value : '';
+  if (slot.role === 'holder' || slot.role === 'observer') {
+    const choices = noteChoices({
+      role: slot.role,
+      options: opts.noteOptions(),
+      query,
+      recentNoteIds: getRecentNoteIds(),
+      currentNoteId: opts.currentNoteId?.() ?? null,
+      defaultHolderId: opts.defaultHolderId?.() ?? null,
+      restrictedIds: null,
+    });
+    return { query, choices };
+  }
+  if (slot.role === 'option' && track?.kind === 'categorical') {
+    const all = track.options.map((o) => ({ id: o.key, path: o.label, label: o.label }));
+    return { query, choices: rankLabelled(all, query) };
+  }
+  if (slot.role === 'value' && track?.kind === 'ordinal') {
+    const rungs = track.rungs.map((r) => ({ id: r.key, path: r.label, label: r.label }));
+    return { query, choices: rankLabelled(rungs, query) };
+  }
+  return { query, choices: [] };
+}
+
+/** The async narrowing a Remove applies: held tags, or observers sharing the tag. `null` = no narrowing. */
+function narrowing(
+  state: EditorState,
+  directive: ParsedDirective,
+  role: Role,
+  actionKind: ActionKind | undefined,
+  opts: RelationshipCompletionOptions,
+): Promise<string[] | null> {
+  if (actionKind !== 'remove') return Promise.resolve(null);
+  const holder = noteIdOf(roleValue(directive, 'holder') ?? '');
+  const doc = state.doc.toString();
+  if (role === 'observer') {
+    const option = roleValue(directive, 'option') || null;
+    const lookup = opts.observerOptions;
+    const run =
+      holder && option && lookup
+        ? () => lookup({ trackId: directive.trackId, holder, option, anchor: directive.from, doc })
+        : null;
+    return cachedLookup(state.doc, `observers:${directive.from}:${holder}:${option}`, run);
+  }
+  if (role === 'option') {
+    const observer = noteIdOf(roleValue(directive, 'observer') ?? '');
+    const lookup = opts.heldOptions;
+    const run = lookup
+      ? () => lookup({ trackId: directive.trackId, holder, observer, anchor: directive.from, doc })
+      : null;
+    return cachedLookup(state.doc, `held:${directive.from}:${holder}:${observer}`, run);
+  }
+  return Promise.resolve(null);
 }
 
 async function completeBlank(
@@ -230,129 +362,79 @@ async function completeBlank(
 ): Promise<CompletionResult | null> {
   const { state } = context;
   const hit = liveSlotAt(state, context.pos);
-  if (!hit || !hit.model.track) return null;
-  const { directive, slot, model } = hit;
-  const track = model.track!;
-  if (!roleHasChoices(slot.role, track)) return null;
-
-  const display = displayOf(model, slot.role, slot.value, state);
-  const query = display.kind === 'text' ? slot.value : '';
+  const track = hit?.model.track;
+  if (!hit || !track || !roleHasChoices(hit.slot.role, track)) return null;
+  const { directive, slot } = hit;
   const opts = getOptions();
   const action = track.action(directive.actionKey);
-  let options: Completion[] = [];
+  const { query, choices } = baseChoices(state, hit, opts);
+  const narrowed = filterHeldOptions(
+    choices,
+    await narrowing(state, directive, slot.role, action?.kind, opts),
+  );
+  if (context.aborted) return null;
 
-  if (slot.role === 'holder' || slot.role === 'observer') {
-    const holder = noteIdOf(roleValue(directive, 'holder') ?? '');
-    const option = roleValue(directive, 'option') || null;
-    const restrict =
-      slot.role === 'observer' &&
-      action?.kind === 'remove' &&
-      holder &&
-      option &&
-      opts.observerOptions
-        ? () =>
-            opts.observerOptions!({
-              trackId: directive.trackId,
-              holder,
-              option,
-              anchor: directive.from,
-              doc: state.doc.toString(),
-            })
-        : null;
-    const restrictedIds = await cachedLookup(
-      state.doc,
-      `observers:${directive.from}:${holder}:${option}`,
-      restrict,
-    );
-    const choices = noteChoices({
-      role: slot.role,
-      options: opts.noteOptions(),
-      query,
-      recentNoteIds: getRecentNoteIds(),
-      currentNoteId: opts.currentNoteId?.() ?? null,
-      defaultHolderId: opts.defaultHolderId?.() ?? null,
-      restrictedIds,
-    });
-    options = noteCompletions(slot.role, choices, opts);
-  } else if (slot.role === 'option' && track.kind === 'categorical') {
-    const holder = noteIdOf(roleValue(directive, 'holder') ?? '');
-    const observer = noteIdOf(roleValue(directive, 'observer') ?? '');
-    const lookup =
-      action?.kind === 'remove' && opts.heldOptions
-        ? () =>
-            opts.heldOptions!({
-              trackId: directive.trackId,
-              holder,
-              observer,
-              anchor: directive.from,
-              doc: state.doc.toString(),
-            })
-        : null;
-    const held = await cachedLookup(
-      state.doc,
-      `held:${directive.from}:${holder}:${observer}`,
-      lookup,
-    );
-    const all: PickerOption[] = track.options.map((o) => ({
-      id: o.key,
-      path: o.label,
-      label: o.label,
-    }));
-    const ranked = rankLabelled(filterHeldOptions(all, held), query);
-    options = ranked.map((o) => pick(o.id, o.label ?? o.path));
-    if (
-      allowsCreateOption(action?.kind) &&
-      opts.createOption &&
-      shouldOfferCreateOption(query, ranked)
-    ) {
-      options.push(createCompletion(directive, query, false, opts));
-      options.push(createCompletion(directive, query, true, opts));
-    }
-  } else if (slot.role === 'value' && track.kind === 'ordinal') {
-    const rungs: PickerOption[] = track.rungs.map((r) => ({
-      id: r.key,
-      path: r.label,
-      label: r.label,
-    }));
-    options = rankLabelled(rungs, query).map((o) => pick(o.id, o.label ?? o.path));
+  const options =
+    slot.role === 'holder' || slot.role === 'observer'
+      ? noteCompletions(slot.role, narrowed, opts)
+      : narrowed.map((o) => pick(o.id, o.label ?? o.path));
+
+  if (
+    slot.role === 'option' &&
+    opts.createOption &&
+    allowsCreateOption(action?.kind) &&
+    shouldOfferCreateOption(query, narrowed)
+  ) {
+    options.push(createCompletion(directive, query, false, opts.createOption));
+    options.push(createCompletion(directive, query, true, opts.createOption));
   }
 
-  if (context.aborted || options.length === 0) return null;
+  if (options.length === 0) return null;
   return { from: slot.from, to: slot.to, options, filter: false };
 }
 
-/** Whether a blank holds typed text (a query) for a role that has choices. */
-function hasTypedQuery(state: EditorView['state'], pos: number): boolean {
-  const hit = liveSlotAt(state, pos);
-  if (!hit || hit.slot.value === '' || !roleHasChoices(hit.slot.role, hit.model.track))
-    return false;
-  return displayOf(hit.model, hit.slot.role, hit.slot.value, state).kind === 'text';
-}
-
-function displayOf(model: DirectiveModel, role: Role, value: string, state: EditorView['state']) {
-  const labels = state.field(entityLabelMapField, false) ?? new Map<string, string>();
-  return valueDisplay(role, value, model.track, (id) => labels.get(id) ?? UNKNOWN_ENTITY_LABEL);
-}
-
 /**
- * Tab or Enter on a typed query picks a choice without waiting on the popup:
- * the highlighted one when the list is open and takes the key, otherwise the
- * top match, computed straight from the same source. So typing "spi" and
- * pressing Tab always fills Spire Watch, however fast it's typed.
+ * Tab or Enter on a typed query picks a real match without waiting on the
+ * popup: the highlighted one when the list is open, otherwise the top match
+ * computed straight from the same source — so typing "spi" and pressing Tab
+ * always fills Spire Watch, however fast it's typed.
+ *
+ * Never a "Create …" row unless the user moved the highlight onto it:
+ * creating a tag is permanent, so a typo plus Tab must not do it. And when
+ * nothing matches, the key isn't taken, so the directive keymap moves on to
+ * the next blank as usual, leaving the typed text (shown as a problem).
  */
 function makeAcceptTypedQuery(getOptions: () => RelationshipCompletionOptions): Command {
   return (view) => {
-    const pos = view.state.selection.main.head;
-    if (!view.state.selection.main.empty || !hasTypedQuery(view.state, pos)) return false;
-    if (completionStatus(view.state) === 'active' && selectedCompletion(view.state)) {
-      if (acceptCompletion(view)) return true;
+    const { state } = view;
+    const sel = state.selection.main;
+    const hit = sel.empty ? liveSlotAt(state, sel.head) : null;
+    if (!hit || hit.slot.value === '' || !roleHasChoices(hit.slot.role, hit.model.track)) {
+      return false;
     }
-    const doc = view.state.doc;
-    void completeBlank(new Context(view.state, pos, true), getOptions).then((result) => {
-      const top = result?.options[0];
+    const opts = getOptions();
+    const { query, choices } = baseChoices(state, hit, opts);
+    if (!query) return false;
+
+    if (completionStatus(state) === 'active') {
+      const selected = selectedCompletion(state);
+      const explicitCreate = selected && createRows.has(selected) && steered.has(view);
+      if (selected && (!createRows.has(selected) || explicitCreate) && acceptCompletion(view)) {
+        return true;
+      }
+    }
+    if (choices.length === 0) return false;
+
+    const doc = state.doc;
+    void completeBlank(new Context(state, sel.head, true), getOptions).then((result) => {
       // Drop the answer if the buffer changed while it was being worked out.
-      if (!top || view.state.doc !== doc || typeof top.apply !== 'function') return;
-      top.apply(view, top, result.from, result.to ?? result.from);
+      if (view.state.doc !== doc) return;
+      const top = result?.options.find((o) => !createRows.has(o));
+      if (result && top && typeof top.apply === 'function') {
+        top.apply(view, top, result.from, result.to ?? result.from);
+      } else {
+        moveToAdjacentBlank(view, 1);
+      }
     });
     return true;
   };
@@ -369,6 +451,8 @@ export function relationshipDirectiveCompletions(
   return [
     editorAutocompletion,
     Prec.high(completionSources.of((context) => completeBlank(context, getOptions))),
+    mapTrackedPositions,
+    noteSteering,
     // Ahead of the directive keymap's own Tab/Enter (which move between blanks).
     Prec.highest(
       keymap.of([

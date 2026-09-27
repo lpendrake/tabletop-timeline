@@ -35,7 +35,11 @@ import { imagePaste, type ImagePasteConfig } from './extensions/image-paste';
 import { imageDecorations, type ImageDecorationsOptions } from './extensions/image-decorations';
 import { dropLink, type DropLinkConfig } from './extensions/drop-link';
 import { editorContextMenu, type EditorMenuExtraItems } from './extensions/editor-context-menu';
-import { relationshipDirectives, setDirectiveContext } from './extensions/relationship-directives';
+import {
+  directiveGuardBypass,
+  relationshipDirectives,
+  setDirectiveContext,
+} from './extensions/relationship-directives';
 import {
   relationshipDirectiveCompletions,
   type RelationshipCompletionOptions,
@@ -339,6 +343,8 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     if (view && content !== view.state.doc.toString()) {
       view.dispatch({
         changes: { from: 0, to: view.state.doc.length, insert: content },
+        // The file on disk is the truth; never let the directive guard edit it.
+        annotations: directiveGuardBypass.of(true),
       });
     }
   }, [content]);

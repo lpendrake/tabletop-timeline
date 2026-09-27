@@ -180,11 +180,19 @@ describe('rankLabelled (pure)', () => {
     ]);
   });
 
-  it('puts prefix matches before substring matches, case-insensitively', () => {
+  it('ranks like menu search: prefix, then word start, then substring', () => {
+    const words = [
+      { id: 'swatter', path: 'swatter', label: 'swatter' },
+      { id: 'spire', path: 'Spire Watch', label: 'Spire Watch' },
+    ];
+    expect(rankLabelled(words, 'wat').map((o) => o.id)).toEqual(['spire', 'swatter']);
+  });
+
+  it('puts prefix matches before word-start and substring matches, case-insensitively', () => {
     expect(rankLabelled(options, 'b').map((o) => o.id)).toEqual([
       'business-partner',
-      'member',
       'sponsored-by',
+      'member',
     ]);
     expect(rankLabelled(options, 'SPON').map((o) => o.id)).toEqual(['sponsored-by']);
   });

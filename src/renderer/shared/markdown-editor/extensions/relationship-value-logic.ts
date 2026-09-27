@@ -7,6 +7,7 @@
 import type { ActionKind, Role, ResolvedTrack } from '../../../../shared/relationships';
 import { recentsFirst, type PickerOption } from '../../searchable-picker';
 import { compareRanked, rankEntityMatch, type MatchRank } from '../../entity-match';
+import { rankMatch } from '../../search/rank';
 
 function numericStep(track: ResolvedTrack): number {
   return track.kind === 'numeric' ? track.step || 1 : 1;
@@ -88,7 +89,7 @@ export function buildNotePickerRecents(
   return recents;
 }
 
-interface RankedNoteOption {
+interface RankedOption {
   option: PickerOption;
   index: number;
   rank: MatchRank;
@@ -99,9 +100,7 @@ interface RankedNoteOption {
  * substring matching via `shared/entity-match.ts`'s `rankEntityMatch`), not
  * `rankPickerOptions`'s file-path-segment matching — a note titled "The
  * Whispering Claw" needs to be found by typing its title, not by segments
- * of its file path. Passed to `SearchablePicker`'s `rank` prop by
- * `NotePickerField` below; the folder picker (and every other
- * `SearchablePicker` caller) keeps `rankPickerOptions` by not passing this.
+ * of its file path. Used by `noteChoices` for holder/observer blanks.
  */
 export function rankNoteOptions(
   options: readonly PickerOption[],
@@ -110,7 +109,7 @@ export function rankNoteOptions(
 ): PickerOption[] {
   const q = query.trim();
   if (!q) return recentsFirst(options, recentIds);
-  const ranked: RankedNoteOption[] = [];
+  const ranked: RankedOption[] = [];
   options.forEach((option, index) => {
     const rank = rankEntityMatch(option.label ?? option.path, option.id, q);
     if (rank !== null) ranked.push({ option, index, rank });
@@ -147,12 +146,18 @@ export function noteChoices(input: NoteChoiceInput): PickerOption[] {
   return rankNoteOptions(options, input.query, recents);
 }
 
-/** Ranks labelled choices (tags, rungs) by a case-insensitive label match: prefix matches first, then substring. */
+/**
+ * Ranks labelled choices (tags, rungs) by their label the same way menu
+ * search does (`shared/search/rank.ts`): prefix, then word-start, then
+ * substring, keeping the given order for ties and for an empty query.
+ */
 export function rankLabelled(options: readonly PickerOption[], query: string): PickerOption[] {
-  const q = query.trim().toLowerCase();
-  if (!q) return [...options];
-  const label = (o: PickerOption) => (o.label ?? o.path).toLowerCase();
-  const prefix = options.filter((o) => label(o).startsWith(q));
-  const rest = options.filter((o) => !label(o).startsWith(q) && label(o).includes(q));
-  return [...prefix, ...rest];
+  if (!query.trim()) return [...options];
+  const ranked: RankedOption[] = [];
+  options.forEach((option, index) => {
+    const rank = rankMatch(option.label ?? option.path, query);
+    if (rank !== null) ranked.push({ option, index, rank });
+  });
+  ranked.sort(compareRanked);
+  return ranked.map((entry) => entry.option);
 }

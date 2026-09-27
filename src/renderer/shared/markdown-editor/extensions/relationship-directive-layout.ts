@@ -11,7 +11,7 @@
  * into decorations, atomic ranges and a transaction filter.
  */
 import {
-  noteIdOf,
+  knownValueLabel,
   noteRoleValue,
   type ParsedDirective,
   type ResolvedTrack,
@@ -155,8 +155,8 @@ export type ChangeVerdict =
   | { kind: 'whole' }
   /** Stays inside one value. */
   | { kind: 'value'; directive: ParsedDirective; slot: ValueSlot }
-  /** Would edit structure (envelope, wording, delimiters) or straddle a boundary. */
-  | { kind: 'blocked' };
+  /** Would edit structure (envelope, wording, delimiters) or straddle a boundary; `directive` is the first one it would break. */
+  | { kind: 'blocked'; directive: ParsedDirective };
 
 function touches(d: ParsedDirective, fromA: number, toA: number): boolean {
   if (fromA === toA) return d.from < fromA && fromA < d.to;
@@ -182,7 +182,7 @@ export function classifyChange(
     const slot = directiveSlots(directive).find((s) => s.from <= fromA && toA <= s.to);
     if (slot) return { kind: 'value', directive, slot };
   }
-  return { kind: 'blocked' };
+  return { kind: 'blocked', directive: touched[0] };
 }
 
 export type ValueDisplay =
@@ -204,22 +204,12 @@ export function valueDisplay(
   labelForNote: (id: string) => string,
 ): ValueDisplay {
   if (value === '') return { kind: 'empty' };
-  if (role === 'holder' || role === 'observer') {
-    const noteId = noteIdOf(value);
-    if (noteId && value === noteRoleValue(noteId)) {
-      return { kind: 'label', label: labelForNote(noteId), noteId };
-    }
-    return { kind: 'text' };
-  }
-  if (role === 'option' && track?.kind === 'categorical') {
-    const option = track.optionFor(value);
-    return option ? { kind: 'label', label: option.label } : { kind: 'text' };
-  }
-  if (role === 'value' && track?.kind === 'ordinal') {
-    const rung = track.rungs.find((r) => r.key === value);
-    return rung ? { kind: 'label', label: rung.label } : { kind: 'text' };
-  }
-  return { kind: 'text' };
+  const known = knownValueLabel(role, value, track, labelForNote);
+  if (!known) return { kind: 'text' };
+  // A note blank is one unit only when it holds exactly one link; anything
+  // else in it (a typed query around a link) reads as the text it is.
+  if (known.noteId && value !== noteRoleValue(known.noteId)) return { kind: 'text' };
+  return { kind: 'label', ...known };
 }
 
 /** Whether a role offers a list of choices (notes, tags, rungs) rather than free text. */

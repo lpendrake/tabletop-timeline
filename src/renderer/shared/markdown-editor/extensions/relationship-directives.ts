@@ -13,6 +13,7 @@
  * a blank. See `AGENTS.md` in this directory.
  */
 import {
+  Annotation,
   EditorSelection,
   EditorState,
   Facet,
@@ -195,30 +196,40 @@ function buildModels(state: EditorState, place: 'note' | 'event'): DirectiveMode
   });
 }
 
-function labelForNoteFrom(state: EditorState): (id: string) => string {
+/** Looks up a note's label from the editor's entity labels, falling back to the unknown-entity label. */
+export function labelForNoteFrom(state: EditorState): (id: string) => string {
   const map = state.field(entityLabelMapField, false) ?? new Map<string, string>();
   return (id: string) => map.get(id) ?? UNKNOWN_ENTITY_LABEL;
 }
 
-function displayFor(model: DirectiveModel, slot: ValueSlot, state: EditorState): ValueDisplay {
+/** How a blank's value reads right now (empty, typed text, or a label for a key/link). */
+export function displayFor(
+  state: EditorState,
+  model: DirectiveModel,
+  slot: ValueSlot,
+): ValueDisplay {
   return valueDisplay(slot.role, slot.value, model.track, labelForNoteFrom(state));
 }
+
+const CHIP_STATUS_CLASS: Record<InterpretedDirective['status'], string> = {
+  ok: 'cm-directive-chip',
+  unfinished: 'cm-directive-chip cm-directive-chip-unfinished',
+  invalid: 'cm-directive-chip cm-directive-chip-error',
+};
 
 class ChipWidget extends WidgetType {
   constructor(
     readonly text: string,
-    readonly statusClass: string | null,
+    readonly status: InterpretedDirective['status'],
   ) {
     super();
   }
   override eq(other: ChipWidget): boolean {
-    return other.text === this.text && other.statusClass === this.statusClass;
+    return other.text === this.text && other.status === this.status;
   }
   override toDOM(): HTMLElement {
     const el = document.createElement('span');
-    el.className = this.statusClass
-      ? `cm-directive-chip cm-directive-chip-${this.statusClass.replace('cm-directive-', '')}`
-      : 'cm-directive-chip';
+    el.className = CHIP_STATUS_CLASS[this.status];
     el.textContent = this.text;
     return el;
   }
@@ -292,10 +303,27 @@ function chipText(model: DirectiveModel): string {
   return `${model.track?.name ?? model.directive.trackId} · ${action?.label ?? model.directive.actionKey}`;
 }
 
-function buildModelState(
-  state: EditorState,
-  config: RelationshipDirectivesConfig,
-): DirectiveModelState {
+/**
+ * The host's per-editor settings. Every piece below reads them from here;
+ * `relationshipDirectives()` always provides them, so there's no default —
+ * in particular no silent fallback to the permissive `'event'` place.
+ */
+const directiveConfig = Facet.define<
+  RelationshipDirectivesConfig,
+  RelationshipDirectivesConfig | null
+>({
+  combine: (values) => values[0] ?? null,
+});
+
+const EMPTY_MODEL_STATE: DirectiveModelState = {
+  models: [],
+  decorations: Decoration.none,
+  atomic: Decoration.none,
+};
+
+function buildModelState(state: EditorState): DirectiveModelState {
+  const config = state.facet(directiveConfig);
+  if (!config) return EMPTY_MODEL_STATE;
   const models = buildModels(state, config.place);
   const { defaultReason } = state.field(directiveContextField);
   const editable = !state.readOnly && !config.readOnly;
@@ -325,7 +353,7 @@ function buildModelState(
       }).range(directive.from, directive.to),
     );
     decorations.push(
-      Decoration.replace({ widget: new ChipWidget(chipText(model), statusClass) }).range(
+      Decoration.replace({ widget: new ChipWidget(chipText(model), model.status) }).range(
         layout.envelope.from,
         layout.envelope.to,
       ),
@@ -344,7 +372,7 @@ function buildModelState(
     const template = model.track?.action(directive.actionKey)?.template ?? '';
     for (const slot of layout.slots) {
       const problem = model.problems.find((p) => p.role === slot.role);
-      const display = displayFor(model, slot, state);
+      const display = displayFor(state, model, slot);
       if (display.kind === 'empty') {
         const isReason = slot.role === 'reason';
         const text = isReason ? defaultReason : promptFor(slot.role, template);
@@ -416,19 +444,14 @@ export function liveSlotAt(
   return slot ? { model, directive: model.directive, slot } : null;
 }
 
-/** The host's per-editor settings, readable from state by every piece below. */
-const directiveConfig = Facet.define<RelationshipDirectivesConfig, RelationshipDirectivesConfig>({
-  combine: (values) => values[0] ?? { place: 'event' },
-});
-
 const modelStateField = StateField.define<DirectiveModelState>({
-  create: (state) => buildModelState(state, state.facet(directiveConfig)),
+  create: (state) => buildModelState(state),
   update(value, tr) {
     const rebuild =
       tr.docChanged ||
       tr.startState.field(revealedField, false) !== tr.state.field(revealedField, false) ||
       tr.effects.some((e) => e.is(setDirectiveContext) || e.is(setEntityLabels));
-    return rebuild ? buildModelState(tr.state, tr.state.facet(directiveConfig)) : value;
+    return rebuild ? buildModelState(tr.state) : value;
   },
   provide: (f) => [
     EditorView.decorations.from(f, (v) => v.decorations),
@@ -437,33 +460,45 @@ const modelStateField = StateField.define<DirectiveModelState>({
 });
 
 // ---------------------------------------------------------------------------
-// The guard: typed, pasted, dropped or deleted text may only change a value,
-// or whole directives. Anything touching structure is dropped.
+// The guard: every document change may only change a value, or whole
+// directives. Anything touching structure is dropped, with a brief flash on
+// the directive it would have broken.
 // ---------------------------------------------------------------------------
 
-function isGuardedEdit(tr: Transaction): boolean {
-  return tr.isUserEvent('input') || tr.isUserEvent('delete') || tr.isUserEvent('move');
+/**
+ * Marks a change as the host's own — e.g. replacing the whole buffer when
+ * the file is reloaded from disk — so the guard lets it through untouched.
+ */
+export const directiveGuardBypass = Annotation.define<boolean>();
+
+function isGuarded(tr: Transaction): boolean {
+  return (
+    tr.docChanged &&
+    !tr.isUserEvent('undo') &&
+    !tr.isUserEvent('redo') &&
+    !tr.annotation(directiveGuardBypass)
+  );
 }
 
 /**
- * Pure-ish decision for one transaction, exported for tests: returns the
- * transaction unchanged, a rewritten spec (values sanitised, a picked
- * note/tag/rung replaced as a whole when typed over), or `[]` to drop it.
+ * Decides one transaction: returns it unchanged, a rewritten spec (values
+ * sanitised, a picked note/tag/rung replaced as a whole when typed over), or
+ * — when it would break a directive — a spec carrying only the flash effect.
  */
-export function guardDirectiveEdit(tr: Transaction): Transaction | TransactionSpec | readonly [] {
-  if (!tr.docChanged || !isGuardedEdit(tr)) return tr;
+export function guardDirectiveEdit(tr: Transaction): Transaction | TransactionSpec {
+  if (!isGuarded(tr)) return tr;
   const state = tr.startState;
   const live = liveDirectives(state);
   if (live.length === 0) return tr;
 
-  let blocked = false;
+  let blocked: ParsedDirective | null = null;
   let rewritten = false;
   const changes: ChangeSpec[] = [];
   tr.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
     const verdict = classifyChange(live, fromA, toA);
     const text = inserted.toString();
     if (verdict.kind === 'blocked') {
-      blocked = true;
+      blocked ??= verdict.directive;
       return;
     }
     if (verdict.kind !== 'value') {
@@ -479,7 +514,7 @@ export function guardDirectiveEdit(tr: Transaction): Transaction | TransactionSp
       model &&
       text.length > 0 &&
       !coversSlot &&
-      displayFor(model, slot, state).kind === 'label'
+      displayFor(state, model, slot).kind === 'label'
     ) {
       from = slot.from;
       to = slot.to;
@@ -490,25 +525,71 @@ export function guardDirectiveEdit(tr: Transaction): Transaction | TransactionSp
     changes.push({ from, to, insert: clean });
   });
 
-  if (blocked) return [];
+  if (blocked) return { effects: flashDirective.of((blocked as ParsedDirective).from) };
   if (!rewritten) return tr;
 
   const changeSet = state.changes(changes);
+  // Carry an explicit selection over to the rewritten changes; otherwise map the old one.
+  const selection = tr.selection
+    ? tr.selection.map(tr.changes.invert(state.doc), 1).map(changeSet, 1)
+    : state.selection.map(changeSet, 1);
   return {
     changes: changeSet,
-    selection: state.selection.map(changeSet, 1),
+    selection,
     effects: tr.effects,
     scrollIntoView: tr.scrollIntoView,
     annotations: [Transaction.userEvent.of(tr.annotation(Transaction.userEvent) ?? 'input')],
   };
 }
 
+const flashDirective = StateEffect.define<number>();
+const clearFlash = StateEffect.define<null>();
+const FLASH_MS = 450;
+
+/** A short-lived outline on a directive whose edit was refused, so a refused keystroke never feels like a frozen editor. */
+const flashField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(value, tr) {
+    let next = value.map(tr.changes);
+    for (const e of tr.effects) {
+      if (e.is(clearFlash)) next = Decoration.none;
+      if (e.is(flashDirective)) {
+        const d = directivesIn(tr.state).find((x) => x.from === e.value);
+        next = d
+          ? Decoration.set([Decoration.mark({ class: 'cm-directive-blocked' }).range(d.from, d.to)])
+          : Decoration.none;
+      }
+    }
+    return next;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
+const clearFlashAfterDelay = ViewPlugin.fromClass(
+  class {
+    private timer: ReturnType<typeof setTimeout> | null = null;
+    constructor(readonly view: EditorView) {}
+    update(update: ViewUpdate) {
+      if (!update.transactions.some((tr) => tr.effects.some((e) => e.is(flashDirective)))) return;
+      if (this.timer) clearTimeout(this.timer);
+      this.timer = setTimeout(() => {
+        this.timer = null;
+        this.view.dispatch({ effects: clearFlash.of(null) });
+      }, FLASH_MS);
+    }
+    destroy() {
+      if (this.timer) clearTimeout(this.timer);
+    }
+  },
+);
+
 // ---------------------------------------------------------------------------
 // Keyboard
 // ---------------------------------------------------------------------------
 
-function editable(view: EditorView, config: RelationshipDirectivesConfig): boolean {
-  return !view.state.readOnly && !config.readOnly;
+function editable(view: EditorView): boolean {
+  const config = view.state.facet(directiveConfig);
+  return Boolean(config) && !view.state.readOnly && !config?.readOnly;
 }
 
 /** Moves the caret to `pos` inside a directive and opens that blank's choices. */
@@ -522,31 +603,34 @@ function moveToSlot(view: EditorView, pos: number): void {
   if (hit && roleHasChoices(hit.slot.role, hit.model.track)) startCompletion(view);
 }
 
-function makeNextBlankCommand(config: RelationshipDirectivesConfig, dir: 1 | -1): Command {
-  return (view) => {
-    if (!editable(view, config)) return false;
-    const head = view.state.selection.main.head;
-    const hit = liveSlotAt(view.state, head);
-    if (!hit) return false;
-    const next = adjacentSlot(hit.directive, head, dir);
-    if (next) {
-      moveToSlot(view, next.to);
-    } else {
-      closeCompletion(view);
-      view.dispatch({
-        selection: EditorSelection.cursor(dir === 1 ? hit.directive.to : hit.directive.from),
-        userEvent: 'select.directive',
-        scrollIntoView: true,
-      });
-    }
-    return true;
-  };
+/**
+ * From a blank, moves to the end of the next (`dir = 1`) or previous blank,
+ * opening its choices; past the last or first, to just outside the
+ * directive. Returns false when the caret isn't in a live blank.
+ */
+export function moveToAdjacentBlank(view: EditorView, dir: 1 | -1): boolean {
+  if (!editable(view)) return false;
+  const head = view.state.selection.main.head;
+  const hit = liveSlotAt(view.state, head);
+  if (!hit) return false;
+  const next = adjacentSlot(hit.directive, head, dir);
+  if (next) {
+    moveToSlot(view, next.to);
+  } else {
+    closeCompletion(view);
+    view.dispatch({
+      selection: EditorSelection.cursor(dir === 1 ? hit.directive.to : hit.directive.from),
+      userEvent: 'select.directive',
+      scrollIntoView: true,
+    });
+  }
+  return true;
 }
 
 /** Alt-↑/↓ in an amount or value blank steps it by the track's step (or one rung). */
-function makeStepCommand(config: RelationshipDirectivesConfig, dir: 1 | -1): Command {
+function makeStepCommand(dir: 1 | -1): Command {
   return (view) => {
-    if (!editable(view, config)) return false;
+    if (!editable(view)) return false;
     const hit = liveSlotAt(view.state, view.state.selection.main.head);
     const track = hit?.model.track;
     if (!hit || !track) return false;
@@ -572,12 +656,9 @@ function makeStepCommand(config: RelationshipDirectivesConfig, dir: 1 | -1): Com
  * on the first press; pressing again (selection now covers exactly the
  * directive) deletes it in one transaction — one undo step either way.
  */
-function makeBoundaryCommand(
-  config: RelationshipDirectivesConfig,
-  kind: 'backspace' | 'delete',
-): Command {
+function makeBoundaryCommand(kind: 'backspace' | 'delete'): Command {
   return (view) => {
-    if (!editable(view, config)) return false;
+    if (!editable(view)) return false;
     const sel = view.state.selection.main;
     const directives = liveDirectives(view.state);
 
@@ -605,12 +686,9 @@ function makeBoundaryCommand(
  * Home/End inside a blank go to that blank's start/end first; pressed again
  * at the edge, they fall through to the usual line start/end.
  */
-function makeBlankEdgeCommand(
-  config: RelationshipDirectivesConfig,
-  edge: 'start' | 'end',
-): Command {
+function makeBlankEdgeCommand(edge: 'start' | 'end'): Command {
   return (view) => {
-    if (!editable(view, config)) return false;
+    if (!editable(view)) return false;
     const sel = view.state.selection.main;
     if (!sel.empty) return false;
     const hit = liveSlotAt(view.state, sel.head);
@@ -632,22 +710,22 @@ const toggleSource: Command = (view) => {
   return true;
 };
 
-function directiveKeymap(config: RelationshipDirectivesConfig): Extension {
-  const next = makeNextBlankCommand(config, 1);
-  return Prec.high(
-    keymap.of([
-      { key: 'Tab', run: next, shift: makeNextBlankCommand(config, -1) },
-      { key: 'Enter', run: next },
-      { key: 'Alt-ArrowUp', run: makeStepCommand(config, 1) },
-      { key: 'Alt-ArrowDown', run: makeStepCommand(config, -1) },
-      { key: 'Backspace', run: makeBoundaryCommand(config, 'backspace') },
-      { key: 'Delete', run: makeBoundaryCommand(config, 'delete') },
-      { key: 'Home', run: makeBlankEdgeCommand(config, 'start') },
-      { key: 'End', run: makeBlankEdgeCommand(config, 'end') },
-      { key: 'Mod-/', run: toggleSource },
-    ]),
-  );
-}
+const nextBlank: Command = (view) => moveToAdjacentBlank(view, 1);
+const previousBlank: Command = (view) => moveToAdjacentBlank(view, -1);
+
+const directiveKeymap = Prec.high(
+  keymap.of([
+    { key: 'Tab', run: nextBlank, shift: previousBlank },
+    { key: 'Enter', run: nextBlank },
+    { key: 'Alt-ArrowUp', run: makeStepCommand(1) },
+    { key: 'Alt-ArrowDown', run: makeStepCommand(-1) },
+    { key: 'Backspace', run: makeBoundaryCommand('backspace') },
+    { key: 'Delete', run: makeBoundaryCommand('delete') },
+    { key: 'Home', run: makeBlankEdgeCommand('start') },
+    { key: 'End', run: makeBlankEdgeCommand('end') },
+    { key: 'Mod-/', run: toggleSource },
+  ]),
+);
 
 // ---------------------------------------------------------------------------
 // Pointer
@@ -664,83 +742,79 @@ function clickPos(view: EditorView, event: MouseEvent, el: Element): number {
   return view.posAtDOM(el);
 }
 
-function directivePointer(config: RelationshipDirectivesConfig): Extension {
-  return EditorView.domEventHandlers({
-    mousedown(event, view) {
-      if (event.button !== 0) return false;
-      const target = event.target instanceof Element ? event.target : null;
-      if (!target) return false;
+const directivePointer = EditorView.domEventHandlers({
+  mousedown(event, view) {
+    if (event.button !== 0) return false;
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target) return false;
 
-      const valueEl = target.closest('.cm-directive-value');
-      if (event.ctrlKey || event.metaKey) {
-        if (!valueEl) return false;
-        const hit = liveSlotAt(view.state, view.posAtDOM(valueEl));
-        const noteId = hit ? noteIdOf(hit.slot.value) : null;
-        if (!noteId) return false;
-        event.preventDefault();
-        config.onOpenNote?.(noteId);
-        return true;
-      }
-
-      if (!editable(view, config)) return false;
-      // Typed text in a value is real text: CodeMirror places the caret in it.
-      if (valueEl && !valueEl.classList.contains('cm-directive-value-label')) return false;
-
-      // An empty blank's placeholder or a picked name is a widget. Its
-      // coordinates sit next to hidden structure, which the atomic skip would
-      // snap into the neighbouring blank — so resolve it by the widget's own
-      // document position instead.
-      const widgetEl = valueEl ?? target.closest('.cm-directive-placeholder');
-      let slot: ValueSlot | null = null;
-      if (widgetEl) {
-        slot = liveSlotAt(view.state, view.posAtDOM(widgetEl))?.slot ?? null;
-      } else {
-        // A click anywhere else on a directive lands in its nearest blank.
-        const blockEl = target.closest('.cm-directive, .cm-directive-chip');
-        if (!blockEl) return false;
-        const pos = clickPos(view, event, blockEl);
-        const model = liveModelAt(view.state, pos);
-        slot = model ? nearestSlot(model.directive, pos) : null;
-      }
-      if (!slot) return false;
+    const valueEl = target.closest('.cm-directive-value');
+    if (event.ctrlKey || event.metaKey) {
+      if (!valueEl) return false;
+      const hit = liveSlotAt(view.state, view.posAtDOM(valueEl));
+      const noteId = hit ? noteIdOf(hit.slot.value) : null;
+      if (!noteId) return false;
       event.preventDefault();
-      view.focus();
-      view.dispatch({ selection: EditorSelection.cursor(slot.to), userEvent: 'select.pointer' });
+      view.state.facet(directiveConfig)?.onOpenNote?.(noteId);
       return true;
-    },
-  });
-}
+    }
+
+    if (!editable(view)) return false;
+    // Typed text in a value is real text: CodeMirror places the caret in it.
+    if (valueEl && !valueEl.classList.contains('cm-directive-value-label')) return false;
+
+    // An empty blank's placeholder or a picked name is a widget. Its
+    // coordinates sit next to hidden structure, which the atomic skip would
+    // snap into the neighbouring blank — so resolve it by the widget's own
+    // document position instead.
+    const widgetEl = valueEl ?? target.closest('.cm-directive-placeholder');
+    let slot: ValueSlot | null = null;
+    if (widgetEl) {
+      slot = liveSlotAt(view.state, view.posAtDOM(widgetEl))?.slot ?? null;
+    } else {
+      // A click anywhere else on a directive lands in its nearest blank.
+      const blockEl = target.closest('.cm-directive, .cm-directive-chip');
+      if (!blockEl) return false;
+      const pos = clickPos(view, event, blockEl);
+      const model = liveModelAt(view.state, pos);
+      slot = model ? nearestSlot(model.directive, pos) : null;
+    }
+    if (!slot) return false;
+    event.preventDefault();
+    view.focus();
+    view.dispatch({ selection: EditorSelection.cursor(slot.to), userEvent: 'select.pointer' });
+    return true;
+  },
+});
 
 /**
  * Opens a blank's choices when the caret arrives in it by a click or a fresh
  * insert. (Tab/Enter open them directly; plain arrow keys don't, so moving
  * through a line never pops a list uninvited.)
  */
-function openChoicesOnArrival(config: RelationshipDirectivesConfig): Extension {
-  return ViewPlugin.fromClass(
-    class {
-      private destroyed = false;
-      constructor(readonly view: EditorView) {}
-      update(update: ViewUpdate) {
-        if (!editable(update.view, config)) return;
-        const arrived = update.transactions.some(
-          (tr) => tr.isUserEvent('select.pointer') || tr.isUserEvent('input.directive.insert'),
-        );
-        if (!arrived) return;
-        const hit = liveSlotAt(update.state, update.state.selection.main.head);
-        if (!hit || !roleHasChoices(hit.slot.role, hit.model.track)) return;
-        // Can't dispatch from inside an update; open it straight after.
-        queueMicrotask(() => {
-          if (this.destroyed || completionStatus(this.view.state) === 'active') return;
-          startCompletion(this.view);
-        });
-      }
-      destroy() {
-        this.destroyed = true;
-      }
-    },
-  );
-}
+const openChoicesOnArrival = ViewPlugin.fromClass(
+  class {
+    private destroyed = false;
+    constructor(readonly view: EditorView) {}
+    update(update: ViewUpdate) {
+      if (!editable(update.view)) return;
+      const arrived = update.transactions.some(
+        (tr) => tr.isUserEvent('select.pointer') || tr.isUserEvent('input.directive.insert'),
+      );
+      if (!arrived) return;
+      const hit = liveSlotAt(update.state, update.state.selection.main.head);
+      if (!hit || !roleHasChoices(hit.slot.role, hit.model.track)) return;
+      // Can't dispatch from inside an update; open it straight after.
+      queueMicrotask(() => {
+        if (this.destroyed || completionStatus(this.view.state) === 'active') return;
+        startCompletion(this.view);
+      });
+    }
+    destroy() {
+      this.destroyed = true;
+    }
+  },
+);
 
 /**
  * Inserts a freshly filled directive as one undo step with the caret in its
@@ -776,6 +850,10 @@ const directiveTheme = EditorView.theme({
     padding: '2px 0',
     boxDecorationBreak: 'clone',
     WebkitBoxDecorationBreak: 'clone',
+  },
+  '.cm-directive-blocked': {
+    outline: '2px solid var(--theme-danger)',
+    outlineOffset: '1px',
   },
   '.cm-directive-raw': {
     outline: '1px solid var(--theme-danger)',
@@ -868,13 +946,17 @@ export function relationshipDirectives(config: RelationshipDirectivesConfig): Ex
     directiveConfig.of(config),
     modelStateField,
     directiveTheme,
-    directivePointer(config),
+    directivePointer,
+    // Which pieces are installed is decided here, once; everything installed
+    // reads the settings themselves from `directiveConfig`.
     readOnly
       ? []
       : [
           EditorState.transactionFilter.of(guardDirectiveEdit),
-          directiveKeymap(config),
-          openChoicesOnArrival(config),
+          flashField,
+          clearFlashAfterDelay,
+          directiveKeymap,
+          openChoicesOnArrival,
         ],
   ];
 }

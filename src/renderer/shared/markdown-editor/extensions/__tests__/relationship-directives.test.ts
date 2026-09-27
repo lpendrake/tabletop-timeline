@@ -16,6 +16,7 @@ import {
   relationshipDirectives,
   setDirectiveContext,
   directiveBorderClass,
+  directiveGuardBypass,
   insertDirective,
   type RelationshipDirectivesConfig,
 } from '../relationship-directives';
@@ -161,6 +162,13 @@ function press(
 ): boolean {
   const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...mods });
   return runScopeHandlers(view, event, 'editor');
+}
+
+/** A real keydown on the content, as the browser sends it (runs DOM handlers and keymaps). */
+function keydown(view: EditorView, key: string): void {
+  view.contentDOM.dispatchEvent(
+    new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }),
+  );
 }
 
 /** Waits out autocompletion's interaction delay, during which it ignores accepting. */
@@ -320,11 +328,31 @@ describe('editing is typing into the document', () => {
     expect(doc(view)).toBe('x AgoneB y');
   });
 
-  it('host reloads and other programmatic changes are never filtered', () => {
+  it('guards every change, labelled or not — e.g. an image paste over half a directive', () => {
+    const view = makeView(`intro ${FULL_CHANGE}`);
+    view.dispatch({
+      changes: { from: 2, to: 12, insert: '![map](notes-asset://current/map.png)' },
+    });
+    expect(doc(view)).toBe(`intro ${FULL_CHANGE}`);
+  });
+
+  it('flashes the directive a refused edit would have broken, then clears it', async () => {
     const view = makeView(FULL_CHANGE);
-    view.dispatch({ changes: { from: 0, to: 2, insert: '{{' } });
+    caretAt(view, 3);
+    type(view, 'x');
+    expect(view.dom.querySelector('.cm-directive-blocked')).not.toBeNull();
+    await vi.waitFor(() => expect(view.dom.querySelector('.cm-directive-blocked')).toBeNull());
+  });
+
+  it('whole-buffer reloads pass, and the host bypass lets anything through', () => {
+    const view = makeView(FULL_CHANGE);
     view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: EMPTY_CHANGE } });
     expect(doc(view)).toBe(EMPTY_CHANGE);
+    view.dispatch({
+      changes: { from: 0, to: 2, insert: '[[' },
+      annotations: directiveGuardBypass.of(true),
+    });
+    expect(doc(view).startsWith('[[rp01')).toBe(true);
   });
 
   it('undo steps back through edits normally', () => {
@@ -485,9 +513,58 @@ describe('choices', () => {
     caretAt(view, valueStart(view, 'option'));
     type(view, 'riv');
     expect(await openList(view)).toEqual(['Create "riv"', 'Create "riv" (symmetrical)']);
+    await settle();
+    // Creating is permanent, so it takes an explicit pick: move onto the row first.
+    keydown(view, 'ArrowDown');
+    keydown(view, 'ArrowUp');
     press(view, 'Enter');
     await vi.waitFor(() => expect(doc(view)).toContain('{option:rival}'));
     expect(createOption).toHaveBeenCalledWith('tg01', 'riv', false);
+  });
+
+  it('Tab or Enter on a typo in a Gains tag never creates it; it moves on and leaves the text', async () => {
+    const createOption = vi.fn(async () => ({ key: 'marired' }));
+    const view = makeView(EMPTY_GAINS, { choices: { createOption } });
+    caretAt(view, valueStart(view, 'option'));
+    type(view, 'marired');
+    expect(await openList(view)).toEqual(['Create "marired"', 'Create "marired" (symmetrical)']);
+    await settle();
+    press(view, 'Tab');
+    expect(head(view)).toBe(valueEnd(view, 'observer'));
+    press(view, 'Tab', { shiftKey: true });
+    press(view, 'Enter');
+    await settle();
+    expect(createOption).not.toHaveBeenCalled();
+    expect(doc(view)).toContain('{option:marired}');
+  });
+
+  it('a note query that matches nothing lets Tab move on instead of swallowing it', () => {
+    const view = makeView(EMPTY_CHANGE);
+    caretAt(view, valueStart(view, 'observer'));
+    type(view, 'zzz');
+    expect(press(view, 'Tab')).toBe(true);
+    expect(head(view)).toBe(valueEnd(view, 'holder'));
+    expect(doc(view)).toContain('{observer:zzz}');
+  });
+
+  it('a created tag lands in its own blank even if the document moved meanwhile', async () => {
+    let finish: (v: { key: string }) => void = () => {};
+    const createOption = vi.fn(() => new Promise<{ key: string }>((r) => (finish = r)));
+    const view = makeView(`\n${EMPTY_GAINS}`, { choices: { createOption } });
+    caretAt(view, valueStart(view, 'option'));
+    type(view, 'rival');
+    await openList(view);
+    await settle();
+    keydown(view, 'ArrowDown');
+    keydown(view, 'ArrowUp');
+    press(view, 'Enter');
+    expect(createOption).toHaveBeenCalled();
+    // Another directive appears above while the host is still creating the tag.
+    view.dispatch({ changes: { from: 0, insert: EMPTY_GAINS } });
+    finish({ key: 'rival' });
+    await vi.waitFor(() => expect(doc(view)).toContain('{option:rival}'));
+    expect(doc(view).indexOf('{option:rival}')).toBeGreaterThan(EMPTY_GAINS.length);
+    expect(doc(view).startsWith(EMPTY_GAINS)).toBe(true);
   });
 
   it('a Loses tag blank lists only held tags and never offers create', async () => {
