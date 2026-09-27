@@ -39,6 +39,10 @@ export interface RelationshipBubbleProps {
   heldOptionKeys: string[] | null;
   /** True while an async `heldOptions` lookup for this exact blank is in flight — see `relationship-bubble-view-plugin.ts`. */
   heldOptionsLoading: boolean;
+  /** For a Remove directive's observer blank once holder+option are filled: ids to restrict the note picker to, or `null` (unrestricted — the default for every other blank). */
+  restrictedNoteIds: string[] | null;
+  /** True while an async `observerOptions` lookup for this exact blank is in flight — see `relationship-bubble-view-plugin.ts`. */
+  restrictedNoteIdsLoading: boolean;
   /** May return a `Promise` (e.g. a confirm dialog) — awaited before advancing, see `NotePickerField.commitPick`. */
   onHolderChosenWithoutDefault?: (id: string) => void | Promise<void>;
   createOption?: (
@@ -390,10 +394,13 @@ function NotePickerField(props: RelationshipBubbleProps) {
     onCommit,
     onClose,
     visible,
+    restrictedNoteIds,
+    restrictedNoteIdsLoading,
   } = props;
   const ref = useRef<HTMLInputElement>(null);
   useBubbleFocus(ref, visible);
 
+  const options = filterHeldOptions(noteOptions, restrictedNoteIds);
   const recents = buildNotePickerRecents(recentNoteIds, currentNoteId);
   const prefilled = prefillNoteValue(role, value, defaultHolderId);
 
@@ -411,18 +418,30 @@ function NotePickerField(props: RelationshipBubbleProps) {
     onCommit(id, direction);
   }
 
+  // Called unconditionally (before the loading early-return) so it always
+  // runs in the same order regardless of `restrictedNoteIdsLoading` — even
+  // though it's a plain function, not an actual hook, its `use*` name makes
+  // the lint rule treat it as one.
   const handleTab = usePickerTabHandler(
-    noteOptions,
+    options,
     recents,
     prefilled,
     (id, direction) => void commitPick(id, direction),
     rankNoteOptions,
   );
 
+  if (restrictedNoteIdsLoading) {
+    return (
+      <div className="relationship-bubble-field">
+        <div className="relationship-bubble-loading">Loading…</div>
+      </div>
+    );
+  }
+
   return (
     <div className="relationship-bubble-field" onKeyDownCapture={handleTab}>
       <SearchablePicker
-        options={noteOptions}
+        options={options}
         recentIds={recents}
         value={prefilled ?? null}
         inputRef={ref}

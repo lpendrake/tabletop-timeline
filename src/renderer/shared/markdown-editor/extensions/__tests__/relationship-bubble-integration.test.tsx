@@ -311,6 +311,101 @@ describe('relationship bubble — async heldOptions', () => {
   });
 });
 
+describe('relationship bubble — async observerOptions (Remove observer blank, #262)', () => {
+  const LOSES_TEMPLATE = relationshipTagsSpec.actions.find((a) => a.key === 'loses')!.template;
+  // holder and option filled, observer left blank — the in-order fill state
+  // in which the observer blank should restrict to notes holding that tag.
+  const LOSES_WITH_OPTION_DIRECTIVE = serialiseTemplate('tg01', 'loses', LOSES_TEMPLATE, {
+    holder: '[[c3d4]]',
+    option: 'married',
+    reason: 'a falling out',
+  });
+
+  function field(): HTMLElement {
+    return document.querySelector('.relationship-bubble-field')!;
+  }
+
+  it('shows a loading state until observerOptions resolves, then only the restricted notes', async () => {
+    let resolveFn: (ids: string[]) => void = () => {};
+    const observerOptions = () =>
+      new Promise<string[]>((resolve) => {
+        resolveFn = resolve;
+      });
+    const setup = track(makeView(LOSES_WITH_OPTION_DIRECTIVE, { observerOptions }));
+    const { view } = setup;
+    const observerValue = view.dom.querySelector<HTMLElement>('.cm-directive-value-role-observer')!;
+
+    act(() => {
+      observerValue.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }),
+      );
+    });
+    await flushBubbleOpen();
+
+    expect(field().textContent).toBe('Loading…');
+    expect(document.querySelectorAll('.searchable-picker-row').length).toBe(0);
+
+    await act(async () => {
+      resolveFn(['a1b2']);
+      await Promise.resolve();
+    });
+
+    const rows = Array.from(document.querySelectorAll('.searchable-picker-row'));
+    expect(rows.map((r) => r.textContent)).toEqual(['White Tigers']);
+  });
+
+  it('falls back to every note, unfiltered, when the lookup rejects', async () => {
+    let rejectFn: (err: unknown) => void = () => {};
+    const observerOptions = () =>
+      new Promise<string[]>((_resolve, reject) => {
+        rejectFn = reject;
+      });
+    const setup = track(makeView(LOSES_WITH_OPTION_DIRECTIVE, { observerOptions }));
+    const { view } = setup;
+    const observerValue = view.dom.querySelector<HTMLElement>('.cm-directive-value-role-observer')!;
+
+    act(() => {
+      observerValue.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }),
+      );
+    });
+    await flushBubbleOpen();
+    expect(field().textContent).toBe('Loading…');
+
+    await act(async () => {
+      rejectFn(new Error('main-process ledger read failed'));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(field().textContent).not.toBe('Loading…');
+    const rows = Array.from(document.querySelectorAll('.searchable-picker-row'));
+    expect(rows.length).toBe(2); // the full note list, unfiltered
+  });
+
+  it('does not query observerOptions for the holder blank, or before the option is filled', async () => {
+    const observerOptions = vi.fn().mockResolvedValue(['a1b2']);
+    const LOSES_NO_OPTION = serialiseTemplate('tg01', 'loses', LOSES_TEMPLATE, {
+      holder: '[[c3d4]]',
+      reason: 'a falling out',
+    });
+    const setup = track(makeView(LOSES_NO_OPTION, { observerOptions }));
+    const { view } = setup;
+    const observerValue = view.dom.querySelector<HTMLElement>('.cm-directive-value-role-observer')!;
+
+    act(() => {
+      observerValue.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }),
+      );
+    });
+    await flushBubbleOpen();
+
+    expect(observerOptions).not.toHaveBeenCalled();
+    const rows = Array.from(document.querySelectorAll('.searchable-picker-row'));
+    expect(rows.length).toBe(2); // unrestricted — every note
+  });
+});
+
 describe('relationship bubble — Create row only offered for an Add action', () => {
   const GAINS_TEMPLATE = relationshipTagsSpec.actions.find((a) => a.key === 'gains')!.template;
   const GAINS_DIRECTIVE = serialiseTemplate('tg01', 'gains', GAINS_TEMPLATE, {

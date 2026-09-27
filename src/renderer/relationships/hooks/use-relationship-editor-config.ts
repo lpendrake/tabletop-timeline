@@ -16,6 +16,7 @@ import {
   buildRelationshipEditorConfig,
   makeHeldOptionsResolver,
   makeHolderChosenHandler,
+  makeObserverOptionsResolver,
   type ConfirmFn,
 } from '../editor-host-config';
 
@@ -114,6 +115,11 @@ export function useRelationshipEditorConfig(
       currentPath,
       at: () => optsRef.current.at(),
     });
+    const observerOptions = makeObserverOptionsResolver({
+      library,
+      currentPath,
+      at: () => optsRef.current.at(),
+    });
 
     return buildRelationshipEditorConfig({
       library,
@@ -125,6 +131,7 @@ export function useRelationshipEditorConfig(
       currentNoteId,
       onHolderChosenWithoutDefault: makeHolderChosenHandler(opts.confirm, labelFor),
       heldOptions,
+      observerOptions,
     });
   }, [library, opts.defaultReason, opts.onOpenNote, opts.place, opts.confirm, defaultHolderId]);
 

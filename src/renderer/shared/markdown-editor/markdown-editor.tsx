@@ -144,6 +144,7 @@ function makeBubbleHostContext(
     onHolderChosenWithoutDefault: config?.bubbles?.onHolderChosenWithoutDefault,
     createOption: config?.bubbles?.createOption,
     heldOptions: config?.bubbles?.heldOptions,
+    observerOptions: config?.bubbles?.observerOptions,
   };
 }
 

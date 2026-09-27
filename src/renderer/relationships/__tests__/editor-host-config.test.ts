@@ -10,7 +10,11 @@ vi.mock('../data', () => ({
   },
 }));
 
-import { makeHolderChosenHandler, makeHeldOptionsResolver } from '../editor-host-config';
+import {
+  makeHolderChosenHandler,
+  makeHeldOptionsResolver,
+  makeObserverOptionsResolver,
+} from '../editor-host-config';
 import {
   relationshipTagsSpec,
   type Ledger,
@@ -103,7 +107,7 @@ describe('makeHeldOptionsResolver', () => {
     expect(result).toEqual(['member', 'employee']);
   });
 
-  it('returns empty when holder or observer is missing', async () => {
+  it('returns empty when holder is missing', async () => {
     const resolver = makeHeldOptionsResolver({
       library: LIBRARY,
       currentPath: () => 'events/a.md',
@@ -113,6 +117,31 @@ describe('makeHeldOptionsResolver', () => {
       [],
     );
     expect(getLedgers).not.toHaveBeenCalled();
+  });
+
+  it('with no observer (the normal in-order fill), unions tags held with every observer on the track', async () => {
+    getLedgers.mockResolvedValue([
+      ledger([
+        { op: 'add', key: 'member', at: null, declaredIn: { path: 'notes/a.md', ordinal: 0 } },
+      ]),
+      {
+        holder: 'haaa',
+        observer: 'obbb',
+        track: trackId,
+        deltas: [
+          { op: 'add', key: 'hates', at: null, declaredIn: { path: 'notes/b.md', ordinal: 0 } },
+        ],
+      },
+    ]);
+    const resolver = makeHeldOptionsResolver({
+      library: LIBRARY,
+      currentPath: () => 'events/other.md',
+      at: () => 100,
+    });
+
+    const result = await resolver({ trackId, holder: 'haaa', observer: null, anchor: 0, doc: '' });
+    expect(getLedgers).toHaveBeenCalledWith('haaa', 'holder');
+    expect(result.sort()).toEqual(['hates', 'member']);
   });
 
   it('returns empty when unsaved (no current path) — Remove is event-only', async () => {
@@ -148,5 +177,88 @@ describe('makeHeldOptionsResolver', () => {
     const result = await resolver({ trackId, holder: 'haaa', observer: 'oaaa', anchor, doc });
 
     expect(result).toEqual(['employee']); // saved 'member' dropped; buffer's 'member' excluded (being edited)
+  });
+
+  it('includes a mirrored tag from a mutual option declared elsewhere in the SAME buffer (bug: previously missed)', async () => {
+    getLedgers.mockResolvedValue([]);
+    const doc = [
+      '{{tg01.gains {holder:[[oaaa]]} is now {option:married} with {observer:[[haaa]]} — {reason:}}}',
+      '{{tg01.loses {holder:[[haaa]]} is now {option:} with {observer:[[oaaa]]} — {reason:}}}',
+    ].join('\n');
+    const resolver = makeHeldOptionsResolver({
+      library: LIBRARY,
+      currentPath: () => 'events/e.md',
+      at: () => 100,
+    });
+
+    // The 'loses' directive's own tag blank: holder haaa, observer oaaa (already
+    // filled out of order) — its held options must include the mirror of the
+    // 'married' the OTHER directive gave (oaaa, haaa).
+    const anchor = doc.indexOf('{{tg01.loses');
+    const result = await resolver({ trackId, holder: 'haaa', observer: 'oaaa', anchor, doc });
+
+    expect(result).toEqual(['married']);
+  });
+});
+
+describe('makeObserverOptionsResolver', () => {
+  const trackId = relationshipTagsSpec.id;
+
+  function ledger(holder: string, observer: string, deltas: Ledger['deltas']): Ledger {
+    return { holder, observer, track: trackId, deltas };
+  }
+
+  beforeEach(() => {
+    getLedgers.mockReset();
+  });
+
+  it('restricts to observers holding the chosen tag with the holder', async () => {
+    getLedgers.mockResolvedValue([
+      ledger('haaa', 'oaaa', [
+        { op: 'add', key: 'member', at: 50, declaredIn: { path: 'notes/a.md', ordinal: 0 } },
+      ]),
+      ledger('haaa', 'obbb', [
+        { op: 'add', key: 'hates', at: 50, declaredIn: { path: 'notes/b.md', ordinal: 0 } },
+      ]),
+    ]);
+    const resolver = makeObserverOptionsResolver({
+      library: LIBRARY,
+      currentPath: () => 'events/e.md',
+      at: () => 100,
+    });
+
+    const result = await resolver({
+      trackId,
+      holder: 'haaa',
+      option: 'member',
+      anchor: 0,
+      doc: '',
+    });
+    expect(getLedgers).toHaveBeenCalledWith('haaa', 'holder');
+    expect(result).toEqual(['oaaa']);
+  });
+
+  it('returns empty when holder is missing', async () => {
+    const resolver = makeObserverOptionsResolver({
+      library: LIBRARY,
+      currentPath: () => 'events/e.md',
+      at: () => 100,
+    });
+    expect(await resolver({ trackId, holder: null, option: 'member', anchor: 0, doc: '' })).toEqual(
+      [],
+    );
+    expect(getLedgers).not.toHaveBeenCalled();
+  });
+
+  it('returns empty when unsaved (no current path)', async () => {
+    const resolver = makeObserverOptionsResolver({
+      library: LIBRARY,
+      currentPath: () => null,
+      at: () => 100,
+    });
+    expect(
+      await resolver({ trackId, holder: 'haaa', option: 'member', anchor: 0, doc: '' }),
+    ).toEqual([]);
+    expect(getLedgers).not.toHaveBeenCalled();
   });
 });

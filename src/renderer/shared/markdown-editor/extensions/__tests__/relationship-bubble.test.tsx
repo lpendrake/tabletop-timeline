@@ -49,6 +49,8 @@ function baseProps(overrides: Partial<RelationshipBubbleProps> = {}): Relationsh
     currentNoteId: null,
     heldOptionKeys: null,
     heldOptionsLoading: false,
+    restrictedNoteIds: null,
+    restrictedNoteIdsLoading: false,
     onCommit: vi.fn(),
     onClose: vi.fn(),
     style: {},
@@ -361,6 +363,61 @@ describe('holder/observer note pickers', () => {
       await Promise.resolve();
     });
     expect(onCommit).toHaveBeenCalledWith('a1b2', 'advance');
+  });
+});
+
+describe('holder/observer note picker — restricted note list (Remove observer blank, #262)', () => {
+  const NOTE_OPTIONS = [
+    { id: 'a1b2', path: 'npcs/mira', label: 'Mira' },
+    { id: 'c3d4', path: 'factions/party', label: 'The Party' },
+  ];
+
+  it('restricts the note list to restrictedNoteIds when given', () => {
+    tracked();
+    render(
+      baseProps({
+        role: 'observer',
+        value: '',
+        track: null,
+        noteOptions: NOTE_OPTIONS,
+        restrictedNoteIds: ['a1b2'],
+      }),
+    );
+    const rows = Array.from(container.querySelectorAll('.searchable-picker-row')).map(
+      (r) => r.textContent,
+    );
+    expect(rows).toEqual(['Mira']);
+  });
+
+  it('shows every note when restrictedNoteIds is null', () => {
+    tracked();
+    render(
+      baseProps({
+        role: 'observer',
+        value: '',
+        track: null,
+        noteOptions: NOTE_OPTIONS,
+        restrictedNoteIds: null,
+      }),
+    );
+    const rows = Array.from(container.querySelectorAll('.searchable-picker-row'));
+    expect(rows.length).toBe(NOTE_OPTIONS.length);
+  });
+
+  it('shows a loading state and no notes while restrictedNoteIdsLoading is true', () => {
+    tracked();
+    render(
+      baseProps({
+        role: 'observer',
+        value: '',
+        track: null,
+        noteOptions: NOTE_OPTIONS,
+        restrictedNoteIds: null,
+        restrictedNoteIdsLoading: true,
+      }),
+    );
+    expect(container.querySelector('.relationship-bubble-loading')?.textContent).toBe('Loading…');
+    expect(container.querySelectorAll('.searchable-picker-row').length).toBe(0);
   });
 });
 

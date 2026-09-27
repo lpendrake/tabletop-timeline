@@ -60,7 +60,23 @@ const MAX_MEASURE_ATTEMPTS = 3;
 export interface HeldOptionsQuery {
   trackId: string;
   holder: string | null;
+  /** `null` in the normal in-order fill (tag before observer) — the resolver then unions tags the holder holds with anyone. */
   observer: string | null;
+  anchor: number;
+  doc: string;
+}
+
+/**
+ * The query the bubble sends to the host's `observerOptions` resolver, for
+ * a Remove directive's observer blank once its holder and tag are both
+ * filled: which (trackId, holder, option) triple to restrict the note
+ * picker to, plus the blank's directive anchor and the buffer's current
+ * text (see `HeldOptionsQuery`'s doc comment for why both are needed).
+ */
+export interface ObserverOptionsQuery {
+  trackId: string;
+  holder: string;
+  option: string;
   anchor: number;
   doc: string;
 }
@@ -98,6 +114,15 @@ export interface RelationshipBubbleOptions {
    * `RelationshipBubblePlugin`'s `heldOptionsToken`).
    */
   heldOptions?: (q: HeldOptionsQuery) => Promise<string[]>;
+  /**
+   * Resolves which notes could be picked as the observer for a Remove
+   * directive's observer blank — those where (holder, observer) actually
+   * holds the chosen tag on this track as of the event's date. Async and
+   * cached the same way as `heldOptions` (see
+   * `RelationshipBubblePlugin.observerOptionsFor`); the field falls back to
+   * every note, unfiltered, on a rejection.
+   */
+  observerOptions?: (q: ObserverOptionsQuery) => Promise<string[]>;
 }
 
 export interface RelationshipBubbleHostContext extends RelationshipBubbleOptions {
@@ -180,6 +205,11 @@ class RelationshipBubblePlugin {
    */
   private heldOptionsCache: { key: string; keys: string[] | null } | null = null;
 
+  /** Same caching scheme as `heldOptions*`, for the observer blank's `observerOptions` lookup — see `observerOptionsFor`. */
+  private observerOptionsToken = 0;
+  private observerOptionsPendingKey: string | null = null;
+  private observerOptionsCache: { key: string; ids: string[] | null } | null = null;
+
   constructor(
     readonly view: EditorView,
     readonly getContext: () => RelationshipBubbleHostContext,
@@ -201,6 +231,9 @@ class RelationshipBubblePlugin {
       this.heldOptionsCache = null;
       this.heldOptionsPendingKey = null;
       this.heldOptionsToken++;
+      this.observerOptionsCache = null;
+      this.observerOptionsPendingKey = null;
+      this.observerOptionsToken++;
     }
     if (before !== after || update.docChanged || update.geometryChanged || update.viewportChanged) {
       this.sync();
@@ -329,6 +362,46 @@ class RelationshipBubblePlugin {
     return { keys: null, loading: true };
   }
 
+  /**
+   * Resolves `restrictedNoteIds`/`restrictedNoteIdsLoading` for a Remove
+   * directive's observer blank: same caching/staleness scheme as
+   * `heldOptionsFor` (cached per exact query, at most one in flight,
+   * `observerOptionsToken` drops a response superseded by a newer request
+   * or a doc edit), reported via `observerOptionsCache`/`observerOptionsPendingKey`.
+   * A rejected lookup is cached as `ids: null` — "show every note
+   * unfiltered" — the same fallback `heldOptionsFor` uses.
+   */
+  private observerOptionsFor(
+    ctx: RelationshipBubbleHostContext,
+    q: Omit<ObserverOptionsQuery, 'doc'>,
+  ): { ids: string[] | null; loading: boolean } {
+    if (!ctx.observerOptions) return { ids: null, loading: false };
+    const key = JSON.stringify(q);
+    if (this.observerOptionsCache?.key === key) {
+      return { ids: this.observerOptionsCache.ids, loading: false };
+    }
+    if (this.observerOptionsPendingKey !== key) {
+      this.observerOptionsPendingKey = key;
+      const token = ++this.observerOptionsToken;
+      const doc = this.view.state.doc.toString();
+      void ctx.observerOptions({ ...q, doc }).then(
+        (ids) => {
+          if (token !== this.observerOptionsToken) return; // stale — a newer request has since superseded this one
+          this.observerOptionsCache = { key, ids };
+          if (this.observerOptionsPendingKey === key) this.observerOptionsPendingKey = null;
+          this.sync();
+        },
+        () => {
+          if (token !== this.observerOptionsToken) return; // stale — a newer request has since superseded this one
+          this.observerOptionsCache = { key, ids: null };
+          if (this.observerOptionsPendingKey === key) this.observerOptionsPendingKey = null;
+          this.sync();
+        },
+      );
+    }
+    return { ids: null, loading: true };
+  }
+
   private baseProps(anchor: number, role: Role, directive: ParsedDirective): BaseProps {
     const ctx = this.getContext();
     const track = resolveTrack(directive.trackId, ctx.library);
@@ -348,6 +421,17 @@ class RelationshipBubblePlugin {
           })
         : { keys: null, loading: false };
 
+    const optionValue = roleValue(directive, 'option') || null;
+    const { ids: restrictedNoteIds, loading: restrictedNoteIdsLoading } =
+      role === 'observer' && action?.kind === 'remove' && holderId && optionValue
+        ? this.observerOptionsFor(ctx, {
+            trackId: directive.trackId,
+            holder: holderId,
+            option: optionValue,
+            anchor,
+          })
+        : { ids: null, loading: false };
+
     return {
       anchor,
       role,
@@ -362,6 +446,8 @@ class RelationshipBubblePlugin {
       currentNoteId: ctx.currentNoteId?.() ?? null,
       heldOptionKeys,
       heldOptionsLoading,
+      restrictedNoteIds,
+      restrictedNoteIdsLoading,
       listRef: this.listRef,
       bubbleRef: this.bubbleRef,
       onHolderChosenWithoutDefault: ctx.onHolderChosenWithoutDefault,
