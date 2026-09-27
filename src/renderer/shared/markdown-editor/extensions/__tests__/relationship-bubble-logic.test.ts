@@ -11,6 +11,7 @@ import {
   stepRung,
   decideBubbleKey,
   shouldOfferCreateOption,
+  allowsCreateOption,
   filterHeldOptions,
   computeTailOffset,
   TAIL_EDGE_INSET,
@@ -182,6 +183,14 @@ describe('option create-row + held-options filtering (pure)', () => {
     expect(filterHeldOptions(options, ['hates'])).toEqual([{ id: 'hates', path: 'hates' }]);
     expect(filterHeldOptions(options, null)).toEqual(options);
     expect(filterHeldOptions(options, [])).toEqual([]);
+  });
+
+  it('only an Add action can offer Create — never Remove/Change/Set, and never an unresolved action', () => {
+    expect(allowsCreateOption('add')).toBe(true);
+    expect(allowsCreateOption('remove')).toBe(false);
+    expect(allowsCreateOption('set')).toBe(false);
+    expect(allowsCreateOption('adjust')).toBe(false);
+    expect(allowsCreateOption(undefined)).toBe(false);
   });
 });
 

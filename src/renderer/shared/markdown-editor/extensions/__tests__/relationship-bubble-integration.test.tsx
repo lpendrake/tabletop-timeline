@@ -57,7 +57,11 @@ function makeView(doc: string, ctx: Partial<RelationshipBubbleHostContext> = {})
 
   const state = EditorState.create({
     doc,
-    extensions: [history(), relationshipDirectives({}), relationshipBubble(() => context)],
+    extensions: [
+      history(),
+      relationshipDirectives({ place: 'event' }),
+      relationshipBubble(() => context),
+    ],
   });
   const container = document.createElement('div');
   document.body.appendChild(container);
@@ -236,6 +240,135 @@ describe('relationship bubble — async heldOptions', () => {
     });
     const rows = Array.from(document.querySelectorAll('.searchable-picker-row'));
     expect(rows.map((r) => r.textContent)).toEqual(['hates']);
+  });
+
+  it('falls back to showing every option, unfiltered, when the lookup rejects — never stays stuck on Loading…', async () => {
+    let rejectFn: (err: unknown) => void = () => {};
+    const heldOptions = () =>
+      new Promise<string[]>((_resolve, reject) => {
+        rejectFn = reject;
+      });
+    const setup = track(makeView(LOSES_DIRECTIVE, { heldOptions }));
+    const { view } = setup;
+    const optionValue = view.dom.querySelector<HTMLElement>('.cm-directive-value-role-option')!;
+
+    act(() => {
+      optionValue.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }),
+      );
+    });
+    await flushBubbleOpen();
+    expect(optionField().textContent).toBe('Loading…');
+
+    await act(async () => {
+      rejectFn(new Error('main-process ledger read failed'));
+      // Let the rejection handler's microtask run.
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(optionField().textContent).not.toBe('Loading…');
+    const rows = Array.from(document.querySelectorAll('.searchable-picker-row'));
+    // relationshipTagsSpec's full option set, unfiltered.
+    expect(rows.length).toBeGreaterThan(0);
+  });
+
+  it('a doc edit elsewhere re-fetches held options instead of serving a stale cached result for the same key', async () => {
+    const calls: number[] = [];
+    const heldOptions = () => {
+      calls.push(calls.length);
+      return Promise.resolve(['hates']);
+    };
+    const setup = track(makeView(`${LOSES_DIRECTIVE} x`, { heldOptions }));
+    const { view } = setup;
+    const optionValue = view.dom.querySelector<HTMLElement>('.cm-directive-value-role-option')!;
+
+    act(() => {
+      optionValue.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }),
+      );
+    });
+    await flushBubbleOpen();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(calls.length).toBe(1);
+
+    // Edit the document strictly AFTER the directive — its own `from`
+    // (and so the bubble's anchor) doesn't shift, so the
+    // (trackId, holder, observer, anchor) cache key is unchanged. Only the
+    // document itself changed, so the cache must not silently serve the
+    // old result.
+    act(() => {
+      view.dispatch({ changes: { from: view.state.doc.length, insert: ' y' } });
+    });
+    await flushBubbleOpen();
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(calls.length).toBe(2);
+  });
+});
+
+describe('relationship bubble — Create row only offered for an Add action', () => {
+  const GAINS_TEMPLATE = relationshipTagsSpec.actions.find((a) => a.key === 'gains')!.template;
+  const GAINS_DIRECTIVE = serialiseTemplate('tg01', 'gains', GAINS_TEMPLATE, {
+    holder: '[[c3d4]]',
+    observer: '[[a1b2]]',
+    reason: 'signed the deal',
+  });
+  const LOSES_TEMPLATE = relationshipTagsSpec.actions.find((a) => a.key === 'loses')!.template;
+  const LOSES_DIRECTIVE = serialiseTemplate('tg01', 'loses', LOSES_TEMPLATE, {
+    holder: '[[c3d4]]',
+    observer: '[[a1b2]]',
+    reason: 'a falling out',
+  });
+
+  function optionField(): HTMLElement {
+    return document.querySelector('.relationship-bubble-field')!;
+  }
+
+  it('a gains (add) blank offers Create for an unmatched tag', async () => {
+    const createOption = vi.fn().mockResolvedValue({ key: 'rival' });
+    const setup = track(makeView(GAINS_DIRECTIVE, { createOption }));
+    const { view } = setup;
+    const optionValue = view.dom.querySelector<HTMLElement>('.cm-directive-value-role-option')!;
+    act(() => {
+      optionValue.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }),
+      );
+    });
+    await flushBubbleOpen();
+
+    act(() => {
+      fireEvent.change(bubbleInput(), { target: { value: 'rival' } });
+    });
+
+    expect(optionField().textContent).toContain('Create');
+  });
+
+  it('a loses (remove) blank never offers Create, even for an unmatched tag, and never writes a duplicate option', async () => {
+    const createOption = vi.fn().mockResolvedValue({ key: 'married-2' });
+    // No `heldOptions` supplied — the option list falls back to every
+    // known option (unfiltered), which is exactly the case that used to
+    // let an unmatched query on a Remove blank offer to create one.
+    const setup = track(makeView(LOSES_DIRECTIVE, { createOption }));
+    const { view } = setup;
+    const optionValue = view.dom.querySelector<HTMLElement>('.cm-directive-value-role-option')!;
+    act(() => {
+      optionValue.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }),
+      );
+    });
+    await flushBubbleOpen();
+
+    act(() => {
+      fireEvent.change(bubbleInput(), { target: { value: 'married' } });
+    });
+
+    expect(optionField().textContent).not.toContain('Create');
+    expect(createOption).not.toHaveBeenCalled();
   });
 });
 

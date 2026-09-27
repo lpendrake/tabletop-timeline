@@ -6,11 +6,8 @@ import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
 import { fireEvent } from '@testing-library/react';
-import {
-  RelationshipBubble,
-  rankNoteOptions,
-  type RelationshipBubbleProps,
-} from '../relationship-bubble';
+import { RelationshipBubble, type RelationshipBubbleProps } from '../relationship-bubble';
+import { rankNoteOptions } from '../relationship-bubble-logic';
 import { computeCaretPlacement } from '../../../context-menu/caret-position';
 import { resolveTrackSpec } from '../../../../../shared/relationships';
 import {
@@ -59,6 +56,8 @@ function baseProps(overrides: Partial<RelationshipBubbleProps> = {}): Relationsh
     listMaxHeight: null,
     visible: true,
     tailOffset: 16,
+    listRef: { current: null },
+    bubbleRef: { current: null },
     ...overrides,
   };
 }

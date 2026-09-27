@@ -75,9 +75,11 @@ export interface RelationshipDirectivesHostConfig {
    * Whether this document is a note (undated) or an event. Passed through
    * to `interpretDirective` as `undated: place === 'note'` — a note may only
    * Set/Add, never Change/Shift/Remove (see `src/shared/relationships/AGENTS.md`).
-   * Defaults to `'event'` (the permissive context) when omitted.
+   * Required — every host must say which it is explicitly; there is no
+   * default, since silently defaulting to the permissive `'event'` context
+   * is exactly what let a note wrongly accept Change/Shift/Remove before.
    */
-  place?: 'note' | 'event';
+  place: 'note' | 'event';
   /** Data and callbacks the built-in fill-in bubble needs. Omit to still get a bubble with no note/option pickers wired up. */
   bubbles?: RelationshipBubbleOptions;
 }
@@ -209,7 +211,13 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       relationshipDirectives({
         readOnly: readOnlyRef.current,
         onOpenNote: (id) => relationshipDirectivesRef.current?.onOpenNote?.(id),
-        place: relationshipDirectivesRef.current?.place,
+        // `relationshipDirectives` prop is itself optional — when the host
+        // supplies no config at all (built-in tracks, no field-editing),
+        // there is no `place` to be explicit about, so this is the one
+        // spot that still defaults to the permissive 'event' context. Any
+        // host that DOES supply `RelationshipDirectivesHostConfig` must
+        // give `place` explicitly — it's a required field there.
+        place: relationshipDirectivesRef.current?.place ?? 'event',
       }),
     ];
     if (!readOnlyRef.current) {

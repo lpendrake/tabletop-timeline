@@ -377,9 +377,6 @@ function usePickerTabHandler(
   };
 }
 
-// Re-export rankNoteOptions for backwards compatibility
-export { rankNoteOptions } from './relationship-bubble-logic';
-
 function NotePickerField(props: RelationshipBubbleProps) {
   const {
     value,

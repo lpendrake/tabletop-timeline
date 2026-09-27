@@ -5,10 +5,16 @@
  * React component. Keeping this pure is what makes it unit-testable without
  * mounting a view (see CLAUDE.md — no business logic inside hooks/components).
  */
-import type { ParsedDirective, Role, ResolvedTrack } from '../../../../shared/relationships';
+import type {
+  ActionKind,
+  ParsedDirective,
+  Role,
+  ResolvedTrack,
+} from '../../../../shared/relationships';
 import { validateRoleValue, noteIdOf } from '../../../../shared/relationships';
 import { rankPickerOptions, recentsFirst, type PickerOption } from '../../searchable-picker';
 import { compareRanked, rankEntityMatch, type MatchRank } from '../../entity-match';
+import { EDGE_MARGIN, GAP, clampLeft } from '../../context-menu/caret-position';
 
 /** How a bubble field commit should move the bubble: to the next/previous blank, or hop over a filled one. */
 export type BubbleCommitDirection = 'advance' | 'back' | 'hop-next' | 'hop-prev';
@@ -161,6 +167,20 @@ export function shouldOfferCreateOption(query: string, matches: readonly PickerO
   return !matches.some((m) => (m.label ?? m.path).toLowerCase() === trimmed.toLowerCase());
 }
 
+/**
+ * Whether an option blank's directive action can offer "Create …" at all.
+ * Only an Add action mints a fresh option a note doesn't hold yet — a
+ * Remove (`loses`) blank only ever picks among options the ledger already
+ * shows as held, so typing an unrecognised tag there must never create one
+ * (creating on a `loses` blank silently wrote a duplicate, e.g.
+ * `married-2`, instead of just failing to match). `undefined` (unresolved
+ * track/action) is treated as "no", matching the current default of not
+ * offering create when the action can't be determined.
+ */
+export function allowsCreateOption(actionKind: ActionKind | undefined): boolean {
+  return actionKind === 'add';
+}
+
 /** Filters a track's options down to only those the host says are currently held. */
 export function filterHeldOptions(
   options: readonly PickerOption[],
@@ -304,11 +324,10 @@ export function computeTailOffset(
  * helper only ever flips wholesale between a side that fits and one that
  * doesn't, with no notion of a shrinkable list — it can't be reused (or
  * edited; it's shared by other popups) for "shrink the list first, flip only
- * if that's not enough either". `EDGE_MARGIN`/`GAP` are duplicated from that
- * file's own (unexported) constants of the same name and meaning.
+ * if that's not enough either". `EDGE_MARGIN`/`GAP` are imported from that
+ * file rather than redefined here, so the two popups can never drift apart
+ * on spacing.
  */
-const EDGE_MARGIN = 8;
-const GAP = 2;
 
 /** How many rows of the option list must stay visible after a shrink. */
 export const MIN_VISIBLE_LIST_ROWS = 3;
@@ -383,8 +402,7 @@ export function planBubbleFit(
   return { side: 'below', listMaxHeight: Math.max(0, space.below - chromeHeight) };
 }
 
-/** Clamps the bubble's `left` so it stays within the viewport, mirroring `caret-position.ts`'s own (unexported) `clampLeft`. */
+/** Clamps the bubble's `left` so it stays within the viewport — thin wrapper over `caret-position.ts`'s `clampLeft`, which takes a `Size` rather than a bare width. */
 export function clampBubbleLeft(caretX: number, popupWidth: number, viewportWidth: number): number {
-  const max = viewportWidth - popupWidth - EDGE_MARGIN;
-  return Math.max(EDGE_MARGIN, Math.min(caretX, max));
+  return clampLeft(caretX, popupWidth, { width: viewportWidth, height: 0 });
 }

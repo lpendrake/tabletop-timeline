@@ -50,9 +50,11 @@ export interface RelationshipDirectivesConfig {
    * Whether this document is a note (undated) or an event. A note has no
    * order, so Change/Shift (`adjust`) and Remove are rejected there — see
    * `src/shared/relationships/AGENTS.md`'s notes-vs-events invariant.
-   * Defaults to `'event'` (the permissive context) when omitted.
+   * Required — every host must say which it is explicitly; there is no
+   * default, since silently defaulting to the permissive `'event'` context
+   * is exactly what let a note wrongly accept Change/Shift/Remove before.
    */
-  place?: 'note' | 'event';
+  place: 'note' | 'event';
 }
 
 interface DirectiveContext {
@@ -382,7 +384,7 @@ function buildDecorations(state: EditorState, config: RelationshipDirectivesConf
   const { library, defaultReason } = state.field(directiveContextField);
   const labelForNote = labelForNoteFrom(state);
   const readOnly = Boolean(state.readOnly) || Boolean(config.readOnly);
-  const place = config.place ?? 'event';
+  const place = config.place;
 
   const builder = new RangeSetBuilder<Decoration>();
   for (const d of directivesIn(state)) {
@@ -453,7 +455,7 @@ function makeDirectiveEnterKeymap(config: RelationshipDirectivesConfig): Extensi
       library,
       defaultReason,
       labelForNoteFrom(view.state),
-      config.place ?? 'event',
+      config.place,
     );
     if (built.kind === 'sentence') {
       const role = firstEditRole(built.parts);
@@ -536,7 +538,7 @@ const directiveTheme = EditorView.theme({
  * only — hosts must omit this extension in source mode (see
  * `markdown-editor.tsx`'s `buildModeExtensions`).
  */
-export function relationshipDirectives(config: RelationshipDirectivesConfig = {}): Extension {
+export function relationshipDirectives(config: RelationshipDirectivesConfig): Extension {
   const field = StateField.define<DecorationSet>({
     create: (state) => buildDecorations(state, config),
     update(value, tr) {

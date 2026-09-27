@@ -200,6 +200,7 @@ describe('MarkdownEditor', () => {
         relationshipDirectives={{
           library: { custom: [], optionAdditions: {} },
           defaultReason: 'Unspecified',
+          place: 'event',
         }}
       />,
     );
@@ -214,6 +215,7 @@ describe('MarkdownEditor', () => {
         relationshipDirectives={{
           library: { custom: [], optionAdditions: {} },
           defaultReason: 'Unspecified',
+          place: 'event',
         }}
       />,
     );

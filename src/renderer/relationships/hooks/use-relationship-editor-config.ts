@@ -24,8 +24,12 @@ export interface UseRelationshipEditorConfigOptions {
   /** Event editor: the event's current title (follows renames). Notes: 'Unspecified'. */
   defaultReason: string;
   onOpenNote?: (id: string) => void;
-  /** Whether this host is a note (undated) or an event. Defaults to `'event'` when omitted. */
-  place?: 'note' | 'event';
+  /**
+   * Whether this host is a note (undated) or an event. Required — every
+   * caller must say which it is explicitly (see
+   * `RelationshipDirectivesHostConfig.place`).
+   */
+  place: 'note' | 'event';
   /**
    * The notes editor's currently open note (folder/path). Used to derive
    * both `currentNoteId` (the "already linked" recent-notes ordering) and

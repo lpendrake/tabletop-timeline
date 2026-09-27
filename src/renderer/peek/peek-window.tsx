@@ -13,6 +13,7 @@ import { createPortal } from 'react-dom';
 import { MarkdownPreview } from '../shared/markdown-editor/markdown-preview';
 import type { RelationshipDirectivesHostConfig } from '../shared/markdown-editor/markdown-editor';
 import { parseMd } from './parse-md';
+import { placeForPeekPath } from './place-for-path';
 
 export interface PeekWindowProps {
   path: string;
@@ -259,6 +260,13 @@ export const PeekWindow = forwardRef<PeekWindowHandle, PeekWindowProps>(function
                 ? {
                     ...relationshipDirectives,
                     defaultReason: loadState.title || relationshipDirectives.defaultReason,
+                    // Peek shows both notes and events through the same
+                    // read-only preview — derive which this file is from
+                    // its own campaign-relative path so it validates
+                    // directives the same way the real editor would,
+                    // instead of always assuming the permissive 'event'
+                    // context.
+                    place: placeForPeekPath(path),
                   }
                 : undefined
             }

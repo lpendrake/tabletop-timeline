@@ -44,6 +44,7 @@ describe('CardExpansion — relationship directives (read-only)', () => {
           relationshipDirectives={{
             library: { custom: [], optionAdditions: {} },
             defaultReason: 'Unspecified',
+            place: 'event',
           }}
         />,
       );

@@ -238,6 +238,7 @@ function CardItem({
               library: relationshipLibrary,
               defaultReason: card.event.title || NOTE_DEFAULT_REASON,
               onOpenNote: onOpenById,
+              place: 'event',
             }
           : undefined
       }

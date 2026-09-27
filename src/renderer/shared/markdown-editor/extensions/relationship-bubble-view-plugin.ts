@@ -23,6 +23,7 @@ import type { PickerOption } from '../../searchable-picker';
 import { getCaretRect, type CaretRect } from './editor-context-menu';
 import { getDirectiveRoleElement } from './relationship-directives';
 import {
+  allowsCreateOption,
   bubbleVerticalAnchors,
   clampBubbleLeft,
   computeTailOffset,
@@ -172,7 +173,12 @@ class RelationshipBubblePlugin {
   /** Bumped on every `heldOptions` request; a response is discarded once it no longer matches. */
   private heldOptionsToken = 0;
   private heldOptionsPendingKey: string | null = null;
-  private heldOptionsCache: { key: string; keys: string[] } | null = null;
+  /**
+   * `keys: null` caches a lookup that failed (or hasn't been asked for)
+   * as "show all options unfiltered" — see `heldOptionsFor`'s catch
+   * handler.
+   */
+  private heldOptionsCache: { key: string; keys: string[] | null } | null = null;
 
   constructor(
     readonly view: EditorView,
@@ -185,6 +191,17 @@ class RelationshipBubblePlugin {
   update(update: ViewUpdate): void {
     const before = update.startState.field(bubbleStateField, false);
     const after = update.state.field(bubbleStateField, false);
+    if (update.docChanged) {
+      // The cache key doesn't include the document, so an edit elsewhere
+      // (e.g. a directive setting the same holder/observer being added or
+      // removed) can silently invalidate a cached or in-flight fold
+      // without changing (trackId, holder, observer, anchor). Clearing the
+      // cache and bumping the token forces the next render to re-fetch
+      // instead of serving stale held-option keys.
+      this.heldOptionsCache = null;
+      this.heldOptionsPendingKey = null;
+      this.heldOptionsToken++;
+    }
     if (before !== after || update.docChanged || update.geometryChanged || update.viewportChanged) {
       this.sync();
     }
@@ -269,11 +286,17 @@ class RelationshipBubblePlugin {
    * bubble: returns the cached result for this exact (track, holder,
    * observer, anchor) query when there is one, otherwise kicks off (at
    * most one in flight per key) an async fetch via the host's
-   * `heldOptions` and reports loading until it resolves. A response is
-   * applied only while `heldOptionsToken` still matches the request that
-   * produced it — a later call (a different blank, a doc edit) bumps the
-   * token first, so a stale response is silently dropped instead of
-   * clobbering newer state.
+   * `heldOptions` and reports loading until it resolves or rejects. A
+   * response is applied only while `heldOptionsToken` still matches the
+   * request that produced it — a later call (a different blank) bumps the
+   * token first, and a doc edit bumps it too (see `update()`, which also
+   * clears the cache — its key doesn't include the document), so a stale
+   * response is silently dropped instead of clobbering newer state.
+   *
+   * A rejected lookup (e.g. the main-process ledger read failed) is
+   * cached as `keys: null` — "show all options unfiltered" — instead of
+   * being left pending forever, which otherwise stuck the field on its
+   * "Loading…" state with no way out.
    */
   private heldOptionsFor(
     ctx: RelationshipBubbleHostContext,
@@ -288,12 +311,20 @@ class RelationshipBubblePlugin {
       this.heldOptionsPendingKey = key;
       const token = ++this.heldOptionsToken;
       const doc = this.view.state.doc.toString();
-      void ctx.heldOptions({ ...q, doc }).then((keys) => {
-        if (token !== this.heldOptionsToken) return; // stale — a newer request has since superseded this one
-        this.heldOptionsCache = { key, keys };
-        if (this.heldOptionsPendingKey === key) this.heldOptionsPendingKey = null;
-        this.sync();
-      });
+      void ctx.heldOptions({ ...q, doc }).then(
+        (keys) => {
+          if (token !== this.heldOptionsToken) return; // stale — a newer request has since superseded this one
+          this.heldOptionsCache = { key, keys };
+          if (this.heldOptionsPendingKey === key) this.heldOptionsPendingKey = null;
+          this.sync();
+        },
+        () => {
+          if (token !== this.heldOptionsToken) return; // stale — a newer request has since superseded this one
+          this.heldOptionsCache = { key, keys: null };
+          if (this.heldOptionsPendingKey === key) this.heldOptionsPendingKey = null;
+          this.sync();
+        },
+      );
     }
     return { keys: null, loading: true };
   }
@@ -334,7 +365,9 @@ class RelationshipBubblePlugin {
       listRef: this.listRef,
       bubbleRef: this.bubbleRef,
       onHolderChosenWithoutDefault: ctx.onHolderChosenWithoutDefault,
-      createOption: ctx.createOption,
+      // Only an Add action offers "Create …" — see `allowsCreateOption`'s
+      // doc comment for why a Remove blank must never mint a new option.
+      createOption: allowsCreateOption(action?.kind) ? ctx.createOption : undefined,
       onCommit: (v: string, direction: BubbleCommitDirection) =>
         this.commit(anchor, role, v, direction),
       onClose: () => {

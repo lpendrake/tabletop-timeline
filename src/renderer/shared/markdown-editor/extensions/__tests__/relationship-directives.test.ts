@@ -81,7 +81,7 @@ interface Setup {
 
 function makeView(
   doc: string,
-  config: RelationshipDirectivesConfig = {},
+  config: RelationshipDirectivesConfig = { place: 'event' },
   options: {
     defaultReason?: string;
     labels?: Map<string, string>;
@@ -188,7 +188,7 @@ function fireKey(view: EditorView, key: string): void {
 
 describe('relationship directives — readable rendering', () => {
   it('renders only the readable sentence, no ids or envelope', () => {
-    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, {}, { labels: LABELS }));
+    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }));
     const el = block(setup.view);
     expect(el.textContent).toBe(
       'Rep change: -2 White Tigers rep for The Party — attacked their warehouse',
@@ -199,7 +199,7 @@ describe('relationship directives — readable rendering', () => {
   });
 
   it('never reveals raw text when the caret moves across or a selection covers the block', () => {
-    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, {}, { labels: LABELS }));
+    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }));
     const { view } = setup;
     const before = block(view).outerHTML;
     const lineTextBefore = view.state.doc.toString();
@@ -216,7 +216,9 @@ describe('relationship directives — readable rendering', () => {
   });
 
   it('caret moves over a block as one unit', () => {
-    const setup = track(makeView(`x ${FULL_CHANGE_DIRECTIVE} y`, {}, { labels: LABELS }));
+    const setup = track(
+      makeView(`x ${FULL_CHANGE_DIRECTIVE} y`, { place: 'event' }, { labels: LABELS }),
+    );
     const { view } = setup;
     const from = 2;
     const to = 2 + FULL_CHANGE_DIRECTIVE.length;
@@ -229,7 +231,9 @@ describe('relationship directives — readable rendering', () => {
 
 describe('relationship directives — DOM is not a data source', () => {
   it('block click handlers use editor state, not DOM attributes', () => {
-    const setup = track(makeView(`before ${UNFINISHED_CHANGE_DIRECTIVE}`, {}, { labels: LABELS }));
+    const setup = track(
+      makeView(`before ${UNFINISHED_CHANGE_DIRECTIVE}`, { place: 'event' }, { labels: LABELS }),
+    );
     const { view } = setup;
     const el = block(view);
 
@@ -254,7 +258,7 @@ describe('relationship directives — DOM is not a data source', () => {
 describe('relationship directives — deletion', () => {
   it('Backspace after a block selects it, a second Backspace deletes it; Ctrl+Z restores', () => {
     const original = `${FULL_CHANGE_DIRECTIVE} tail`;
-    const setup = track(makeView(original, {}, { labels: LABELS }));
+    const setup = track(makeView(original, { place: 'event' }, { labels: LABELS }));
     const { view } = setup;
     const to = FULL_CHANGE_DIRECTIVE.length;
 
@@ -273,7 +277,7 @@ describe('relationship directives — deletion', () => {
 
   it('Delete before a block selects then deletes', () => {
     const original = `head ${FULL_CHANGE_DIRECTIVE}`;
-    const setup = track(makeView(original, {}, { labels: LABELS }));
+    const setup = track(makeView(original, { place: 'event' }, { labels: LABELS }));
     const { view } = setup;
     const from = 'head '.length;
 
@@ -288,7 +292,7 @@ describe('relationship directives — deletion', () => {
   });
 
   it('clicking the delete cross removes the directive in one undo step', () => {
-    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, {}, { labels: LABELS }));
+    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }));
     const { view } = setup;
     const cross = block(view).querySelector<HTMLElement>('.cm-directive-cross');
     expect(cross).not.toBeNull();
@@ -358,7 +362,7 @@ describe('relationship directives — Ctrl/Cmd+click reliability on a value', ()
     // mutation that happens strictly between mousedown and click, in a
     // browser sometimes racing with (or pre-empting) the click that would
     // otherwise reach the value span's own listener.
-    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, {}, { labels: LABELS }));
+    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }));
     const { view } = setup;
     const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
 
@@ -370,7 +374,7 @@ describe('relationship directives — Ctrl/Cmd+click reliability on a value', ()
   });
 
   it('guards the modified pointerdown so CodeMirror never gets a chance to move the caret', () => {
-    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, {}, { labels: LABELS }));
+    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }));
     const { view } = setup;
     const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
 
@@ -379,7 +383,7 @@ describe('relationship directives — Ctrl/Cmd+click reliability on a value', ()
   });
 
   it('a plain pointerdown on a value is also guarded — see bug 12 below: CodeMirror must never get first crack at it', () => {
-    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, {}, { labels: LABELS }));
+    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }));
     const { view } = setup;
     const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
 
@@ -388,7 +392,7 @@ describe('relationship directives — Ctrl/Cmd+click reliability on a value', ()
   });
 
   it('a plain pointerdown on the block wording (not a value) is guarded too', () => {
-    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, {}, { labels: LABELS }));
+    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }));
     const { view } = setup;
     const el = block(view);
     // Fire on the block root itself (the "wording" click target), not a `.cm-directive-value` child.
@@ -398,7 +402,9 @@ describe('relationship directives — Ctrl/Cmd+click reliability on a value', ()
 
   it('Ctrl/Cmd+click reliably opens the note — pointerdown guarded, click never lands on the wrong thing', () => {
     const onOpenNote = vi.fn();
-    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, { onOpenNote }, { labels: LABELS }));
+    const setup = track(
+      makeView(FULL_CHANGE_DIRECTIVE, { onOpenNote, place: 'event' }, { labels: LABELS }),
+    );
     const { view } = setup;
     const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
 
@@ -429,7 +435,7 @@ describe('relationship directives — Ctrl/Cmd+click reliability on a value', ()
   // pointerdown on the block (not just modified ones) keeps CodeMirror from
   // ever touching the selection, so a single click is reliable.
   it('fixes bug 12: guarding the plain pointerdown keeps the selection untouched, so a single click reliably opens the bubble', () => {
-    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, {}, { labels: LABELS }));
+    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }));
     const { view } = setup;
     const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
 
@@ -449,7 +455,9 @@ describe('relationship directives — Ctrl/Cmd+click reliability on a value', ()
   });
 
   it('fixes bug 12: guarding a plain pointerdown on the wording (no value under the cursor) also keeps a single click working', () => {
-    const setup = track(makeView(UNFINISHED_CHANGE_DIRECTIVE, {}, { labels: LABELS }));
+    const setup = track(
+      makeView(UNFINISHED_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }),
+    );
     const { view } = setup;
     const el = block(view);
 
@@ -463,7 +471,9 @@ describe('relationship directives — Ctrl/Cmd+click reliability on a value', ()
 
   it('plain click still opens the fill-in bubble; Ctrl/Cmd+click never does', () => {
     const onOpenNote = vi.fn();
-    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, { onOpenNote }, { labels: LABELS }));
+    const setup = track(
+      makeView(FULL_CHANGE_DIRECTIVE, { onOpenNote, place: 'event' }, { labels: LABELS }),
+    );
     const { view } = setup;
     const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
 
@@ -483,7 +493,9 @@ describe('relationship directives — Ctrl/Cmd+click reliability on a value', ()
 
 describe('relationship directives — editing callbacks', () => {
   it('clicking a value opens the bubble on its role; clicking wording targets the first empty blank', () => {
-    const setup = track(makeView(UNFINISHED_CHANGE_DIRECTIVE, {}, { labels: LABELS }));
+    const setup = track(
+      makeView(UNFINISHED_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }),
+    );
     const { view } = setup;
 
     const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
@@ -497,7 +509,9 @@ describe('relationship directives — editing callbacks', () => {
 
   it('Ctrl+click on a holder calls onOpenNote; plain click opens the bubble instead', () => {
     const onOpenNote = vi.fn();
-    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, { onOpenNote }, { labels: LABELS }));
+    const setup = track(
+      makeView(FULL_CHANGE_DIRECTIVE, { onOpenNote, place: 'event' }, { labels: LABELS }),
+    );
     const { view } = setup;
     const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
 
@@ -512,7 +526,9 @@ describe('relationship directives — editing callbacks', () => {
   });
 
   it('unfinished blanks show their prompt with the attention class, and the block outlined in warning', () => {
-    const setup = track(makeView(UNFINISHED_CHANGE_DIRECTIVE, {}, { labels: LABELS }));
+    const setup = track(
+      makeView(UNFINISHED_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }),
+    );
     const el = block(setup.view);
     const amountValue = el.querySelector<HTMLElement>('.cm-directive-value-role-amount')!;
     expect(amountValue.classList.contains('cm-directive-value-attention')).toBe(true);
@@ -523,7 +539,7 @@ describe('relationship directives — editing callbacks', () => {
   });
 
   it('a complete, valid directive gets neither the warning nor the danger outline class', () => {
-    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, {}, { labels: LABELS }));
+    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }));
     const el = block(setup.view);
     expect(el.classList.contains('cm-directive-unfinished')).toBe(false);
     expect(el.classList.contains('cm-directive-error')).toBe(false);
@@ -531,7 +547,11 @@ describe('relationship directives — editing callbacks', () => {
 
   it('empty reason shows the host default reason', () => {
     const withHost = track(
-      makeView(EMPTY_REASON_DIRECTIVE, {}, { labels: LABELS, defaultReason: 'Battle of Dawn' }),
+      makeView(
+        EMPTY_REASON_DIRECTIVE,
+        { place: 'event' },
+        { labels: LABELS, defaultReason: 'Battle of Dawn' },
+      ),
     );
     const reasonValue = block(withHost.view).querySelector<HTMLElement>(
       '.cm-directive-value-role-reason',
@@ -539,7 +559,11 @@ describe('relationship directives — editing callbacks', () => {
     expect(reasonValue.textContent).toBe('Battle of Dawn');
 
     const withoutHost = track(
-      makeView(EMPTY_REASON_DIRECTIVE, {}, { labels: LABELS, dispatchContext: false }),
+      makeView(
+        EMPTY_REASON_DIRECTIVE,
+        { place: 'event' },
+        { labels: LABELS, dispatchContext: false },
+      ),
     );
     const defaultReasonValue = block(withoutHost.view).querySelector<HTMLElement>(
       '.cm-directive-value-role-reason',
@@ -583,7 +607,7 @@ describe('relationship directives — editing callbacks', () => {
 
 describe('relationship directives — errors', () => {
   it('unknown track shows raw content with error border and title', () => {
-    const setup = track(makeView(UNKNOWN_TRACK_DIRECTIVE, {}, { labels: LABELS }));
+    const setup = track(makeView(UNKNOWN_TRACK_DIRECTIVE, { place: 'event' }, { labels: LABELS }));
     const el = block(setup.view);
     expect(el.classList.contains('cm-directive-error')).toBe(true);
     expect(el.textContent).toBe(UNKNOWN_TRACK_DIRECTIVE);
@@ -591,7 +615,7 @@ describe('relationship directives — errors', () => {
   });
 
   it('unknown option shows the sentence with the bad value marked, and the block outlined in danger', () => {
-    const setup = track(makeView(UNKNOWN_OPTION_DIRECTIVE, {}, { labels: LABELS }));
+    const setup = track(makeView(UNKNOWN_OPTION_DIRECTIVE, { place: 'event' }, { labels: LABELS }));
     const el = block(setup.view);
     expect(el.classList.contains('cm-directive-error')).toBe(true);
     expect(el.textContent).toContain('relationship: boss →');
@@ -605,7 +629,7 @@ describe('relationship directives — errors', () => {
 describe('relationship directives — wiki-link interop', () => {
   it('wiki-link decorations never render inside a block', () => {
     const doc = `See [[e5f6]] also ${FULL_CHANGE_DIRECTIVE}`;
-    const setup = track(makeView(doc, {}, { labels: LABELS, withWikiLinks: {} }));
+    const setup = track(makeView(doc, { place: 'event' }, { labels: LABELS, withWikiLinks: {} }));
     const { view } = setup;
     const el = block(view);
     expect(el.querySelector('.cm-note-link')).toBeNull();
@@ -616,8 +640,12 @@ describe('relationship directives — wiki-link interop', () => {
 
 describe('relationship directives — per-view role element registry', () => {
   it('scopes registered blank elements per EditorView, even for identical documents', () => {
-    const setupA = track(makeView(UNFINISHED_CHANGE_DIRECTIVE, {}, { labels: LABELS }));
-    const setupB = track(makeView(UNFINISHED_CHANGE_DIRECTIVE, {}, { labels: LABELS }));
+    const setupA = track(
+      makeView(UNFINISHED_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }),
+    );
+    const setupB = track(
+      makeView(UNFINISHED_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }),
+    );
 
     const elA = getDirectiveRoleElement(setupA.view, 0, 'holder');
     const elB = getDirectiveRoleElement(setupB.view, 0, 'holder');
@@ -648,7 +676,7 @@ describe('relationship directives — read-only', () => {
     const setup = track(
       makeView(
         FULL_CHANGE_DIRECTIVE,
-        { readOnly: true, onOpenNote },
+        { readOnly: true, onOpenNote, place: 'event' },
         { labels: LABELS, readOnly: true },
       ),
     );

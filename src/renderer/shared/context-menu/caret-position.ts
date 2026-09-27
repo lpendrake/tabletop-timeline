@@ -27,10 +27,10 @@ export interface CaretPlacement {
 }
 
 /** Minimum gap kept between the popup and the edge of the viewport. */
-const EDGE_MARGIN = 8;
+export const EDGE_MARGIN = 8;
 
 /** Gap kept between the popup and the line it's anchored to. */
-const GAP = 2;
+export const GAP = 2;
 
 /**
  * Computes where a caret-anchored popup should open given the rect of the
@@ -101,7 +101,7 @@ function aboveSpace(lineRect: Rect, viewport: Size): { bottom: number; maxHeight
   return { bottom, maxHeight: Math.max(0, lineRect.top - GAP - EDGE_MARGIN) };
 }
 
-function clampLeft(caretX: number, popupWidth: number, viewport: Size): number {
+export function clampLeft(caretX: number, popupWidth: number, viewport: Size): number {
   const max = viewport.width - popupWidth - EDGE_MARGIN;
   return Math.max(EDGE_MARGIN, Math.min(caretX, max));
 }
