@@ -19,6 +19,8 @@ export type DirectiveProblemCode =
   | 'unknown-rung'
   | 'wrong-type'
   | 'zero-amount'
+  | 'out-of-range'
+  | 'not-integer'
   | 'not-allowed-in-note';
 
 /** Action kinds allowed in a note (undated) vs an event — see AGENTS.md. */
@@ -151,8 +153,7 @@ export function interpretDirective(
     const raw = roleValue(d, 'amount') ?? '';
     const result = validateRoleValue('amount', raw, track);
     if (!result.ok) {
-      const code = result.message === 'Amount cannot be zero' ? 'zero-amount' : 'wrong-type';
-      problems.push({ role: 'amount', code, message: result.message });
+      problems.push({ role: 'amount', code: result.code, message: result.message });
     } else {
       op = { op: 'adjust', by: result.value };
     }
@@ -174,7 +175,7 @@ export function interpretDirective(
       const raw = roleValue(d, 'value') ?? '';
       const result = validateRoleValue('value', raw, track);
       if (!result.ok) {
-        problems.push({ role: 'value', code: 'wrong-type', message: result.message });
+        problems.push({ role: 'value', code: result.code, message: result.message });
       } else {
         op = { op: 'set', value: result.value };
       }

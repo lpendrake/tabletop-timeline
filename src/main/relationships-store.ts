@@ -11,13 +11,11 @@
 
 import type { Ledger, RelationshipDelta, TrackLibrary } from '../shared/relationships/index.js';
 import type { ParsedDirective } from '../shared/relationships/index.js';
+import type { LedgerKeyTriple } from '../shared/relationships/index.js';
 import {
   EMPTY_TRACK_LIBRARY,
-  interpretDirective,
-  noteIdOf,
-  parseDirectives,
-  resolveTrack,
-  roleValue,
+  deltasForFile,
+  splitLedgerKey,
 } from '../shared/relationships/index.js';
 import type { InvalidDirectiveEntry, LedgersAs } from '../shared/relationships/ipc-types.js';
 
@@ -36,13 +34,7 @@ export interface RelationshipFileInput {
   noteId?: string;
 }
 
-export type { InvalidDirectiveEntry, LedgersAs };
-
-export interface LedgerKeyTriple {
-  holder: string;
-  observer: string;
-  track: string;
-}
+export type { InvalidDirectiveEntry, LedgersAs, LedgerKeyTriple };
 
 export interface StoreChangeResult {
   touched: LedgerKeyTriple[];
@@ -56,23 +48,6 @@ export interface StoreChangeResult {
 export interface KnownNote {
   path: string;
   id: string;
-}
-
-const KEY_SEP = '::';
-
-function ledgerKey(holder: string, observer: string, track: string): string {
-  return `${holder}${KEY_SEP}${observer}${KEY_SEP}${track}`;
-}
-
-function splitKey(key: string): LedgerKeyTriple {
-  const [holder, observer, track] = key.split(KEY_SEP);
-  return { holder, observer, track };
-}
-
-function pushTo<K, V>(map: Map<K, V[]>, key: K, value: V): void {
-  const arr = map.get(key);
-  if (arr) arr.push(value);
-  else map.set(key, [value]);
 }
 
 function deltaIdentity(d: RelationshipDelta): string {
@@ -141,6 +116,10 @@ export class RelationshipsStore {
     const prevId = this.noteIdByPath.get(path);
     if (prevId === id) return { pathIdChanged: false };
 
+    // A path claiming a different id than before: this is only a safety net
+    // for hand-edited frontmatter (a note's id never changes otherwise), so
+    // don't "fix" this by skipping the re-derive of files still referencing
+    // the old id — dropping it here is what lets `updateFile` notice.
     if (prevId !== undefined) {
       const prevSet = this.pathsByNoteId.get(prevId);
       if (prevSet) {
@@ -254,7 +233,7 @@ export class RelationshipsStore {
     const invalidAfter = this.invalidEntries.get(path);
     const invalidChanged = !sameInvalidEntries(invalidBefore, invalidAfter);
 
-    return { touched: [...touched].map(splitKey), invalidChanged, knownNotesChanged };
+    return { touched: [...touched].map(splitLedgerKey), invalidChanged, knownNotesChanged };
   }
 
   removeFile(path: string): StoreChangeResult {
@@ -270,7 +249,7 @@ export class RelationshipsStore {
     const invalidChanged = !sameInvalidEntries(invalidBefore, undefined);
     const knownNotesChanged = noteInfo !== null;
 
-    return { touched: [...touched].map(splitKey), invalidChanged, knownNotesChanged };
+    return { touched: [...touched].map(splitLedgerKey), invalidChanged, knownNotesChanged };
   }
 
   ledgers(): Ledger[] {
@@ -358,7 +337,7 @@ export class RelationshipsStore {
       if (survivors.length === 0) {
         this.ledgerObjects.delete(key);
       } else {
-        const { holder, observer, track } = splitKey(key);
+        const { holder, observer, track } = splitLedgerKey(key);
         this.ledgerObjects.set(key, { holder, observer, track, deltas: survivors });
       }
     }
@@ -402,92 +381,21 @@ export class RelationshipsStore {
     const { path, source, isEvent, epochSeconds, title } = fileInput;
     this.fileInputs.set(path, fileInput);
 
-    const { directives, errors } = parseDirectives(source);
+    const { directives, ledgers, invalid, referencedNoteIds } = deltasForFile(
+      { path, source, isEvent, epochSeconds },
+      { library: this.library, isKnownNote: (id) => this.isKnownNote(id) },
+    );
     this.parsedByPath.set(path, { title, directives });
 
-    const invalid: InvalidDirectiveEntry[] = errors.map((e) => ({
-      path,
-      from: e.from,
-      to: e.to,
-      messages: [e.message],
-    }));
+    // Track every note referenced by a holder/observer role — regardless of
+    // whether the directive is otherwise valid — so a later change to that
+    // note's known-ness (created/deleted) knows to re-derive this file.
+    for (const noteId of referencedNoteIds) this.addReferencedBy(noteId, path);
 
-    const touched = new Set<string>();
-    const additions = new Map<string, RelationshipDelta[]>();
-    const noDate = isEvent && (epochSeconds === null || epochSeconds === undefined);
-
-    for (const d of directives) {
-      // Track every note referenced by a holder/observer role — regardless
-      // of whether the directive is otherwise valid — so a later change to
-      // that note's known-ness (created/deleted) knows to re-derive this file.
-      for (const role of ['holder', 'observer'] as const) {
-        const raw = roleValue(d, role);
-        if (raw === undefined) continue;
-        const noteId = noteIdOf(raw);
-        if (noteId !== null) this.addReferencedBy(noteId, path);
-      }
-
-      if (noDate) {
-        invalid.push({
-          path,
-          ordinal: d.ordinal,
-          from: d.from,
-          to: d.to,
-          messages: ['Event has no date'],
-        });
-        continue;
-      }
-
-      const at = isEvent ? (epochSeconds as number) : null;
-      const interpreted = interpretDirective(d, {
-        resolveTrack: (id) => resolveTrack(id, this.library),
-        isKnownNote: (id) => this.isKnownNote(id),
-        // Notes have no order — Change/Shift/Remove are event-only. See
-        // src/shared/relationships/AGENTS.md.
-        undated: !isEvent,
-      });
-
-      if (interpreted.status === 'unfinished') continue;
-
-      if (interpreted.status === 'invalid') {
-        invalid.push({
-          path,
-          ordinal: d.ordinal,
-          from: d.from,
-          to: d.to,
-          messages: interpreted.problems.map((p) => p.message),
-        });
-        continue;
-      }
-
-      const { holder, observer, trackId, op, reason } = interpreted;
-      const delta: RelationshipDelta = { ...op, at, declaredIn: { path, ordinal: d.ordinal } };
-      if (reason) delta.reason = reason;
-      const key = ledgerKey(holder, observer, trackId);
-      touched.add(key);
-      pushTo(additions, key, delta);
-
-      const track = resolveTrack(trackId, this.library);
-      if (track && track.kind === 'categorical' && (op.op === 'add' || op.op === 'remove')) {
-        const optSpec = track.optionFor(op.key);
-        if (optSpec?.mutual) {
-          const mirrorKey = ledgerKey(observer, holder, trackId);
-          const mirrorDelta: RelationshipDelta = {
-            ...op,
-            at,
-            declaredIn: { path, ordinal: d.ordinal },
-            mirrored: true,
-          };
-          if (reason) mirrorDelta.reason = reason;
-          touched.add(mirrorKey);
-          pushTo(additions, mirrorKey, mirrorDelta);
-        }
-      }
-    }
-
-    for (const [key, deltas] of additions) {
+    const touched = new Set(ledgers.keys());
+    for (const [key, deltas] of ledgers) {
       const existing = this.ledgerObjects.get(key);
-      const { holder, observer, track } = splitKey(key);
+      const { holder, observer, track } = splitLedgerKey(key);
       const merged = existing ? [...existing.deltas, ...deltas] : deltas;
       this.ledgerObjects.set(key, { holder, observer, track, deltas: merged });
     }

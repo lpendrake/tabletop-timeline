@@ -18,8 +18,6 @@ export const EMPTY_TRACK_LIBRARY: TrackLibrary = Object.freeze({
   optionAdditions: {},
 });
 
-const EMPTY_LIBRARY: TrackLibrary = EMPTY_TRACK_LIBRARY;
-
 /** Appends user-added categorical options to a spec's built-in options, ignoring duplicate keys. */
 export function withOptionAdditions(
   spec: TrackSpec,
@@ -60,7 +58,7 @@ function compileCached(id: TrackId, spec: TrackSpec, library: TrackLibrary): Res
  */
 export function resolveTrack(
   id: TrackId,
-  library: TrackLibrary = EMPTY_LIBRARY,
+  library: TrackLibrary = EMPTY_TRACK_LIBRARY,
 ): ResolvedTrack | null {
   const systemSpec = getSystemTrack(id);
   if (systemSpec) {
@@ -80,7 +78,7 @@ export function resolveTrack(
 }
 
 /** Lists every resolvable track: system tracks first, then custom, each in their declared order. */
-export function listTracks(library: TrackLibrary = EMPTY_LIBRARY): ResolvedTrack[] {
+export function listTracks(library: TrackLibrary = EMPTY_TRACK_LIBRARY): ResolvedTrack[] {
   const systemIds = new Set(SYSTEM_TRACKS.map((t) => t.id));
   const customIds = library.custom.map((t) => t.id).filter((id) => !systemIds.has(id));
   const ids = [...SYSTEM_TRACKS.map((t) => t.id), ...customIds];

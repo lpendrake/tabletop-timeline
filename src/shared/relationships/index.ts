@@ -80,6 +80,7 @@ export type {
   ReadablePart,
   ReadableContext,
   ValueValidation,
+  ValueValidationCode,
 } from './directives/index.js';
 export {
   parseDirectives,
@@ -103,3 +104,12 @@ export {
 
 // IPC contract types (shared shape between main and renderer)
 export type { InvalidDirectiveEntry, LedgersAs, AddOptionResult } from './ipc-types.js';
+
+// Per-file delta derivation (shared by the store and the renderer's Remove picker)
+export type {
+  FileToInterpret,
+  DeriveFileDeltasContext,
+  FileDeltas,
+  LedgerKeyTriple,
+} from './derive-file-deltas.js';
+export { deltasForFile, ledgerKey, splitLedgerKey } from './derive-file-deltas.js';

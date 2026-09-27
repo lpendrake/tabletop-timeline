@@ -67,24 +67,30 @@ describe('validation (pure)', () => {
   const track = resolveTrackSpec(pf2eReputationSpec);
 
   it('rejects a zero amount and non-numbers', () => {
-    expect(validateAmount('0', track)).toEqual({ ok: false, message: 'Amount cannot be zero' });
-    expect(validateAmount('abc', track)).toEqual({ ok: false, message: '"abc" is not a number' });
+    expect(validateAmount('0', track)).toMatchObject({
+      ok: false,
+      message: 'Amount cannot be zero',
+    });
+    expect(validateAmount('abc', track)).toMatchObject({
+      ok: false,
+      message: '"abc" is not a number',
+    });
     expect(validateAmount('-3', track)).toEqual({ ok: true, value: '-3' });
   });
 
   it('rejects a fractional amount on an integer-step track', () => {
-    expect(validateAmount('1.5', track)).toEqual({
+    expect(validateAmount('1.5', track)).toMatchObject({
       ok: false,
       message: '1.5 must be a whole number',
     });
   });
 
   it('rejects an out-of-range numeric value', () => {
-    expect(validateNumericValue('999', track)).toEqual({
+    expect(validateNumericValue('999', track)).toMatchObject({
       ok: false,
       message: '999 is out of range for PF2E Reputation',
     });
-    expect(validateNumericValue('x', track)).toEqual({
+    expect(validateNumericValue('x', track)).toMatchObject({
       ok: false,
       message: '"x" is not a number',
     });
@@ -92,8 +98,14 @@ describe('validation (pure)', () => {
   });
 
   it('rejects malformed decimal syntax (exponents, hex)', () => {
-    expect(validateAmount('1e3', track)).toEqual({ ok: false, message: '"1e3" is not a number' });
-    expect(validateAmount('0x10', track)).toEqual({ ok: false, message: '"0x10" is not a number' });
+    expect(validateAmount('1e3', track)).toMatchObject({
+      ok: false,
+      message: '"1e3" is not a number',
+    });
+    expect(validateAmount('0x10', track)).toMatchObject({
+      ok: false,
+      message: '"0x10" is not a number',
+    });
   });
 });
 

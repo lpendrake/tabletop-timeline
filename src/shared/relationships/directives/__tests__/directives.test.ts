@@ -611,10 +611,12 @@ describe('validateRoleValue: strict decimal syntax and integer-step tracks', () 
   it('rejects exponent and hex notation', () => {
     expect(validateRoleValue('amount', '1e3', pf2eReputation)).toEqual({
       ok: false,
+      code: 'wrong-type',
       message: '"1e3" is not a number',
     });
     expect(validateRoleValue('amount', '0x10', pf2eReputation)).toEqual({
       ok: false,
+      code: 'wrong-type',
       message: '"0x10" is not a number',
     });
   });
@@ -622,13 +624,31 @@ describe('validateRoleValue: strict decimal syntax and integer-step tracks', () 
   it('rejects a fractional amount on an integer-step numeric track', () => {
     expect(validateRoleValue('amount', '1.5', pf2eReputation)).toEqual({
       ok: false,
+      code: 'not-integer',
       message: '1.5 must be a whole number',
     });
   });
 
   it('rejects a fractional amount used as an ordinal adjust step', () => {
     // Ordinal steps are always integral rungs, regardless of the track's own step.
-    expect(validateRoleValue('amount', '2.5', attitude).ok).toBe(false);
+    const result = validateRoleValue('amount', '2.5', attitude);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe('not-integer');
+  });
+
+  it('rejects a zero amount with the zero-amount code', () => {
+    const result = validateRoleValue('amount', '0', pf2eReputation);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe('zero-amount');
+  });
+
+  it('rejects an out-of-range value with the out-of-range code', () => {
+    const result = validateRoleValue('value', '999999', pf2eReputation);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('out-of-range');
+      expect(result.message).toMatch(/out of range/);
+    }
   });
 
   it('accepts a valid integer amount and numeric value', () => {

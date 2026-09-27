@@ -11,7 +11,12 @@ import { ResolvedTrack } from '../resolve.js';
 /** Strict decimal syntax only — no exponents, no hex, no leading/trailing junk. */
 export const STRICT_DECIMAL_RE = /^[+-]?\d+(\.\d+)?$/;
 
-export type ValueValidation = { ok: true; value: number } | { ok: false; message: string };
+/** Why a role's raw text failed validation — passed straight through by callers, never re-derived from `message`. */
+export type ValueValidationCode = 'zero-amount' | 'wrong-type' | 'out-of-range' | 'not-integer';
+
+export type ValueValidation =
+  | { ok: true; value: number }
+  | { ok: false; code: ValueValidationCode; message: string };
 
 function requiresInteger(track: ResolvedTrack): boolean {
   return track.kind === 'ordinal' || (track.kind === 'numeric' && Number.isInteger(track.step));
@@ -29,22 +34,22 @@ export function validateRoleValue(
 ): ValueValidation {
   const trimmed = raw.trim();
   if (!STRICT_DECIMAL_RE.test(trimmed)) {
-    return { ok: false, message: `"${raw}" is not a number` };
+    return { ok: false, code: 'wrong-type', message: `"${raw}" is not a number` };
   }
   const n = Number(trimmed);
   if (!Number.isFinite(n)) {
-    return { ok: false, message: `"${raw}" is not a number` };
+    return { ok: false, code: 'wrong-type', message: `"${raw}" is not a number` };
   }
   if (requiresInteger(track) && !Number.isInteger(n)) {
-    return { ok: false, message: `${n} must be a whole number` };
+    return { ok: false, code: 'not-integer', message: `${n} must be a whole number` };
   }
   if (role === 'amount') {
-    if (n === 0) return { ok: false, message: 'Amount cannot be zero' };
+    if (n === 0) return { ok: false, code: 'zero-amount', message: 'Amount cannot be zero' };
     return { ok: true, value: n };
   }
   // role === 'value'
   if (!track.isValidValue(n)) {
-    return { ok: false, message: `${n} is out of range for ${track.name}` };
+    return { ok: false, code: 'out-of-range', message: `${n} is out of range for ${track.name}` };
   }
   return { ok: true, value: n };
 }
