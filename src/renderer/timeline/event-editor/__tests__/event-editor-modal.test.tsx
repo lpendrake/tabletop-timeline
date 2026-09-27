@@ -96,16 +96,16 @@ vi.mock('../../../relationships/editor-menu', () => ({
   buildRelationshipMenuItems: () => [],
 }));
 
-// Lets tests simulate "a relationship bubble is currently open" without
-// mounting a real CodeMirror view/bubble — set `bubbleOpenTarget` to the
-// element an Escape keydown should be treated as originating from inside
-// the (fake) open bubble.
-let bubbleOpenTarget: EventTarget | null = null;
-vi.mock('../../../shared/markdown-editor/extensions/relationship-bubble-view-plugin', () => ({
-  isRelationshipBubbleOpen: (target?: EventTarget | null) => {
-    if (bubbleOpenTarget === null) return false;
+// Lets tests simulate "a relationship directive form is currently open"
+// without mounting a real CodeMirror view/form — set `formOpenTarget` to
+// the element an Escape keydown should be treated as originating from
+// inside the (fake) open form.
+let formOpenTarget: EventTarget | null = null;
+vi.mock('../../../shared/markdown-editor/extensions/relationship-directive-form-plugin', () => ({
+  isRelationshipFormOpen: (target?: EventTarget | null) => {
+    if (formOpenTarget === null) return false;
     if (target === undefined) return true;
-    return target === bubbleOpenTarget;
+    return target === formOpenTarget;
   },
 }));
 
@@ -283,7 +283,7 @@ describe('EventEditorModal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     confirmMock.mockReset().mockResolvedValue(true);
-    bubbleOpenTarget = null;
+    formOpenTarget = null;
     Object.defineProperty(window, 'fsApi', {
       value: fsApiStub,
       configurable: true,
@@ -294,7 +294,7 @@ describe('EventEditorModal', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.useRealTimers();
-    bubbleOpenTarget = null;
+    formOpenTarget = null;
     teardown();
   });
 
@@ -481,17 +481,17 @@ describe('EventEditorModal', () => {
     expect(onSaved).toHaveBeenCalledTimes(1);
   });
 
-  it('Escape while a relationship bubble is open does not close (or save-and-close) the modal', async () => {
+  it('Escape while a relationship directive form is open does not close (or save-and-close) the modal', async () => {
     setup();
     const { onClose, onSaved } = await renderEdit();
     await dirtyBuffer();
 
-    const bubbleField = document.createElement('input');
-    document.body.appendChild(bubbleField);
-    bubbleOpenTarget = bubbleField;
+    const formField = document.createElement('input');
+    document.body.appendChild(formField);
+    formOpenTarget = formField;
 
     await act(async () => {
-      bubbleField.dispatchEvent(
+      formField.dispatchEvent(
         new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
       );
     });
@@ -501,7 +501,7 @@ describe('EventEditorModal', () => {
     expect(onSaved).not.toHaveBeenCalled();
     expect(timelinePort.updateEvent).not.toHaveBeenCalled();
 
-    bubbleField.remove();
+    formField.remove();
   });
 
   // ── Verify autosave delay is 500ms not 2000ms ──

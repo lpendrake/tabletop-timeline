@@ -37,10 +37,10 @@ import { dropLink, type DropLinkConfig } from './extensions/drop-link';
 import { editorContextMenu, type EditorMenuExtraItems } from './extensions/editor-context-menu';
 import { relationshipDirectives, setDirectiveContext } from './extensions/relationship-directives';
 import {
-  relationshipBubble,
-  type RelationshipBubbleHostContext,
-  type RelationshipBubbleOptions,
-} from './extensions/relationship-bubble-view-plugin';
+  relationshipDirectiveForm,
+  type RelationshipFormHostContext,
+  type RelationshipFormOptions,
+} from './extensions/relationship-directive-form-plugin';
 import { formattingKeymap } from './commands';
 import { EMPTY_TRACK_LIBRARY, NOTE_DEFAULT_REASON } from '../../../shared/relationships';
 import type { TrackLibrary } from '../../../shared/relationships';
@@ -80,8 +80,8 @@ export interface RelationshipDirectivesHostConfig {
    * is exactly what let a note wrongly accept Change/Shift/Remove before.
    */
   place: 'note' | 'event';
-  /** Data and callbacks the built-in fill-in bubble needs. Omit to still get a bubble with no note/option pickers wired up. */
-  bubbles?: RelationshipBubbleOptions;
+  /** Data and callbacks the built-in directive form needs. Omit to still get a form with no note/option pickers wired up. */
+  form?: RelationshipFormOptions;
 }
 
 export interface MarkdownEditorProps {
@@ -132,19 +132,19 @@ export interface MarkdownEditorProps {
   initialCursor?: number;
 }
 
-function makeBubbleHostContext(
+function makeFormHostContext(
   config: RelationshipDirectivesHostConfig | undefined,
-): RelationshipBubbleHostContext {
+): RelationshipFormHostContext {
   return {
     library: config?.library ?? EMPTY_TRACK_LIBRARY,
     defaultReason: config?.defaultReason ?? NOTE_DEFAULT_REASON,
-    noteOptions: () => config?.bubbles?.noteOptions() ?? [],
-    defaultHolderId: () => config?.bubbles?.defaultHolderId?.() ?? null,
-    currentNoteId: () => config?.bubbles?.currentNoteId?.() ?? null,
-    onHolderChosenWithoutDefault: config?.bubbles?.onHolderChosenWithoutDefault,
-    createOption: config?.bubbles?.createOption,
-    heldOptions: config?.bubbles?.heldOptions,
-    observerOptions: config?.bubbles?.observerOptions,
+    noteOptions: () => config?.form?.noteOptions() ?? [],
+    defaultHolderId: () => config?.form?.defaultHolderId?.() ?? null,
+    currentNoteId: () => config?.form?.currentNoteId?.() ?? null,
+    onHolderChosenWithoutDefault: config?.form?.onHolderChosenWithoutDefault,
+    createOption: config?.form?.createOption,
+    heldOptions: config?.form?.heldOptions,
+    observerOptions: config?.form?.observerOptions,
   };
 }
 
@@ -222,7 +222,9 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       }),
     ];
     if (!readOnlyRef.current) {
-      exts.push(relationshipBubble(() => makeBubbleHostContext(relationshipDirectivesRef.current)));
+      exts.push(
+        relationshipDirectiveForm(() => makeFormHostContext(relationshipDirectivesRef.current)),
+      );
     }
     return exts;
   }

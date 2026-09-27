@@ -40,7 +40,7 @@ function Host() {
     getDocText: () => '',
     confirm: vi.fn(),
   });
-  lastDefaultHolderId = relationshipDirectives.bubbles?.defaultHolderId?.();
+  lastDefaultHolderId = relationshipDirectives.form?.defaultHolderId?.();
   return null;
 }
 

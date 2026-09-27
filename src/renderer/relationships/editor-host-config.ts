@@ -20,13 +20,13 @@ export interface ConfirmFn {
 }
 
 /**
- * Builds the callback the fill-in bubble invokes when a note is chosen for
+ * Builds the callback the directive form invokes when a note is chosen for
  * the holder role and no default reputation holder is set yet. It always
  * offers to make that note the default (there's no "don't ask again"), and
  * saves it via `relationshipsData` on a yes.
  *
  * Returns a `Promise` that resolves only once the dialog is answered (and,
- * on a yes, the save has completed) — the bubble awaits it
+ * on a yes, the save has completed) — the form awaits it
  * (`NotePickerField.commitPick`) before advancing to the next blank, so
  * focus lands there only after the dialog is gone instead of being stolen
  * back by it.
@@ -59,10 +59,10 @@ function excludeOrdinalFor(doc: string, anchor: number): number | undefined {
 }
 
 /**
- * Builds the bubble's `heldOptions` resolver — the Remove bubble's tag
+ * Builds the form's `heldOptions` resolver — the Remove form's tag
  * blank. Remove is event-only, so this always has a `currentPath` (an
  * unsaved-note query returns `[]`). Fetches the holder's ledgers lazily —
- * only when a "remove" bubble actually opens, via
+ * only when a "remove" form actually opens, via
  * `relationshipsData.getLedgers(holder, 'holder')` — instead of loading
  * every ledger up front on every keystroke.
  *
@@ -132,7 +132,7 @@ export type HeldOptionsResolver = (q: {
 }) => Promise<string[]>;
 
 /**
- * Builds the bubble's `observerOptions` resolver — the Remove bubble's
+ * Builds the form's `observerOptions` resolver — the Remove form's
  * observer blank, once the holder and tag are both filled. Restricts the
  * note picker to observers where (holder, observer) actually holds that
  * tag on this track as of the event's date, via the same
@@ -194,7 +194,7 @@ export function buildRelationshipEditorConfig(
     defaultReason: deps.defaultReason,
     onOpenNote: deps.onOpenNote,
     place: deps.place,
-    bubbles: {
+    form: {
       noteOptions: () => deps.noteOptions() as PickerOption[],
       defaultHolderId: deps.defaultHolderId,
       currentNoteId: deps.currentNoteId,

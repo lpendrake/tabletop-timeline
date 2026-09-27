@@ -28,10 +28,10 @@ New Note folder picker.
 A caller whose options aren't folders (so a path-segment match makes no
 sense) passes its own `rank` prop instead of adding a second mode to
 `rankPickerOptions`. The note pickers (`NotePickerField` in
-`markdown-editor/extensions/relationship-bubble.tsx`) do this: they pass
-`rankNoteOptions`, built on `shared/entity-match.ts`'s title/id matcher —
-the same matching rule the `@` link search (`suggestLinks`) uses — so a note
-is found by its title, not by segments of its file path.
+`markdown-editor/extensions/relationship-directive-form.tsx`) do this: they
+pass `rankNoteOptions`, built on `shared/entity-match.ts`'s title/id matcher
+— the same matching rule the `@` link search (`suggestLinks`) uses — so a
+note is found by its title, not by segments of its file path.
 
 ## Recents
 

@@ -2,7 +2,7 @@
  * The matching rule behind the `@` link search (`suggestLinks`) — title/id
  * substring matching against the entity index. Shared with the relationship
  * bubble's note pickers (`NotePickerField` in
- * `markdown-editor/extensions/relationship-bubble.tsx`) so a note like "The
+ * `markdown-editor/extensions/relationship-directive-form.tsx`) so a note like "The
  * Whispering Claw" is found the same way in both places, instead of the
  * note pickers re-implementing their own search over `SearchablePicker`'s
  * file-path-aware `rankPickerOptions` (built for the New Note folder

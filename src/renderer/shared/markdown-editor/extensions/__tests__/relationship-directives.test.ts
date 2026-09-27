@@ -6,13 +6,12 @@ import { history, undo, redo, cursorCharRight } from '@codemirror/commands';
 import {
   relationshipDirectives,
   setDirectiveContext,
-  firstEditRole,
   crossEnd,
   directiveBorderClass,
-  getDirectiveRoleElement,
+  getDirectiveRootElement,
   type RelationshipDirectivesConfig,
 } from '../relationship-directives';
-import { bubbleStateField, closeBubbleEffect } from '../relationship-bubble-state';
+import { directiveFormStateField, closeFormEffect } from '../relationship-directive-form-plugin';
 import { wikiLinks, setEntityLabels, type WikiLinksConfig } from '../wiki-links';
 import { serialiseTemplate } from '../../../../../shared/relationships/directives/index';
 import {
@@ -91,7 +90,7 @@ function makeView(
   } = {},
 ): Setup {
   const { defaultReason, labels, readOnly, withWikiLinks, dispatchContext = true } = options;
-  const extensions = [history(), relationshipDirectives(config), bubbleStateField];
+  const extensions = [history(), relationshipDirectives(config), directiveFormStateField];
   if (withWikiLinks) extensions.push(wikiLinks(withWikiLinks));
   if (readOnly) extensions.push(EditorState.readOnly.of(true));
 
@@ -251,7 +250,7 @@ describe('relationship directives — DOM is not a data source', () => {
     const shiftedFrom = 'more before '.length;
     const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
     fireClick(holderValue);
-    expect(view.state.field(bubbleStateField)).toEqual({ anchor: shiftedFrom, role: 'holder' });
+    expect(view.state.field(directiveFormStateField)).toEqual({ anchor: shiftedFrom });
   });
 });
 
@@ -324,27 +323,6 @@ describe('crossEnd — hysteresis (pure)', () => {
   });
 });
 
-describe('firstEditRole (pure)', () => {
-  it('picks the first empty value, falling back to the first value', () => {
-    expect(
-      firstEditRole([
-        { kind: 'text', text: 'a' },
-        { kind: 'value', role: 'holder', tokenIndex: 0, display: 'x', empty: false },
-        { kind: 'value', role: 'amount', tokenIndex: 1, display: '', empty: true },
-      ]),
-    ).toBe('amount');
-
-    expect(
-      firstEditRole([
-        { kind: 'value', role: 'holder', tokenIndex: 0, display: 'x', empty: false },
-        { kind: 'value', role: 'observer', tokenIndex: 1, display: 'y', empty: false },
-      ]),
-    ).toBe('holder');
-
-    expect(firstEditRole([{ kind: 'text', text: 'a' }])).toBeNull();
-  });
-});
-
 describe('directiveBorderClass (pure)', () => {
   it('maps each interpreted status to its outline class', () => {
     expect(directiveBorderClass('unfinished')).toBe('cm-directive-unfinished');
@@ -382,7 +360,7 @@ describe('relationship directives — Ctrl/Cmd+click reliability on a value', ()
     expect(event.defaultPrevented).toBe(true);
   });
 
-  it('a plain pointerdown on a value is also guarded — see bug 12 below: CodeMirror must never get first crack at it', () => {
+  it('a plain pointerdown on a value is also guarded — CodeMirror must never get first crack at it', () => {
     const setup = track(makeView(FULL_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }));
     const { view } = setup;
     const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
@@ -395,7 +373,7 @@ describe('relationship directives — Ctrl/Cmd+click reliability on a value', ()
     const setup = track(makeView(FULL_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }));
     const { view } = setup;
     const el = block(view);
-    // Fire on the block root itself (the "wording" click target), not a `.cm-directive-value` child.
+    // Fire on the block root itself (the block's one click target), not a `.cm-directive-value` child.
     const event = firePointerDown(el);
     expect(event.defaultPrevented).toBe(true);
   });
@@ -416,25 +394,24 @@ describe('relationship directives — Ctrl/Cmd+click reliability on a value', ()
 
     expect(onOpenNote).toHaveBeenCalledWith('c3d4');
     expect(onOpenNote).toHaveBeenCalledTimes(1);
-    expect(view.state.field(bubbleStateField)).toBeNull();
+    expect(view.state.field(directiveFormStateField)).toBeNull();
     // The selection was never hijacked by CodeMirror along the way.
     expect(view.state.selection.main.from).toBe(0);
     expect(view.state.selection.main.to).toBe(0);
   });
 
-  // Bug 12's root cause is the same mechanism the test above already proves
-  // for Ctrl/Cmd+click: an unguarded mousedown on the atomic block — plain
-  // or modified — snaps the selection over the whole directive before any
-  // `click` fires. On a real browser that selection-driven update forces
-  // CodeMirror to rebuild the block's widget DOM mid-gesture, detaching the
-  // exact node the mousedown landed on; since a `click` is only synthesised
-  // when mousedown and mouseup share a target, the click is silently
-  // dropped and the first click on a directive never opens its bubble —
-  // only a second click (mousedown on the now-settled, already-rebuilt
-  // node) succeeds. These tests prove the fix: guarding every plain
-  // pointerdown on the block (not just modified ones) keeps CodeMirror from
-  // ever touching the selection, so a single click is reliable.
-  it('fixes bug 12: guarding the plain pointerdown keeps the selection untouched, so a single click reliably opens the bubble', () => {
+  // An unguarded mousedown on the atomic block — plain or modified — snaps
+  // the selection over the whole directive before any `click` fires. On a
+  // real browser that selection-driven update forces CodeMirror to rebuild
+  // the block's widget DOM mid-gesture, detaching the exact node the
+  // mousedown landed on; since a `click` is only synthesised when mousedown
+  // and mouseup share a target, the click is silently dropped and the first
+  // click on a directive never opens its form — only a second click
+  // (mousedown on the now-settled, already-rebuilt node) succeeds. These
+  // tests prove the fix: guarding every plain pointerdown on the block (not
+  // just modified ones) keeps CodeMirror from ever touching the selection,
+  // so a single click is reliable.
+  it('guarding the plain pointerdown keeps the selection untouched, so a single click reliably opens the form', () => {
     const setup = track(makeView(FULL_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }));
     const { view } = setup;
     const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
@@ -447,14 +424,14 @@ describe('relationship directives — Ctrl/Cmd+click reliability on a value', ()
     expect(pointerDown.defaultPrevented).toBe(true);
     fireClick(holderValue);
 
-    expect(view.state.field(bubbleStateField)).toEqual({ anchor: 0, role: 'holder' });
+    expect(view.state.field(directiveFormStateField)).toEqual({ anchor: 0 });
     // The selection was never hijacked by CodeMirror along the way, so there
     // is no widget rebuild for the click to race against.
     expect(view.state.selection.main.from).toBe(0);
     expect(view.state.selection.main.to).toBe(0);
   });
 
-  it('fixes bug 12: guarding a plain pointerdown on the wording (no value under the cursor) also keeps a single click working', () => {
+  it('guarding a plain pointerdown on the wording (no value under the cursor) also keeps a single click working', () => {
     const setup = track(
       makeView(UNFINISHED_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }),
     );
@@ -465,11 +442,10 @@ describe('relationship directives — Ctrl/Cmd+click reliability on a value', ()
     expect(pointerDown.defaultPrevented).toBe(true);
     fireClick(el);
 
-    // UNFINISHED_CHANGE_DIRECTIVE's first empty blank is `amount`.
-    expect(view.state.field(bubbleStateField)).toEqual({ anchor: 0, role: 'amount' });
+    expect(view.state.field(directiveFormStateField)).toEqual({ anchor: 0 });
   });
 
-  it('plain click still opens the fill-in bubble; Ctrl/Cmd+click never does', () => {
+  it('plain click still opens the form; Ctrl/Cmd+click never does', () => {
     const onOpenNote = vi.fn();
     const setup = track(
       makeView(FULL_CHANGE_DIRECTIVE, { onOpenNote, place: 'event' }, { labels: LABELS }),
@@ -479,20 +455,20 @@ describe('relationship directives — Ctrl/Cmd+click reliability on a value', ()
 
     firePointerDown(holderValue);
     fireClick(holderValue);
-    expect(view.state.field(bubbleStateField)).toEqual({ anchor: 0, role: 'holder' });
+    expect(view.state.field(directiveFormStateField)).toEqual({ anchor: 0 });
     expect(onOpenNote).not.toHaveBeenCalled();
 
-    view.dispatch({ effects: closeBubbleEffect.of(null) });
+    view.dispatch({ effects: closeFormEffect.of(null) });
 
     firePointerDown(holderValue, { ctrlKey: true });
     fireClick(holderValue, { ctrlKey: true });
     expect(onOpenNote).toHaveBeenCalledWith('c3d4');
-    expect(view.state.field(bubbleStateField)).toBeNull();
+    expect(view.state.field(directiveFormStateField)).toBeNull();
   });
 });
 
 describe('relationship directives — editing callbacks', () => {
-  it('clicking a value opens the bubble on its role; clicking wording targets the first empty blank', () => {
+  it('the whole block is one click target: a value, the wording, or any other spot all open the same form once', () => {
     const setup = track(
       makeView(UNFINISHED_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }),
     );
@@ -500,14 +476,14 @@ describe('relationship directives — editing callbacks', () => {
 
     const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
     fireClick(holderValue);
-    expect(view.state.field(bubbleStateField)).toEqual({ anchor: 0, role: 'holder' });
+    expect(view.state.field(directiveFormStateField)).toEqual({ anchor: 0 });
 
-    view.dispatch({ effects: closeBubbleEffect.of(null) });
+    view.dispatch({ effects: closeFormEffect.of(null) });
     fireClick(block(view));
-    expect(view.state.field(bubbleStateField)).toEqual({ anchor: 0, role: 'amount' });
+    expect(view.state.field(directiveFormStateField)).toEqual({ anchor: 0 });
   });
 
-  it('Ctrl+click on a holder calls onOpenNote; plain click opens the bubble instead', () => {
+  it('Ctrl+click on a holder calls onOpenNote; plain click opens the form instead', () => {
     const onOpenNote = vi.fn();
     const setup = track(
       makeView(FULL_CHANGE_DIRECTIVE, { onOpenNote, place: 'event' }, { labels: LABELS }),
@@ -517,12 +493,12 @@ describe('relationship directives — editing callbacks', () => {
 
     fireClick(holderValue);
     expect(onOpenNote).not.toHaveBeenCalled();
-    expect(view.state.field(bubbleStateField)).toEqual({ anchor: 0, role: 'holder' });
+    expect(view.state.field(directiveFormStateField)).toEqual({ anchor: 0 });
 
-    view.dispatch({ effects: closeBubbleEffect.of(null) });
+    view.dispatch({ effects: closeFormEffect.of(null) });
     fireClick(holderValue, { ctrlKey: true });
     expect(onOpenNote).toHaveBeenCalledWith('c3d4');
-    expect(view.state.field(bubbleStateField)).toBeNull();
+    expect(view.state.field(directiveFormStateField)).toBeNull();
   });
 
   it('unfinished blanks show their prompt with the attention class, and the block outlined in warning', () => {
@@ -638,8 +614,8 @@ describe('relationship directives — wiki-link interop', () => {
   });
 });
 
-describe('relationship directives — per-view role element registry', () => {
-  it('scopes registered blank elements per EditorView, even for identical documents', () => {
+describe('relationship directives — per-view root element registry', () => {
+  it("scopes each block's registered root element per EditorView, even for identical documents", () => {
     const setupA = track(
       makeView(UNFINISHED_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }),
     );
@@ -647,8 +623,8 @@ describe('relationship directives — per-view role element registry', () => {
       makeView(UNFINISHED_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }),
     );
 
-    const elA = getDirectiveRoleElement(setupA.view, 0, 'holder');
-    const elB = getDirectiveRoleElement(setupB.view, 0, 'holder');
+    const elA = getDirectiveRootElement(setupA.view, 0);
+    const elB = getDirectiveRootElement(setupB.view, 0);
 
     expect(elA).not.toBeNull();
     expect(elB).not.toBeNull();
@@ -661,8 +637,8 @@ describe('relationship directives — per-view role element registry', () => {
     // Destroying view B's widgets (via view.destroy(), which the harness
     // does through `track`/`afterEach`) must not clobber view A's entry.
     setupB.view.destroy();
-    expect(getDirectiveRoleElement(setupA.view, 0, 'holder')).toBe(elA);
-    expect(getDirectiveRoleElement(setupB.view, 0, 'holder')).toBeNull();
+    expect(getDirectiveRootElement(setupA.view, 0)).toBe(elA);
+    expect(getDirectiveRootElement(setupB.view, 0)).toBeNull();
 
     // Prevent the shared afterEach cleanup from destroying setupB's view twice.
     cleanup = cleanup.filter((s) => s !== setupB);
@@ -686,5 +662,18 @@ describe('relationship directives — read-only', () => {
     const holderValue = el.querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
     fireClick(holderValue, { ctrlKey: true });
     expect(onOpenNote).toHaveBeenCalledWith('c3d4');
+  });
+
+  it('a plain click never opens the form', () => {
+    const setup = track(
+      makeView(
+        FULL_CHANGE_DIRECTIVE,
+        { readOnly: true, place: 'event' },
+        { labels: LABELS, readOnly: true },
+      ),
+    );
+    const { view } = setup;
+    fireClick(block(view));
+    expect(view.state.field(directiveFormStateField)).toBeNull();
   });
 });

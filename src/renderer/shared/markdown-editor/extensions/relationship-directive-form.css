@@ -1,0 +1,160 @@
+/* ---- Relationship directive form popover ---- */
+.relationship-directive-form-host {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 2100;
+}
+
+.relationship-directive-form {
+  position: fixed;
+  width: 320px;
+  overflow-y: auto;
+  background: var(--theme-panel);
+  border: 1px solid var(--theme-border-strong);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.35);
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--theme-text-primary);
+}
+
+.relationship-directive-form-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.relationship-directive-form-field-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.relationship-directive-form-field-prompt {
+  color: var(--theme-text-secondary);
+  font-size: 12px;
+}
+
+.relationship-directive-form-input {
+  background: var(--theme-surface);
+  border: 1px solid var(--theme-border);
+  border-radius: 4px;
+  padding: 5px 8px;
+  color: var(--theme-text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+  width: 100%;
+}
+
+.relationship-directive-form-input:focus {
+  border-color: var(--theme-border-strong);
+}
+
+.relationship-directive-form-message {
+  color: var(--theme-danger);
+  font-size: 12px;
+}
+
+.relationship-directive-form-number-row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.relationship-directive-form-number-row .relationship-directive-form-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.relationship-directive-form-stepper {
+  display: flex;
+  flex-direction: column;
+}
+
+.relationship-directive-form-stepper-button {
+  flex: 1;
+  padding: 0 6px;
+  min-width: 20px;
+  background: var(--theme-surface);
+  border: 1px solid var(--theme-border);
+  color: var(--theme-text-secondary);
+  font-size: 9px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.relationship-directive-form-stepper-button:first-child {
+  border-radius: 4px 4px 0 0;
+  border-bottom: none;
+}
+
+.relationship-directive-form-stepper-button:last-child {
+  border-radius: 0 0 4px 4px;
+}
+
+.relationship-directive-form-stepper-button:hover {
+  background: var(--theme-panel);
+  color: var(--theme-text-primary);
+}
+
+.relationship-directive-form-loading {
+  padding: 8px;
+  color: var(--theme-text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.relationship-directive-form-mutual-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-style: normal;
+  font-size: 12px;
+  color: var(--theme-text-secondary);
+}
+
+.relationship-directive-form-error {
+  color: var(--theme-danger);
+  font-size: 12px;
+}
+
+.relationship-directive-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.relationship-directive-form-cancel,
+.relationship-directive-form-save {
+  padding: 5px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.relationship-directive-form-cancel {
+  background: var(--theme-surface);
+  border: 1px solid var(--theme-border);
+  color: var(--theme-text-secondary);
+}
+
+.relationship-directive-form-cancel:hover {
+  background: var(--theme-panel);
+  color: var(--theme-text-primary);
+}
+
+.relationship-directive-form-save {
+  background: var(--theme-panel-accent);
+  border: 1px solid var(--theme-accent);
+  color: var(--theme-accent);
+  font-weight: 600;
+}
+
+.relationship-directive-form-save:hover {
+  filter: brightness(1.08);
+}

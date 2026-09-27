@@ -61,7 +61,7 @@ export interface UseRelationshipEditorConfigResult {
  * `contextMenu` (host extras + Relationships submenu) for a `MarkdownEditor`
  * host (the notes editor or the event editor): loads the track library from
  * context, keeps a ledger snapshot and the default holder fresh, and wires
- * the fill-in bubble's data/callbacks. All the actual logic lives in
+ * the directive form's data/callbacks. All the actual logic lives in
  * `editor-host-config.ts`, `editor-menu.ts` and `domain/held-options.ts` —
  * this hook only wires refs and effects.
  */
@@ -78,8 +78,8 @@ export function useRelationshipEditorConfig(
       if (active) setDefaultHolderId(next);
     });
     // The default holder can change without any file changing (the "Make X
-    // the default?" bubble prompt writes it directly) — reload on that
-    // event so the next bubble pre-fills without a stale value.
+    // the default?" form prompt writes it directly) — reload on that
+    // event so the next form pre-fills without a stale value.
     const unsubscribeDefaultHolder = relationshipsData.onDefaultHolderChanged((next) => {
       if (active) setDefaultHolderId(next);
     });

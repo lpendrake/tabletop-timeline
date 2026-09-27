@@ -33,13 +33,11 @@ import {
   type InterpretedDirective,
   type ParsedDirective,
   type ReadablePart,
-  type Role,
   type TrackLibrary,
 } from '../../../../shared/relationships';
 import { UNKNOWN_ENTITY_LABEL } from '../../../../shared/entity-labels';
 import { entityLabelMapField, setEntityLabels } from './wiki-links';
-import { openDirectiveBubble } from './relationship-bubble-state';
-import { firstOf } from './relationship-bubble-logic';
+import { openDirectiveForm } from './relationship-directive-form-plugin';
 import { parsedDirectivesField, directivesIn } from './parsed-directives';
 import { makePointerGuard } from './pointer-guard';
 
@@ -99,12 +97,6 @@ export function directiveBorderClass(status: InterpretedDirective['status']): st
 }
 
 type ValuePart = Extract<ReadablePart, { kind: 'value' }>;
-
-/** Picks the field a click on the wording (or an Enter on a selected block) should target. */
-export function firstEditRole(parts: ReadablePart[]): Role | null {
-  const values = parts.filter((p): p is ValuePart => p.kind === 'value');
-  return firstOf(values, (p) => p.empty)?.role ?? null;
-}
 
 /**
  * Pure hysteresis for the delete cross's end: switches only once the pointer
@@ -176,14 +168,14 @@ function currentDirectiveAt(view: EditorView, root: HTMLElement): ParsedDirectiv
 }
 
 /**
- * Live registry of each currently-mounted directive block's blank spans, by
- * the directive's `from` and then by role — populated by `DirectiveWidget`
+ * Live registry of each currently-mounted directive block's own root
+ * element, by the directive's `from` — populated by `DirectiveWidget`
  * itself at `toDOM` time and cleared on `destroy`. This is what
- * `relationship-bubble-view-plugin.ts` reads to find a blank's rendered rect
- * for the fill-in bubble's tail: a direct reference to the actual span held
- * by its own widget instance, never a `querySelector`/`data-*` lookup (see
- * this file's own `currentDirectiveAt` and the module AGENTS.md for why
- * directive data is never read back from the DOM). Keyed by identity on
+ * `relationship-directive-form-plugin.ts` reads to anchor the form popover
+ * to the WHOLE block's rect: a direct reference to the actual root element
+ * held by its own widget instance, never a `querySelector`/`data-*` lookup
+ * (see this file's own `currentDirectiveAt` and the module AGENTS.md for
+ * why directive data is never read back from the DOM). Keyed by identity on
  * cleanup, so an old widget's `destroy` can never clobber a newer widget's
  * entry for the same (possibly reused) `from` position.
  *
@@ -191,29 +183,25 @@ function currentDirectiveAt(view: EditorView, root: HTMLElement): ParsedDirectiv
  * mounted at once over the SAME document (e.g. an editor modal and the
  * read-only preview behind it), and a directive at a given `from` can exist
  * identically in more than one of them. Without this scoping, a lookup from
- * one editor could return another editor's element (anchoring the bubble
- * tail in the wrong DOM tree), and one editor's widget `destroy()` could
- * race and clobber another editor's registration for the same `from`.
+ * one editor could return another editor's element (anchoring the form in
+ * the wrong DOM tree), and one editor's widget `destroy()` could race and
+ * clobber another editor's registration for the same `from`.
  */
-const roleElementRegistry = new WeakMap<EditorView, Map<number, Map<Role, HTMLElement>>>();
+const rootElementRegistry = new WeakMap<EditorView, Map<number, HTMLElement>>();
 
-/** The blank's rendered element for `role` on the directive at `from` within `view`, if currently mounted. */
-export function getDirectiveRoleElement(
-  view: EditorView,
-  from: number,
-  role: Role,
-): HTMLElement | null {
-  return roleElementRegistry.get(view)?.get(from)?.get(role) ?? null;
+/** The block's own rendered root element for the directive at `from` within `view`, if currently mounted. */
+export function getDirectiveRootElement(view: EditorView, from: number): HTMLElement | null {
+  return rootElementRegistry.get(view)?.get(from) ?? null;
 }
 
 class DirectiveWidget extends WidgetType {
-  private readonly roleElements = new Map<Role, HTMLElement>();
   /**
    * Captured in `toDOM` so `destroy` — which CodeMirror calls without
    * passing the view — can identity-check and clean up this widget's own
-   * entry in `roleElementRegistry` for the correct view.
+   * entry in `rootElementRegistry` for the correct view.
    */
   private mountedView: EditorView | null = null;
+  private mountedRoot: HTMLElement | null = null;
 
   constructor(
     readonly directive: ParsedDirective,
@@ -234,10 +222,10 @@ class DirectiveWidget extends WidgetType {
     );
   }
 
-  private openField(view: EditorView, root: HTMLElement, role: Role): void {
+  private openForm(view: EditorView, root: HTMLElement): void {
     const directive = currentDirectiveAt(view, root);
     if (!directive) return;
-    openDirectiveBubble(view, directive.from, role);
+    openDirectiveForm(view, directive.from);
   }
 
   override toDOM(view: EditorView): HTMLElement {
@@ -254,7 +242,7 @@ class DirectiveWidget extends WidgetType {
           root.appendChild(document.createTextNode(part.text));
           continue;
         }
-        root.appendChild(this.buildValueSpan(part, view, root));
+        root.appendChild(this.buildValueSpan(part));
       }
     }
 
@@ -303,17 +291,17 @@ class DirectiveWidget extends WidgetType {
       root.appendChild(cross);
     }
 
-    // Wording click: opens the first blank to edit. Value/cross clicks
-    // above call stopPropagation so this only fires for genuine wording
-    // clicks (or a click anywhere else in the block when it has no values).
+    // The whole block is one click target: a plain left click anywhere on
+    // it opens the form (the delete cross and a Ctrl/Cmd+click on a note
+    // name each call stopPropagation above/below so this never double-fires
+    // for those).
     root.addEventListener('click', (event) => {
       if (event.button !== 0) return;
       event.preventDefault();
       event.stopPropagation();
       if (this.readOnly || this.config.readOnly) return;
       if (this.built.kind !== 'sentence') return;
-      const role = firstEditRole(this.built.parts);
-      if (role) this.openField(view, root, role);
+      this.openForm(view, root);
     });
 
     root.addEventListener('contextmenu', (event) => {
@@ -325,12 +313,13 @@ class DirectiveWidget extends WidgetType {
 
     if (this.built.kind === 'sentence') {
       this.mountedView = view;
-      let byFrom = roleElementRegistry.get(view);
+      this.mountedRoot = root;
+      let byFrom = rootElementRegistry.get(view);
       if (!byFrom) {
-        byFrom = new Map<number, Map<Role, HTMLElement>>();
-        roleElementRegistry.set(view, byFrom);
+        byFrom = new Map<number, HTMLElement>();
+        rootElementRegistry.set(view, byFrom);
       }
-      byFrom.set(this.directive.from, this.roleElements);
+      byFrom.set(this.directive.from, root);
     }
 
     return root;
@@ -338,12 +327,11 @@ class DirectiveWidget extends WidgetType {
 
   override destroy(): void {
     if (!this.mountedView) return;
-    const byFrom = roleElementRegistry.get(this.mountedView);
-    const current = byFrom?.get(this.directive.from);
-    if (current === this.roleElements) byFrom?.delete(this.directive.from);
+    const byFrom = rootElementRegistry.get(this.mountedView);
+    if (byFrom?.get(this.directive.from) === this.mountedRoot) byFrom?.delete(this.directive.from);
   }
 
-  private buildValueSpan(part: ValuePart, view: EditorView, root: HTMLElement): HTMLElement {
+  private buildValueSpan(part: ValuePart): HTMLElement {
     const span = document.createElement('span');
     const classes = ['cm-directive-value', `cm-directive-value-role-${part.role}`];
     if (part.problem) {
@@ -357,19 +345,19 @@ class DirectiveWidget extends WidgetType {
     }
     span.className = classes.join(' ');
     span.textContent = part.display;
-    this.roleElements.set(part.role, span);
 
+    // Only a Ctrl/Cmd+click on a note name is handled here (opens the
+    // note, and must not also open the form) — a plain click is left to
+    // bubble up to the root's own listener above, which is the block's one
+    // click target.
     span.addEventListener('click', (event) => {
       if (event.button !== 0) return;
-      event.preventDefault();
-      event.stopPropagation();
       const modified = event.ctrlKey || event.metaKey;
       if (modified && part.noteId) {
+        event.preventDefault();
+        event.stopPropagation();
         this.config.onOpenNote?.(part.noteId);
-        return;
       }
-      if (modified || this.readOnly || this.config.readOnly) return;
-      this.openField(view, root, part.role);
     });
 
     return span;
@@ -439,7 +427,7 @@ function makeDirectiveDeleteKeymap(): Extension {
   );
 }
 
-/** Enter, while the selection exactly covers a block, acts like clicking its wording. */
+/** Enter, while the selection exactly covers a block, acts like clicking it: opens its form. */
 function makeDirectiveEnterKeymap(config: RelationshipDirectivesConfig): Extension {
   const run: Command = (view) => {
     if (config.readOnly || view.state.readOnly) return false;
@@ -457,10 +445,7 @@ function makeDirectiveEnterKeymap(config: RelationshipDirectivesConfig): Extensi
       labelForNoteFrom(view.state),
       config.place,
     );
-    if (built.kind === 'sentence') {
-      const role = firstEditRole(built.parts);
-      if (role) openDirectiveBubble(view, directive.from, role);
-    }
+    if (built.kind === 'sentence') openDirectiveForm(view, directive.from);
     return true;
   };
   return Prec.high(keymap.of([{ key: 'Enter', run }]));
@@ -580,7 +565,7 @@ export function relationshipDirectives(config: RelationshipDirectivesConfig): Ex
     // `click` when mousedown and mouseup share a target, the click is then
     // silently dropped, and the very first click on a directive never opens
     // its bubble — see this module's AGENTS.md and its tests, and
-    // `relationship-bubble-view-plugin.ts`'s `scheduleMeasure` for the
+    // the form plugin's own repositioning for the
     // related churn this same rebuild causes on the bubble's placement.
     // `makePointerGuard` with `anyLeftClick: true` swallows every plain (and
     // modified) pointerdown on the block in the capture phase — exactly the
