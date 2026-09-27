@@ -13,6 +13,23 @@ function numericStep(track: ResolvedTrack): number {
   return track.kind === 'numeric' ? track.step || 1 : 1;
 }
 
+/**
+ * Whether a blank that holds a number (`amount`, or `value` on a numeric
+ * track) may contain `text` while it's being typed: an optional sign, digits,
+ * and — only when the track's step is fractional — one decimal point. It
+ * doesn't require a complete number (a lone `-` is fine mid-typing);
+ * `interpretDirective` still flags an incomplete or out-of-range value.
+ */
+export function isNumericInputText(text: string, track: ResolvedTrack): boolean {
+  const fractional = track.kind === 'numeric' && !Number.isInteger(track.step || 1);
+  return (fractional ? /^[+-]?\d*\.?\d*$/ : /^[+-]?\d*$/).test(text);
+}
+
+/** Whether `role` on `track` holds a number. */
+export function isNumericRole(role: Role, track: ResolvedTrack | null): boolean {
+  return role === 'amount' || (role === 'value' && track?.kind === 'numeric');
+}
+
 /** Steps `amount` by the track's step (direction: +1 = up, -1 = down). No clamping — amount is unbounded. */
 export function stepAmount(raw: string, track: ResolvedTrack, dir: 1 | -1): string {
   const step = numericStep(track);

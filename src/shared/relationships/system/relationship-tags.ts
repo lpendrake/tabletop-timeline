@@ -14,16 +14,17 @@ export const relationshipTagsSpec: CategoricalTrackSpec = {
     { key: 'married', label: 'married', mutual: true },
     { key: 'business-partner', label: 'business partner', mutual: true },
   ],
+  // Keys are identity (stored in every directive): `gains`/`loses` stay; only the labels read Add/Remove.
   actions: [
     {
       key: 'gains',
-      label: 'Gains',
+      label: 'Add',
       kind: 'add',
       template: 'Give {holder} relationship: {option} → {observer} — {reason}',
     },
     {
       key: 'loses',
-      label: 'Loses',
+      label: 'Remove',
       kind: 'remove',
       template: "Remove {holder}'s relationship: {option} → {observer} — {reason}",
     },

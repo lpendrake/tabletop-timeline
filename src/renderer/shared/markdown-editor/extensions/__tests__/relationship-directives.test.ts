@@ -389,6 +389,60 @@ describe('editing is typing into the document', () => {
   });
 });
 
+describe('review round 2', () => {
+  it('Backspace after a picked note clears the whole value, not the link brackets', () => {
+    const view = makeView(FULL_CHANGE);
+    caretAt(view, valueEnd(view, 'observer'));
+    expect(press(view, 'Backspace')).toBe(true);
+    expect(doc(view)).toContain('{observer:}');
+    expect(head(view)).toBe(valueStart(view, 'observer'));
+  });
+
+  it('Delete before a picked note clears it too', () => {
+    const view = makeView(FULL_CHANGE);
+    caretAt(view, valueStart(view, 'holder'));
+    expect(press(view, 'Delete')).toBe(true);
+    expect(doc(view)).toContain('{holder:}');
+  });
+
+  it('Tab into a blank selects its whole value, so typing replaces it', () => {
+    const view = makeView(FULL_CHANGE);
+    caretAt(view, valueEnd(view, 'holder'));
+    press(view, 'Tab');
+    const sel = view.state.selection.main;
+    expect([sel.from, sel.to]).toEqual([valueStart(view, 'reason'), valueEnd(view, 'reason')]);
+    type(view, 'new reason');
+    expect(doc(view)).toContain('{reason:new reason}');
+  });
+
+  it('a number blank refuses letters but takes digits and a sign', () => {
+    const view = makeView(EMPTY_CHANGE);
+    caretAt(view, valueStart(view, 'amount'));
+    type(view, 'a');
+    expect(doc(view)).toBe(EMPTY_CHANGE);
+    expect(view.dom.querySelector('.cm-directive-blocked')).not.toBeNull();
+    type(view, '-');
+    type(view, '3');
+    type(view, '.');
+    expect(doc(view)).toContain('{amount:-3}');
+    userChange(
+      view,
+      {
+        changes: { from: valueStart(view, 'amount'), to: valueEnd(view, 'amount'), insert: '12x' },
+      },
+      'input.paste',
+    );
+    expect(doc(view)).toContain('{amount:-3}');
+  });
+
+  it('tag actions read Add and Remove (their stored keys are unchanged)', () => {
+    const view = makeView(`${EMPTY_GAINS}\n${LOSES_WITH_HOLDER}`);
+    expect(text(view)).toContain('Relationship tags · Add');
+    expect(text(view)).toContain('Relationship tags · Remove');
+    expect(doc(view)).toContain('{{tg01.gains ');
+  });
+});
+
 describe('moving between blanks', () => {
   it('Tab goes to the end of the next blank, Shift-Tab back, and past the last leaves the directive', () => {
     const view = makeView(`${FULL_CHANGE} tail`);
@@ -507,7 +561,7 @@ describe('choices', () => {
     expect(doc(view)).toContain('{holder:[[c3d4]]}');
   });
 
-  it('a tag blank lists the track tags; a Gains blank offers to create an unknown one', async () => {
+  it('a tag blank lists the track tags; an Add blank offers to create an unknown one', async () => {
     const createOption = vi.fn(async () => ({ key: 'rival' }));
     const view = makeView(EMPTY_GAINS, { choices: { createOption } });
     caretAt(view, valueStart(view, 'option'));
@@ -522,7 +576,7 @@ describe('choices', () => {
     expect(createOption).toHaveBeenCalledWith('tg01', 'riv', false);
   });
 
-  it('Tab or Enter on a typo in a Gains tag never creates it; it moves on and leaves the text', async () => {
+  it('Tab or Enter on a typo in an Add tag never creates it; it moves on and leaves the text', async () => {
     const createOption = vi.fn(async () => ({ key: 'marired' }));
     const view = makeView(EMPTY_GAINS, { choices: { createOption } });
     caretAt(view, valueStart(view, 'option'));
@@ -567,7 +621,7 @@ describe('choices', () => {
     expect(doc(view).startsWith(EMPTY_GAINS)).toBe(true);
   });
 
-  it('a Loses tag blank lists only held tags and never offers create', async () => {
+  it('a Remove tag blank lists only held tags and never offers create', async () => {
     const heldOptions = vi.fn(async () => ['married']);
     const view = makeView(LOSES_WITH_HOLDER, {
       choices: { heldOptions, createOption: vi.fn() },
@@ -589,7 +643,7 @@ describe('choices', () => {
     expect(await openList(view)).toEqual(['member', 'married', 'employee', 'customer']);
   });
 
-  it("a Loses observer blank lists only notes sharing the holder's tag", async () => {
+  it("a Remove observer blank lists only notes sharing the holder's tag", async () => {
     const observerOptions = vi.fn(async () => ['e5f6']);
     const doc0 = serialiseTemplate('tg01', 'loses', LOSES_TEMPLATE, {
       holder: '[[c3d4]]',

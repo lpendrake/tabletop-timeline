@@ -124,8 +124,8 @@ function cachedLookup(
 }
 
 /**
- * Writes `value` into the blank at `from`–`to` and moves the caret to the
- * end of the next blank (or just past the directive after the last one), as
+ * Writes `value` into the blank at `from`–`to` and selects the next blank's
+ * value (or puts the caret just past the directive after the last one), as
  * one transaction and one undo step.
  */
 export function writeAndAdvance(
@@ -140,10 +140,11 @@ export function writeAndAdvance(
   const end = from + value.length;
   const directive = directivesIn(after).find((d) => d.from <= end && end <= d.to);
   const next = directive ? adjacentSlot(directive, end, 1) : null;
-  const caret = next ? next.to : (directive?.to ?? end);
+  // Like Tab, arriving in the next blank selects its whole value.
+  const selection = next ? { anchor: next.from, head: next.to } : { anchor: directive?.to ?? end };
   view.dispatch({
     changes,
-    selection: { anchor: caret },
+    selection,
     userEvent: 'input.complete',
     annotations: completion ? pickedCompletion.of(completion) : [],
     scrollIntoView: true,

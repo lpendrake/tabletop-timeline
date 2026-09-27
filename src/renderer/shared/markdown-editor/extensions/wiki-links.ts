@@ -166,6 +166,11 @@ function wikiLinkEditKeymap(config: WikiLinksConfig): Extension {
           const range = view.state.selection.main;
           if (!range.empty) return false;
           const cursor = range.head;
+          // A link inside a relationship directive is a blank's value; the
+          // directive extension owns its editing (Backspace clears it whole).
+          if (directiveRanges(view.state).some((r) => r.from < cursor && cursor < r.to)) {
+            return false;
+          }
           const line = view.state.doc.lineAt(cursor);
           const links = findWikiLinksInLine(line.text, line.from);
           const link = links.find((l) => l.to === cursor);

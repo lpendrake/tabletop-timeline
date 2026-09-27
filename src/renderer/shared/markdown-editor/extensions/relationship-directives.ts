@@ -72,7 +72,13 @@ import {
   type ValueDisplay,
   type ValueSlot,
 } from './relationship-directive-layout';
-import { stepAmount, stepNumericValue, stepRung } from './relationship-value-logic';
+import {
+  isNumericInputText,
+  isNumericRole,
+  stepAmount,
+  stepNumericValue,
+  stepRung,
+} from './relationship-value-logic';
 
 export interface RelationshipDirectivesConfig {
   readOnly?: boolean;
@@ -522,6 +528,16 @@ export function guardDirectiveEdit(tr: Transaction): Transaction | TransactionSp
     }
     const clean = sanitiseValue(text);
     if (clean !== text) rewritten = true;
+    // A number blank only ever holds number characters.
+    const track = model?.track ?? null;
+    if (track && isNumericRole(slot.role, track)) {
+      const after =
+        slot.value.slice(0, from - slot.from) + clean + slot.value.slice(to - slot.from);
+      if (!isNumericInputText(after, track)) {
+        blocked ??= verdict.directive;
+        return;
+      }
+    }
     changes.push({ from, to, insert: clean });
   });
 
@@ -592,14 +608,14 @@ function editable(view: EditorView): boolean {
   return Boolean(config) && !view.state.readOnly && !config?.readOnly;
 }
 
-/** Moves the caret to `pos` inside a directive and opens that blank's choices. */
-function moveToSlot(view: EditorView, pos: number): void {
+/** Selects a blank's whole value (so typing replaces it) and opens its choices. */
+function moveToSlot(view: EditorView, slot: ValueSlot): void {
   view.dispatch({
-    selection: EditorSelection.cursor(pos),
+    selection: EditorSelection.range(slot.from, slot.to),
     userEvent: 'select.directive',
     scrollIntoView: true,
   });
-  const hit = liveSlotAt(view.state, pos);
+  const hit = liveSlotAt(view.state, slot.to);
   if (hit && roleHasChoices(hit.slot.role, hit.model.track)) startCompletion(view);
 }
 
@@ -615,7 +631,7 @@ export function moveToAdjacentBlank(view: EditorView, dir: 1 | -1): boolean {
   if (!hit) return false;
   const next = adjacentSlot(hit.directive, head, dir);
   if (next) {
-    moveToSlot(view, next.to);
+    moveToSlot(view, next);
   } else {
     closeCompletion(view);
     view.dispatch({
@@ -652,6 +668,26 @@ function makeStepCommand(dir: 1 | -1): Command {
 }
 
 /**
+ * Backspace just after, or Delete just before, a picked note/tag/rung clears
+ * the whole value — its hidden key is never edited a character at a time.
+ */
+function clearLabelValue(view: EditorView, kind: 'backspace' | 'delete'): boolean {
+  const sel = view.state.selection.main;
+  if (!sel.empty) return false;
+  const hit = liveSlotAt(view.state, sel.head);
+  if (!hit || displayFor(view.state, hit.model, hit.slot).kind !== 'label') return false;
+  const atEdge = kind === 'backspace' ? sel.head === hit.slot.to : sel.head === hit.slot.from;
+  if (!atEdge) return false;
+  view.dispatch({
+    changes: { from: hit.slot.from, to: hit.slot.to, insert: '' },
+    selection: EditorSelection.cursor(hit.slot.from),
+    userEvent: kind === 'backspace' ? 'delete.backward' : 'delete.forward',
+  });
+  if (roleHasChoices(hit.slot.role, hit.model.track)) startCompletion(view);
+  return true;
+}
+
+/**
  * Backspace right after a directive, or Delete right before it, selects it
  * on the first press; pressing again (selection now covers exactly the
  * directive) deletes it in one transaction — one undo step either way.
@@ -660,6 +696,7 @@ function makeBoundaryCommand(kind: 'backspace' | 'delete'): Command {
   return (view) => {
     if (!editable(view)) return false;
     const sel = view.state.selection.main;
+    if (clearLabelValue(view, kind)) return true;
     const directives = liveDirectives(view.state);
 
     if (!sel.empty) {
@@ -788,6 +825,20 @@ const directivePointer = EditorView.domEventHandlers({
 });
 
 /**
+ * CodeMirror lets Escape-then-Tab move focus out of the editor (an
+ * accessibility escape hatch armed on every Escape). Inside a blank, Escape
+ * just closes the list and Tab means "next blank", so the hatch is switched
+ * back off there. Outside blanks — including just past a directive — it
+ * works as normal.
+ */
+const keepTabInBlanks = EditorView.domEventObservers({
+  keyup(event, view) {
+    if (event.key !== 'Escape' || !editable(view)) return;
+    if (liveSlotAt(view.state, view.state.selection.main.head)) view.setTabFocusMode(false);
+  },
+});
+
+/**
  * Opens a blank's choices when the caret arrives in it by a click or a fresh
  * insert. (Tab/Enter open them directly; plain arrow keys don't, so moving
  * through a line never pops a list uninvited.)
@@ -904,8 +955,12 @@ const directiveTheme = EditorView.theme({
     border: '1px dashed var(--theme-warning)',
     borderRadius: '3px',
   },
+  // An empty reason falls back to the event title: that's a valid value, so
+  // it looks like a filled blank (just italic, to show it's the default).
   '.cm-directive-placeholder-default': {
-    color: 'var(--theme-text-muted)',
+    backgroundColor: 'var(--theme-directive-value-highlight)',
+    borderRadius: '3px',
+    padding: '1px 3px',
   },
   '.cm-directive-cross': {
     display: 'inline-block',
@@ -956,6 +1011,7 @@ export function relationshipDirectives(config: RelationshipDirectivesConfig): Ex
           flashField,
           clearFlashAfterDelay,
           directiveKeymap,
+          keepTabInBlanks,
           openChoicesOnArrival,
         ],
   ];
