@@ -1,19 +1,31 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { EditorState } from '@codemirror/state';
-import { EditorView } from '@codemirror/view';
-import { history, undo, redo, cursorCharRight } from '@codemirror/commands';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { EditorSelection, EditorState, type TransactionSpec } from '@codemirror/state';
+import { EditorView, runScopeHandlers } from '@codemirror/view';
+import {
+  history,
+  historyKeymap,
+  defaultKeymap,
+  undo,
+  cursorCharRight,
+  cursorCharLeft,
+} from '@codemirror/commands';
+import { keymap } from '@codemirror/view';
+import { acceptCompletion, completionStatus, currentCompletions } from '@codemirror/autocomplete';
 import {
   relationshipDirectives,
   setDirectiveContext,
-  firstEditRole,
-  crossEnd,
   directiveBorderClass,
-  getDirectiveRoleElement,
+  insertDirective,
   type RelationshipDirectivesConfig,
 } from '../relationship-directives';
-import { bubbleStateField, closeBubbleEffect } from '../relationship-bubble-state';
-import { wikiLinks, setEntityLabels, type WikiLinksConfig } from '../wiki-links';
+import {
+  relationshipDirectiveCompletions,
+  type RelationshipCompletionOptions,
+} from '../relationship-directive-completions';
+import { isEditorPopupOpen } from '../editor-completions';
+import { wikiLinks, setEntityLabels } from '../wiki-links';
+import { getRecentNoteIds, resetRecentNoteIdsForTests } from '../relationship-recent-notes';
 import { serialiseTemplate } from '../../../../../shared/relationships/directives/index';
 import {
   pf2eReputationSpec,
@@ -22,669 +34,569 @@ import {
 
 const CHANGE_TEMPLATE = pf2eReputationSpec.actions.find((a) => a.key === 'change')!.template;
 const GAINS_TEMPLATE = relationshipTagsSpec.actions.find((a) => a.key === 'gains')!.template;
+const LOSES_TEMPLATE = relationshipTagsSpec.actions.find((a) => a.key === 'loses')!.template;
 
-const FULL_CHANGE_DIRECTIVE = serialiseTemplate('rp01', 'change', CHANGE_TEMPLATE, {
+const FULL_CHANGE = serialiseTemplate('rp01', 'change', CHANGE_TEMPLATE, {
   amount: '-2',
   observer: '[[a1b2]]',
   holder: '[[c3d4]]',
   reason: 'attacked their warehouse',
 });
-
-const UNFINISHED_CHANGE_DIRECTIVE = serialiseTemplate('rp01', 'change', CHANGE_TEMPLATE, {
-  observer: '[[a1b2]]',
-  holder: '[[c3d4]]',
-  reason: 'attacked their warehouse',
-});
-
-const EMPTY_REASON_DIRECTIVE = serialiseTemplate('rp01', 'change', CHANGE_TEMPLATE, {
-  amount: '-2',
-  observer: '[[a1b2]]',
-  holder: '[[c3d4]]',
-});
-
-const UNKNOWN_TRACK_DIRECTIVE = serialiseTemplate('rp99', 'change', CHANGE_TEMPLATE, {
-  amount: '-2',
-  observer: '[[a1b2]]',
-  holder: '[[c3d4]]',
-  reason: 'x',
-});
-
-const UNKNOWN_OPTION_DIRECTIVE = serialiseTemplate('tg01', 'gains', GAINS_TEMPLATE, {
+const EMPTY_CHANGE = serialiseTemplate('rp01', 'change', CHANGE_TEMPLATE);
+const UNKNOWN_TRACK = serialiseTemplate('rp99', 'change', CHANGE_TEMPLATE, { amount: '1' });
+const UNKNOWN_OPTION = serialiseTemplate('tg01', 'gains', GAINS_TEMPLATE, {
   holder: '[[a1b2]]',
   option: 'boss',
   observer: '[[c3d4]]',
-  reason: 'x',
 });
-
-const EMPTY_REASON_TAG_DIRECTIVE = serialiseTemplate('tg01', 'gains', GAINS_TEMPLATE, {
+const EMPTY_GAINS = serialiseTemplate('tg01', 'gains', GAINS_TEMPLATE);
+const LOSES_WITH_HOLDER = serialiseTemplate('tg01', 'loses', LOSES_TEMPLATE, {
   holder: '[[c3d4]]',
-  option: 'member',
-  observer: '[[a1b2]]',
-});
-
-const FILLED_REASON_TAG_DIRECTIVE = serialiseTemplate('tg01', 'gains', GAINS_TEMPLATE, {
-  holder: '[[c3d4]]',
-  option: 'member',
-  observer: '[[a1b2]]',
-  reason: 'signed the deal',
 });
 
 const LABELS = new Map([
   ['a1b2', 'White Tigers'],
   ['c3d4', 'The Party'],
+  ['e5f6', 'Spire Watch'],
 ]);
 
-interface Setup {
-  view: EditorView;
-  container: HTMLDivElement;
+const NOTES = [
+  { id: 'a1b2', path: 'a1b2.md', label: 'White Tigers' },
+  { id: 'c3d4', path: 'c3d4.md', label: 'The Party' },
+  { id: 'e5f6', path: 'e5f6.md', label: 'Spire Watch' },
+];
+
+interface Options {
+  config?: RelationshipDirectivesConfig;
+  choices?: Partial<RelationshipCompletionOptions>;
+  readOnly?: boolean;
+  defaultReason?: string;
+  cursor?: number;
 }
 
-function makeView(
-  doc: string,
-  config: RelationshipDirectivesConfig = { place: 'event' },
-  options: {
-    defaultReason?: string;
-    labels?: Map<string, string>;
-    readOnly?: boolean;
-    withWikiLinks?: WikiLinksConfig;
-    dispatchContext?: boolean;
-  } = {},
-): Setup {
-  const { defaultReason, labels, readOnly, withWikiLinks, dispatchContext = true } = options;
-  const extensions = [history(), relationshipDirectives(config), bubbleStateField];
-  if (withWikiLinks) extensions.push(wikiLinks(withWikiLinks));
-  if (readOnly) extensions.push(EditorState.readOnly.of(true));
+const views: EditorView[] = [];
 
-  const state = EditorState.create({ doc, extensions });
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  const view = new EditorView({ state, parent: container });
-
-  if (dispatchContext) {
-    view.dispatch({
-      effects: setDirectiveContext.of({
+function makeView(doc: string, options: Options = {}): EditorView {
+  const config = options.config ?? { place: 'event' };
+  const readOnly = options.readOnly ?? false;
+  const choices: RelationshipCompletionOptions = {
+    noteOptions: () => NOTES,
+    ...options.choices,
+  };
+  const extensions = [
+    history(),
+    keymap.of([...defaultKeymap, ...historyKeymap]),
+    wikiLinks({ suggest: async () => [] }),
+    relationshipDirectives({ ...config, readOnly }),
+    ...(readOnly
+      ? [EditorState.readOnly.of(true)]
+      : [relationshipDirectiveCompletions(() => choices)]),
+  ];
+  const state = EditorState.create({
+    doc,
+    extensions,
+    selection: EditorSelection.cursor(options.cursor ?? 0),
+  });
+  const parent = document.createElement('div');
+  document.body.appendChild(parent);
+  const view = new EditorView({ state, parent });
+  view.dispatch({
+    effects: [
+      setDirectiveContext.of({
         library: { custom: [], optionAdditions: {} },
-        defaultReason: defaultReason ?? 'Unspecified',
+        defaultReason: options.defaultReason ?? 'Unspecified',
       }),
-    });
-  }
-  if (labels) {
-    view.dispatch({ effects: setEntityLabels.of(labels) });
-  }
-
-  return { view, container };
+      setEntityLabels.of(LABELS),
+    ],
+  });
+  views.push(view);
+  return view;
 }
 
-function destroy({ view, container }: Setup) {
-  view.destroy();
-  container.remove();
-}
+beforeEach(() => {
+  resetRecentNoteIdsForTests();
+});
 
-let cleanup: Setup[] = [];
 afterEach(() => {
-  cleanup.forEach(destroy);
-  cleanup = [];
+  for (const view of views.splice(0)) {
+    view.dom.parentElement?.remove();
+    view.destroy();
+  }
   vi.restoreAllMocks();
 });
 
-function track(setup: Setup): Setup {
-  cleanup.push(setup);
-  return setup;
+const doc = (view: EditorView) => view.state.doc.toString();
+const head = (view: EditorView) => view.state.selection.main.head;
+const text = (view: EditorView) => view.contentDOM.textContent ?? '';
+
+/** Where `{role:` ends (the value's start) in the document. */
+function valueStart(view: EditorView, role: string, nth = 0): number {
+  let from = -1;
+  for (let i = 0; i <= nth; i++) from = doc(view).indexOf(`{${role}:`, from + 1);
+  if (from === -1) throw new Error(`no ${role} token`);
+  return from + role.length + 2;
 }
 
-function block(view: EditorView): HTMLElement {
-  const el = view.dom.querySelector<HTMLElement>('.cm-directive');
-  if (!el) throw new Error('no .cm-directive block rendered');
-  return el;
+function valueEnd(view: EditorView, role: string, nth = 0): number {
+  return doc(view).indexOf('}', valueStart(view, role, nth));
 }
 
-function fireClick(target: HTMLElement, opts: { ctrlKey?: boolean; metaKey?: boolean } = {}): void {
-  const event = new MouseEvent('click', {
-    bubbles: true,
-    cancelable: true,
-    button: 0,
-    ctrlKey: opts.ctrlKey ?? false,
-    metaKey: opts.metaKey ?? false,
+function caretAt(view: EditorView, pos: number): void {
+  view.dispatch({ selection: EditorSelection.cursor(pos) });
+}
+
+/** Types as the browser's input handling does: a replace-selection transaction tagged `input.type`. */
+function type(view: EditorView, inserted: string): void {
+  view.dispatch({ ...view.state.replaceSelection(inserted), userEvent: 'input.type' });
+}
+
+function userChange(view: EditorView, spec: TransactionSpec, userEvent: string): void {
+  view.dispatch({ ...spec, userEvent });
+}
+
+function press(
+  view: EditorView,
+  key: string,
+  mods: { shiftKey?: boolean; altKey?: boolean; ctrlKey?: boolean } = {},
+): boolean {
+  const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...mods });
+  return runScopeHandlers(view, event, 'editor');
+}
+
+/** Waits out autocompletion's interaction delay, during which it ignores accepting. */
+function settle(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 100));
+}
+
+async function openList(view: EditorView): Promise<string[]> {
+  await vi.waitFor(() => expect(completionStatus(view.state)).toBe('active'));
+  return currentCompletions(view.state).map((c) => c.label);
+}
+
+describe('rendering', () => {
+  it('shows the chip, wording and values, never the envelope, delimiters or ids', () => {
+    const view = makeView(FULL_CHANGE);
+    const shown = text(view);
+    expect(shown).toContain('PF2E Reputation · Change');
+    expect(shown).toContain('Rep change:');
+    expect(shown).toContain('-2');
+    expect(shown).toContain('White Tigers');
+    expect(shown).toContain('The Party');
+    expect(shown).toContain('attacked their warehouse');
+    expect(shown).not.toContain('{{');
+    expect(shown).not.toContain('rp01');
+    expect(shown).not.toContain('{amount:');
+    expect(shown).not.toContain('a1b2');
   });
-  target.dispatchEvent(event);
-}
 
-/** Fires a real `pointerdown` (as the browser does ahead of `mousedown`/`click`) and returns it so callers can inspect `defaultPrevented`. */
-function firePointerDown(
-  target: HTMLElement,
-  opts: { ctrlKey?: boolean; metaKey?: boolean } = {},
-): PointerEvent {
-  const event = new PointerEvent('pointerdown', {
-    bubbles: true,
-    cancelable: true,
-    button: 0,
-    ctrlKey: opts.ctrlKey ?? false,
-    metaKey: opts.metaKey ?? false,
+  it('keeps the document untouched — rendering is decoration only', () => {
+    const view = makeView(FULL_CHANGE);
+    expect(doc(view)).toBe(FULL_CHANGE);
   });
-  target.dispatchEvent(event);
-  return event;
-}
 
-/** Fires a real `mousedown`, as CodeMirror itself listens for, and returns it. */
-function fireMouseDown(
-  target: HTMLElement,
-  opts: { ctrlKey?: boolean; metaKey?: boolean } = {},
-): MouseEvent {
-  const event = new MouseEvent('mousedown', {
-    bubbles: true,
-    cancelable: true,
-    button: 0,
-    ctrlKey: opts.ctrlKey ?? false,
-    metaKey: opts.metaKey ?? false,
-  });
-  target.dispatchEvent(event);
-  return event;
-}
-
-function fireKey(view: EditorView, key: string): void {
-  const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
-  view.contentDOM.dispatchEvent(event);
-}
-
-describe('relationship directives — readable rendering', () => {
-  it('renders only the readable sentence, no ids or envelope', () => {
-    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }));
-    const el = block(setup.view);
-    expect(el.textContent).toBe(
-      'Rep change: -2 White Tigers rep for The Party — attacked their warehouse',
+  it('shows prompts for empty blanks and marks the directive unfinished', () => {
+    const view = makeView(EMPTY_CHANGE);
+    const prompts = [...view.dom.querySelectorAll('.cm-directive-placeholder-attention')].map(
+      (e) => e.textContent,
     );
-    expect(el.textContent).not.toContain('rp01');
-    expect(el.textContent).not.toContain('{');
-    expect(el.textContent).not.toContain('[[');
+    expect(prompts).toEqual(['Reputation change', 'choose observer', 'choose holder']);
+    expect(view.dom.querySelector('.cm-directive-unfinished')).not.toBeNull();
+    expect(view.dom.querySelector('.cm-directive-chip-unfinished')).not.toBeNull();
   });
 
-  it('never reveals raw text when the caret moves across or a selection covers the block', () => {
-    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }));
-    const { view } = setup;
-    const before = block(view).outerHTML;
-    const lineTextBefore = view.state.doc.toString();
-    const len = view.state.doc.length;
-
-    for (let pos = 0; pos <= len; pos++) {
-      view.dispatch({ selection: { anchor: pos } });
-      expect(block(view).outerHTML).toBe(before);
-    }
-
-    view.dispatch({ selection: { anchor: 0, head: len } });
-    expect(block(view).outerHTML).toBe(before);
-    expect(view.state.doc.toString()).toBe(lineTextBefore);
-  });
-
-  it('caret moves over a block as one unit', () => {
-    const setup = track(
-      makeView(`x ${FULL_CHANGE_DIRECTIVE} y`, { place: 'event' }, { labels: LABELS }),
+  it("shows the host's default reason in an empty reason blank", () => {
+    const view = makeView(EMPTY_CHANGE, { defaultReason: 'The Vanguard falls out' });
+    expect(view.dom.querySelector('.cm-directive-placeholder-default')?.textContent).toBe(
+      'The Vanguard falls out',
     );
-    const { view } = setup;
-    const from = 2;
-    const to = 2 + FULL_CHANGE_DIRECTIVE.length;
-
-    view.dispatch({ selection: { anchor: from } });
-    cursorCharRight(view);
-    expect(view.state.selection.main.head).toBe(to);
-  });
-});
-
-describe('relationship directives — DOM is not a data source', () => {
-  it('block click handlers use editor state, not DOM attributes', () => {
-    const setup = track(
-      makeView(`before ${UNFINISHED_CHANGE_DIRECTIVE}`, { place: 'event' }, { labels: LABELS }),
-    );
-    const { view } = setup;
-    const el = block(view);
-
-    // None of the old data-* identity attributes are present anywhere in the block.
-    expect(el.outerHTML).not.toContain('data-from');
-    expect(el.outerHTML).not.toContain('data-to');
-    expect(el.outerHTML).not.toContain('data-ordinal');
-    expect(el.outerHTML).not.toContain('data-role');
-    expect(el.outerHTML).not.toContain('data-note-id');
-
-    // Insert text above the directive — its position shifts — then click still
-    // routes correctly, because the widget re-resolves its own current range
-    // from editor state rather than trusting numbers captured at render time.
-    view.dispatch({ changes: { from: 0, insert: 'more ' } });
-    const shiftedFrom = 'more before '.length;
-    const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
-    fireClick(holderValue);
-    expect(view.state.field(bubbleStateField)).toEqual({ anchor: shiftedFrom, role: 'holder' });
-  });
-});
-
-describe('relationship directives — deletion', () => {
-  it('Backspace after a block selects it, a second Backspace deletes it; Ctrl+Z restores', () => {
-    const original = `${FULL_CHANGE_DIRECTIVE} tail`;
-    const setup = track(makeView(original, { place: 'event' }, { labels: LABELS }));
-    const { view } = setup;
-    const to = FULL_CHANGE_DIRECTIVE.length;
-
-    view.dispatch({ selection: { anchor: to } });
-    fireKey(view, 'Backspace');
-    expect(view.state.selection.main.from).toBe(0);
-    expect(view.state.selection.main.to).toBe(to);
-    expect(view.state.doc.toString()).toBe(original);
-
-    fireKey(view, 'Backspace');
-    expect(view.state.doc.toString()).toBe(' tail');
-
-    undo(view);
-    expect(view.state.doc.toString()).toBe(original);
   });
 
-  it('Delete before a block selects then deletes', () => {
-    const original = `head ${FULL_CHANGE_DIRECTIVE}`;
-    const setup = track(makeView(original, { place: 'event' }, { labels: LABELS }));
-    const { view } = setup;
-    const from = 'head '.length;
-
-    view.dispatch({ selection: { anchor: from } });
-    fireKey(view, 'Delete');
-    expect(view.state.selection.main.from).toBe(from);
-    expect(view.state.selection.main.to).toBe(from + FULL_CHANGE_DIRECTIVE.length);
-    expect(view.state.doc.toString()).toBe(original);
-
-    fireKey(view, 'Delete');
-    expect(view.state.doc.toString()).toBe('head ');
+  it('shows an unknown track as its raw text, flagged, so it can be fixed', () => {
+    const view = makeView(UNKNOWN_TRACK);
+    const raw = view.dom.querySelector<HTMLElement>('.cm-directive-raw');
+    expect(raw?.textContent).toContain('{{rp99.change');
+    expect(raw?.title).toMatch(/rp99/);
   });
 
-  it('clicking the delete cross removes the directive in one undo step', () => {
-    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }));
-    const { view } = setup;
-    const cross = block(view).querySelector<HTMLElement>('.cm-directive-cross');
-    expect(cross).not.toBeNull();
-
-    fireClick(cross!);
-    expect(view.state.doc.toString()).toBe('');
-
-    undo(view);
-    expect(view.state.doc.toString()).toBe(FULL_CHANGE_DIRECTIVE);
-    redo(view);
-    expect(view.state.doc.toString()).toBe('');
+  it('marks a bad value with its problem, leaving the rest readable', () => {
+    const view = makeView(UNKNOWN_OPTION);
+    const bad = view.dom.querySelector<HTMLElement>('.cm-directive-value-error');
+    expect(bad?.textContent).toBe('boss');
+    expect(bad?.title).toMatch(/boss/);
+    expect(view.dom.querySelector('.cm-directive-error')).not.toBeNull();
   });
-});
 
-describe('crossEnd — hysteresis (pure)', () => {
-  it("cross end hysteresis doesn't flicker around the middle", () => {
-    expect(crossEnd(0.45, 'start')).toBe('start');
-    expect(crossEnd(0.55, 'start')).toBe('start');
-    expect(crossEnd(0.45, 'end')).toBe('end');
-    expect(crossEnd(0.55, 'end')).toBe('end');
-
-    // Only switches once clearly past the threshold.
-    expect(crossEnd(0.65, 'start')).toBe('end');
-    expect(crossEnd(0.35, 'end')).toBe('start');
-
-    // Exactly at the threshold switches.
-    expect(crossEnd(0.4, 'end')).toBe('start');
-    expect(crossEnd(0.6, 'start')).toBe('end');
-  });
-});
-
-describe('firstEditRole (pure)', () => {
-  it('picks the first empty value, falling back to the first value', () => {
-    expect(
-      firstEditRole([
-        { kind: 'text', text: 'a' },
-        { kind: 'value', role: 'holder', tokenIndex: 0, display: 'x', empty: false },
-        { kind: 'value', role: 'amount', tokenIndex: 1, display: '', empty: true },
-      ]),
-    ).toBe('amount');
-
-    expect(
-      firstEditRole([
-        { kind: 'value', role: 'holder', tokenIndex: 0, display: 'x', empty: false },
-        { kind: 'value', role: 'observer', tokenIndex: 1, display: 'y', empty: false },
-      ]),
-    ).toBe('holder');
-
-    expect(firstEditRole([{ kind: 'text', text: 'a' }])).toBeNull();
-  });
-});
-
-describe('directiveBorderClass (pure)', () => {
-  it('maps each interpreted status to its outline class', () => {
+  it('maps statuses to outline classes', () => {
     expect(directiveBorderClass('unfinished')).toBe('cm-directive-unfinished');
     expect(directiveBorderClass('invalid')).toBe('cm-directive-error');
     expect(directiveBorderClass('ok')).toBeNull();
   });
-});
 
-describe('relationship directives — Ctrl/Cmd+click reliability on a value', () => {
-  it('root-causes the flakiness: an unguarded mousedown on a value snaps the selection over the whole block before any click fires', () => {
-    // This is what makes acting only on `click` unreliable: `ignoreEvent()`
-    // is `false` for the atomic directive decoration, so CodeMirror's own
-    // mousedown handling runs first and (since the block is atomic) expands
-    // the selection to cover the entire directive — a real, observable
-    // mutation that happens strictly between mousedown and click, in a
-    // browser sometimes racing with (or pre-empting) the click that would
-    // otherwise reach the value span's own listener.
-    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }));
-    const { view } = setup;
-    const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
-
-    expect(view.state.selection.main.from).toBe(0);
-    expect(view.state.selection.main.to).toBe(0);
-    fireMouseDown(holderValue, { ctrlKey: true });
-    expect(view.state.selection.main.from).toBe(0);
-    expect(view.state.selection.main.to).toBe(FULL_CHANGE_DIRECTIVE.length);
+  it('never draws wiki-link widgets for links inside a directive', () => {
+    const view = makeView(FULL_CHANGE);
+    expect(view.dom.querySelector('.cm-note-link')).toBeNull();
   });
 
-  it('guards the modified pointerdown so CodeMirror never gets a chance to move the caret', () => {
-    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }));
-    const { view } = setup;
-    const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
-
-    const event = firePointerDown(holderValue, { ctrlKey: true });
-    expect(event.defaultPrevented).toBe(true);
-  });
-
-  it('a plain pointerdown on a value is also guarded — see bug 12 below: CodeMirror must never get first crack at it', () => {
-    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }));
-    const { view } = setup;
-    const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
-
-    const event = firePointerDown(holderValue);
-    expect(event.defaultPrevented).toBe(true);
-  });
-
-  it('a plain pointerdown on the block wording (not a value) is guarded too', () => {
-    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }));
-    const { view } = setup;
-    const el = block(view);
-    // Fire on the block root itself (the "wording" click target), not a `.cm-directive-value` child.
-    const event = firePointerDown(el);
-    expect(event.defaultPrevented).toBe(true);
-  });
-
-  it('Ctrl/Cmd+click reliably opens the note — pointerdown guarded, click never lands on the wrong thing', () => {
-    const onOpenNote = vi.fn();
-    const setup = track(
-      makeView(FULL_CHANGE_DIRECTIVE, { onOpenNote, place: 'event' }, { labels: LABELS }),
-    );
-    const { view } = setup;
-    const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
-
-    // The real fixed sequence: the guarded pointerdown prevents CodeMirror's
-    // compatibility mousedown from ever being dispatched, so only pointerdown
-    // then click occur — never a selection-moving mousedown in between.
-    firePointerDown(holderValue, { ctrlKey: true });
-    fireClick(holderValue, { ctrlKey: true });
-
-    expect(onOpenNote).toHaveBeenCalledWith('c3d4');
-    expect(onOpenNote).toHaveBeenCalledTimes(1);
-    expect(view.state.field(bubbleStateField)).toBeNull();
-    // The selection was never hijacked by CodeMirror along the way.
-    expect(view.state.selection.main.from).toBe(0);
-    expect(view.state.selection.main.to).toBe(0);
-  });
-
-  // Bug 12's root cause is the same mechanism the test above already proves
-  // for Ctrl/Cmd+click: an unguarded mousedown on the atomic block — plain
-  // or modified — snaps the selection over the whole directive before any
-  // `click` fires. On a real browser that selection-driven update forces
-  // CodeMirror to rebuild the block's widget DOM mid-gesture, detaching the
-  // exact node the mousedown landed on; since a `click` is only synthesised
-  // when mousedown and mouseup share a target, the click is silently
-  // dropped and the first click on a directive never opens its bubble —
-  // only a second click (mousedown on the now-settled, already-rebuilt
-  // node) succeeds. These tests prove the fix: guarding every plain
-  // pointerdown on the block (not just modified ones) keeps CodeMirror from
-  // ever touching the selection, so a single click is reliable.
-  it('fixes bug 12: guarding the plain pointerdown keeps the selection untouched, so a single click reliably opens the bubble', () => {
-    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }));
-    const { view } = setup;
-    const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
-
-    // The guarded pointerdown is prevented, so on a real browser the
-    // compatibility mousedown is never dispatched at all — simulated here by
-    // simply never firing `fireMouseDown`, exactly like the existing
-    // Ctrl/Cmd+click regression test above.
-    const pointerDown = firePointerDown(holderValue);
-    expect(pointerDown.defaultPrevented).toBe(true);
-    fireClick(holderValue);
-
-    expect(view.state.field(bubbleStateField)).toEqual({ anchor: 0, role: 'holder' });
-    // The selection was never hijacked by CodeMirror along the way, so there
-    // is no widget rebuild for the click to race against.
-    expect(view.state.selection.main.from).toBe(0);
-    expect(view.state.selection.main.to).toBe(0);
-  });
-
-  it('fixes bug 12: guarding a plain pointerdown on the wording (no value under the cursor) also keeps a single click working', () => {
-    const setup = track(
-      makeView(UNFINISHED_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }),
-    );
-    const { view } = setup;
-    const el = block(view);
-
-    const pointerDown = firePointerDown(el);
-    expect(pointerDown.defaultPrevented).toBe(true);
-    fireClick(el);
-
-    // UNFINISHED_CHANGE_DIRECTIVE's first empty blank is `amount`.
-    expect(view.state.field(bubbleStateField)).toEqual({ anchor: 0, role: 'amount' });
-  });
-
-  it('plain click still opens the fill-in bubble; Ctrl/Cmd+click never does', () => {
-    const onOpenNote = vi.fn();
-    const setup = track(
-      makeView(FULL_CHANGE_DIRECTIVE, { onOpenNote, place: 'event' }, { labels: LABELS }),
-    );
-    const { view } = setup;
-    const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
-
-    firePointerDown(holderValue);
-    fireClick(holderValue);
-    expect(view.state.field(bubbleStateField)).toEqual({ anchor: 0, role: 'holder' });
-    expect(onOpenNote).not.toHaveBeenCalled();
-
-    view.dispatch({ effects: closeBubbleEffect.of(null) });
-
-    firePointerDown(holderValue, { ctrlKey: true });
-    fireClick(holderValue, { ctrlKey: true });
-    expect(onOpenNote).toHaveBeenCalledWith('c3d4');
-    expect(view.state.field(bubbleStateField)).toBeNull();
+  it('read-only: renders without the delete cross', () => {
+    const view = makeView(FULL_CHANGE, { readOnly: true });
+    expect(text(view)).toContain('White Tigers');
+    expect(view.dom.querySelector('.cm-directive-cross')).toBeNull();
   });
 });
 
-describe('relationship directives — editing callbacks', () => {
-  it('clicking a value opens the bubble on its role; clicking wording targets the first empty blank', () => {
-    const setup = track(
-      makeView(UNFINISHED_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }),
-    );
-    const { view } = setup;
-
-    const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
-    fireClick(holderValue);
-    expect(view.state.field(bubbleStateField)).toEqual({ anchor: 0, role: 'holder' });
-
-    view.dispatch({ effects: closeBubbleEffect.of(null) });
-    fireClick(block(view));
-    expect(view.state.field(bubbleStateField)).toEqual({ anchor: 0, role: 'amount' });
+describe('editing is typing into the document', () => {
+  it('typing in an empty blank writes into its value', () => {
+    const view = makeView(EMPTY_CHANGE);
+    caretAt(view, valueStart(view, 'amount'));
+    type(view, '-3');
+    expect(doc(view)).toContain('{amount:-3}');
+    expect(head(view)).toBe(valueStart(view, 'amount') + 2);
   });
 
-  it('Ctrl+click on a holder calls onOpenNote; plain click opens the bubble instead', () => {
+  it('typing at either edge of a filled free-text value extends it', () => {
+    const view = makeView(FULL_CHANGE);
+    caretAt(view, valueEnd(view, 'reason'));
+    type(view, '!');
+    caretAt(view, valueStart(view, 'reason'));
+    type(view, 'They ');
+    expect(doc(view)).toContain('{reason:They attacked their warehouse!}');
+  });
+
+  it('drops a keystroke that would land in structure', () => {
+    const view = makeView(FULL_CHANGE);
+    for (const pos of [
+      3,
+      FULL_CHANGE.indexOf('Rep change') + 2,
+      FULL_CHANGE.indexOf('{holder:') + 2,
+    ]) {
+      caretAt(view, pos);
+      type(view, 'x');
+      expect(doc(view)).toBe(FULL_CHANGE);
+    }
+  });
+
+  it('drops a deletion that spans structure, but allows one inside a value', () => {
+    const view = makeView(FULL_CHANGE);
+    const wordingStart = FULL_CHANGE.indexOf(' rep for ');
+    userChange(view, { changes: { from: wordingStart, to: wordingStart + 5 } }, 'delete.backward');
+    expect(doc(view)).toBe(FULL_CHANGE);
+
+    const reason = valueStart(view, 'reason');
+    userChange(view, { changes: { from: reason, to: reason + 9 } }, 'delete.backward');
+    expect(doc(view)).toContain('{reason:their warehouse}');
+  });
+
+  it('typing over a picked note replaces the whole link with the typed query', () => {
+    const view = makeView(FULL_CHANGE);
+    caretAt(view, valueEnd(view, 'holder'));
+    type(view, 'sp');
+    expect(doc(view)).toContain('{holder:sp}');
+    expect(head(view)).toBe(valueStart(view, 'holder') + 2);
+  });
+
+  it('strips braces and line breaks from pasted text', () => {
+    const view = makeView(FULL_CHANGE);
+    const from = valueStart(view, 'reason');
+    userChange(
+      view,
+      { changes: { from, to: valueEnd(view, 'reason'), insert: 'a{b}\nc' } },
+      'input.paste',
+    );
+    expect(doc(view)).toContain('{reason:ab c}');
+  });
+
+  it('text before and after a directive, and replacing it whole, are free', () => {
+    const view = makeView(`x ${FULL_CHANGE} y`);
+    caretAt(view, 2);
+    type(view, 'A');
+    caretAt(view, 3 + FULL_CHANGE.length);
+    type(view, 'B');
+    expect(doc(view)).toBe(`x A${FULL_CHANGE}B y`);
+    userChange(
+      view,
+      { changes: { from: 3, to: 3 + FULL_CHANGE.length, insert: 'gone' } },
+      'input.type',
+    );
+    expect(doc(view)).toBe('x AgoneB y');
+  });
+
+  it('host reloads and other programmatic changes are never filtered', () => {
+    const view = makeView(FULL_CHANGE);
+    view.dispatch({ changes: { from: 0, to: 2, insert: '{{' } });
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: EMPTY_CHANGE } });
+    expect(doc(view)).toBe(EMPTY_CHANGE);
+  });
+
+  it('undo steps back through edits normally', () => {
+    const view = makeView(EMPTY_CHANGE);
+    caretAt(view, valueStart(view, 'amount'));
+    type(view, '5');
+    expect(doc(view)).toContain('{amount:5}');
+    undo(view);
+    expect(doc(view)).toBe(EMPTY_CHANGE);
+  });
+
+  it('Alt-↑/↓ steps an amount by the track step', () => {
+    const view = makeView(FULL_CHANGE);
+    caretAt(view, valueEnd(view, 'amount'));
+    expect(press(view, 'ArrowUp', { altKey: true })).toBe(true);
+    expect(doc(view)).toContain('{amount:-1}');
+    press(view, 'ArrowDown', { altKey: true });
+    press(view, 'ArrowDown', { altKey: true });
+    expect(doc(view)).toContain('{amount:-3}');
+  });
+
+  it('Mod-/ shows the raw source until the caret leaves; structure is editable meanwhile', () => {
+    const view = makeView(`${FULL_CHANGE}\nafter`);
+    caretAt(view, valueEnd(view, 'reason'));
+    expect(press(view, '/', { ctrlKey: true })).toBe(true);
+    expect(text(view)).toContain('{{rp01.change');
+    const wording = doc(view).indexOf('Rep change') + 3;
+    caretAt(view, wording);
+    type(view, 'X');
+    expect(doc(view)).toContain('RepX change');
+    caretAt(view, doc(view).length);
+    expect(text(view)).not.toContain('{{rp01.change');
+    expect(text(view)).toContain('RepX change:');
+  });
+});
+
+describe('moving between blanks', () => {
+  it('Tab goes to the end of the next blank, Shift-Tab back, and past the last leaves the directive', () => {
+    const view = makeView(`${FULL_CHANGE} tail`);
+    caretAt(view, valueEnd(view, 'amount'));
+    press(view, 'Tab');
+    expect(head(view)).toBe(valueEnd(view, 'observer'));
+    press(view, 'Tab');
+    expect(head(view)).toBe(valueEnd(view, 'holder'));
+    press(view, 'Tab', { shiftKey: true });
+    expect(head(view)).toBe(valueEnd(view, 'observer'));
+    press(view, 'Tab');
+    press(view, 'Tab');
+    expect(head(view)).toBe(valueEnd(view, 'reason'));
+    press(view, 'Tab');
+    expect(head(view)).toBe(FULL_CHANGE.length);
+  });
+
+  it('Home/End go to the blank edges first, then fall through to the line', () => {
+    const view = makeView(`${FULL_CHANGE} tail`);
+    caretAt(view, valueStart(view, 'reason') + 4);
+    expect(press(view, 'End')).toBe(true);
+    expect(head(view)).toBe(valueEnd(view, 'reason'));
+    expect(press(view, 'Home')).toBe(true);
+    expect(head(view)).toBe(valueStart(view, 'reason'));
+    caretAt(view, valueEnd(view, 'reason'));
+    press(view, 'End');
+    expect(head(view)).toBe(doc(view).length);
+  });
+
+  it('Tab outside a directive is left to the editor', () => {
+    const view = makeView(`${FULL_CHANGE} tail`);
+    caretAt(view, doc(view).length);
+    expect(press(view, 'Tab')).toBe(false);
+  });
+
+  it('arrow keys hop over wording and delimiters from one blank edge to the next', () => {
+    const view = makeView(FULL_CHANGE);
+    caretAt(view, valueEnd(view, 'amount'));
+    cursorCharRight(view);
+    expect(head(view)).toBe(valueStart(view, 'observer'));
+    cursorCharLeft(view);
+    expect(head(view)).toBe(valueEnd(view, 'amount'));
+  });
+
+  it('a picked note is one unit to the arrow keys', () => {
+    const view = makeView(FULL_CHANGE);
+    caretAt(view, valueStart(view, 'observer'));
+    cursorCharRight(view);
+    expect(head(view)).toBe(valueEnd(view, 'observer'));
+  });
+
+  it('Backspace after a directive selects it, again deletes it; undo restores it', () => {
+    const view = makeView(`${FULL_CHANGE}\nafter`);
+    caretAt(view, FULL_CHANGE.length);
+    press(view, 'Backspace');
+    expect(view.state.selection.main.from).toBe(0);
+    expect(view.state.selection.main.to).toBe(FULL_CHANGE.length);
+    press(view, 'Backspace');
+    expect(doc(view)).toBe('\nafter');
+    undo(view);
+    expect(doc(view)).toBe(`${FULL_CHANGE}\nafter`);
+  });
+});
+
+describe('choices', () => {
+  it('Tab into a note blank opens the notes, recents and default holder first', async () => {
+    const view = makeView(EMPTY_CHANGE, { choices: { defaultHolderId: () => 'e5f6' } });
+    caretAt(view, valueEnd(view, 'observer'));
+    press(view, 'Tab');
+    expect(await openList(view)).toEqual(['Spire Watch', 'White Tigers', 'The Party']);
+    expect(isEditorPopupOpen(view.contentDOM)).toBe(true);
+  });
+
+  it('picking a note writes its link, remembers it, and moves on to the next blank', async () => {
+    const view = makeView(EMPTY_CHANGE);
+    caretAt(view, valueStart(view, 'observer'));
+    press(view, 'Tab', { shiftKey: true });
+    press(view, 'Tab');
+    expect(head(view)).toBe(valueStart(view, 'observer'));
+    await openList(view);
+    await settle();
+    expect(acceptCompletion(view)).toBe(true);
+    expect(doc(view)).toContain('{observer:[[a1b2]]}');
+    expect(getRecentNoteIds()).toContain('a1b2');
+    expect(head(view)).toBe(valueEnd(view, 'holder'));
+    // The next blank's list reopens by itself.
+    expect(await openList(view)).toContain('The Party');
+  });
+
+  it('the typed text is the query, and Tab takes the top match', async () => {
+    const view = makeView(EMPTY_CHANGE);
+    caretAt(view, valueStart(view, 'holder'));
+    type(view, 'spi');
+    expect(await openList(view)).toEqual(['Spire Watch']);
+    press(view, 'Tab');
+    await vi.waitFor(() => expect(doc(view)).toContain('{holder:[[e5f6]]}'));
+    expect(head(view)).toBe(valueEnd(view, 'reason'));
+  });
+
+  it('Tab straight after typing, before any list has opened, still takes the top match', async () => {
+    const view = makeView(EMPTY_CHANGE);
+    caretAt(view, valueStart(view, 'holder'));
+    type(view, 'white');
+    expect(completionStatus(view.state)).not.toBe('active');
+    press(view, 'Tab');
+    await vi.waitFor(() => expect(doc(view)).toContain('{holder:[[a1b2]]}'));
+  });
+
+  it('holder picked with no default holder set tells the host', async () => {
+    const onHolderChosenWithoutDefault = vi.fn();
+    const view = makeView(EMPTY_CHANGE, { choices: { onHolderChosenWithoutDefault } });
+    caretAt(view, valueStart(view, 'holder'));
+    type(view, 'party');
+    press(view, 'Enter');
+    await vi.waitFor(() => expect(onHolderChosenWithoutDefault).toHaveBeenCalledWith('c3d4'));
+    expect(doc(view)).toContain('{holder:[[c3d4]]}');
+  });
+
+  it('a tag blank lists the track tags; a Gains blank offers to create an unknown one', async () => {
+    const createOption = vi.fn(async () => ({ key: 'rival' }));
+    const view = makeView(EMPTY_GAINS, { choices: { createOption } });
+    caretAt(view, valueStart(view, 'option'));
+    type(view, 'riv');
+    expect(await openList(view)).toEqual(['Create "riv"', 'Create "riv" (symmetrical)']);
+    press(view, 'Enter');
+    await vi.waitFor(() => expect(doc(view)).toContain('{option:rival}'));
+    expect(createOption).toHaveBeenCalledWith('tg01', 'riv', false);
+  });
+
+  it('a Loses tag blank lists only held tags and never offers create', async () => {
+    const heldOptions = vi.fn(async () => ['married']);
+    const view = makeView(LOSES_WITH_HOLDER, {
+      choices: { heldOptions, createOption: vi.fn() },
+    });
+    caretAt(view, valueStart(view, 'option'));
+    type(view, 'ma');
+    expect(await openList(view)).toEqual(['married']);
+    expect(heldOptions).toHaveBeenCalledWith(
+      expect.objectContaining({ trackId: 'tg01', holder: 'c3d4', observer: null, anchor: 0 }),
+    );
+  });
+
+  it('a failed held-tag lookup shows every tag instead of hanging', async () => {
+    const view = makeView(LOSES_WITH_HOLDER, {
+      choices: { heldOptions: () => Promise.reject(new Error('io')) },
+    });
+    caretAt(view, valueStart(view, 'option'));
+    type(view, 'm');
+    expect(await openList(view)).toEqual(['member', 'married', 'employee', 'customer']);
+  });
+
+  it("a Loses observer blank lists only notes sharing the holder's tag", async () => {
+    const observerOptions = vi.fn(async () => ['e5f6']);
+    const doc0 = serialiseTemplate('tg01', 'loses', LOSES_TEMPLATE, {
+      holder: '[[c3d4]]',
+      option: 'married',
+    });
+    const view = makeView(doc0, { choices: { observerOptions } });
+    caretAt(view, valueEnd(view, 'option'));
+    press(view, 'Tab');
+    expect(await openList(view)).toEqual(['Spire Watch']);
+    expect(observerOptions).toHaveBeenCalledWith(
+      expect.objectContaining({ holder: 'c3d4', option: 'married' }),
+    );
+  });
+
+  it('free-text blanks (amount, reason) offer no list', async () => {
+    const view = makeView(EMPTY_CHANGE);
+    caretAt(view, valueStart(view, 'amount'));
+    type(view, '2');
+    await new Promise((r) => setTimeout(r, 150));
+    expect(completionStatus(view.state)).toBeNull();
+  });
+
+  it('inserting a directive puts the caret in its first blank', () => {
+    const view = makeView('before\nafter');
+    insertDirective(view, 7, 7, EMPTY_CHANGE);
+    expect(doc(view)).toBe(`before\n${EMPTY_CHANGE}after`);
+    expect(head(view)).toBe(valueStart(view, 'amount'));
+  });
+});
+
+describe('never nesting', () => {
+  it('inserting inside a directive puts the new one right after it', () => {
+    const view = makeView(FULL_CHANGE);
+    const inside = valueStart(view, 'reason') + 3;
+    insertDirective(view, inside, inside, EMPTY_CHANGE);
+    expect(doc(view)).toBe(`${FULL_CHANGE} ${EMPTY_CHANGE}`);
+    expect(head(view)).toBe(FULL_CHANGE.length + 1 + EMPTY_CHANGE.indexOf('{amount:') + 8);
+  });
+});
+
+describe('pointer', () => {
+  function mousedown(el: Element, mods: { ctrlKey?: boolean } = {}): MouseEvent {
+    const event = new MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      ...mods,
+    });
+    el.dispatchEvent(event);
+    return event;
+  }
+
+  it('Ctrl-click on a note opens it', () => {
     const onOpenNote = vi.fn();
-    const setup = track(
-      makeView(FULL_CHANGE_DIRECTIVE, { onOpenNote, place: 'event' }, { labels: LABELS }),
-    );
-    const { view } = setup;
-    const holderValue = block(view).querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
-
-    fireClick(holderValue);
-    expect(onOpenNote).not.toHaveBeenCalled();
-    expect(view.state.field(bubbleStateField)).toEqual({ anchor: 0, role: 'holder' });
-
-    view.dispatch({ effects: closeBubbleEffect.of(null) });
-    fireClick(holderValue, { ctrlKey: true });
-    expect(onOpenNote).toHaveBeenCalledWith('c3d4');
-    expect(view.state.field(bubbleStateField)).toBeNull();
-  });
-
-  it('unfinished blanks show their prompt with the attention class, and the block outlined in warning', () => {
-    const setup = track(
-      makeView(UNFINISHED_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }),
-    );
-    const el = block(setup.view);
-    const amountValue = el.querySelector<HTMLElement>('.cm-directive-value-role-amount')!;
-    expect(amountValue.classList.contains('cm-directive-value-attention')).toBe(true);
-    expect(amountValue.textContent).toBe('Reputation change');
-
-    expect(el.classList.contains('cm-directive-unfinished')).toBe(true);
-    expect(el.classList.contains('cm-directive-error')).toBe(false);
-  });
-
-  it('a complete, valid directive gets neither the warning nor the danger outline class', () => {
-    const setup = track(makeView(FULL_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }));
-    const el = block(setup.view);
-    expect(el.classList.contains('cm-directive-unfinished')).toBe(false);
-    expect(el.classList.contains('cm-directive-error')).toBe(false);
-  });
-
-  it('empty reason shows the host default reason', () => {
-    const withHost = track(
-      makeView(
-        EMPTY_REASON_DIRECTIVE,
-        { place: 'event' },
-        { labels: LABELS, defaultReason: 'Battle of Dawn' },
-      ),
-    );
-    const reasonValue = block(withHost.view).querySelector<HTMLElement>(
-      '.cm-directive-value-role-reason',
+    const view = makeView(FULL_CHANGE, { config: { place: 'event', onOpenNote } });
+    const note = [...view.dom.querySelectorAll('.cm-directive-value-note')].find(
+      (e) => e.textContent === 'The Party',
     )!;
-    expect(reasonValue.textContent).toBe('Battle of Dawn');
-
-    const withoutHost = track(
-      makeView(
-        EMPTY_REASON_DIRECTIVE,
-        { place: 'event' },
-        { labels: LABELS, dispatchContext: false },
-      ),
-    );
-    const defaultReasonValue = block(withoutHost.view).querySelector<HTMLElement>(
-      '.cm-directive-value-role-reason',
-    )!;
-    expect(defaultReasonValue.textContent).toBe('Unspecified');
-  });
-
-  it('a note with an empty reason renders "Unspecified" with a reason value element', () => {
-    const setup = track(
-      makeView(EMPTY_REASON_TAG_DIRECTIVE, { place: 'note' }, { labels: LABELS }),
-    );
-    const el = block(setup.view);
-    const reasonValue = el.querySelector<HTMLElement>('.cm-directive-value-role-reason');
-    expect(reasonValue).not.toBeNull();
-    expect(reasonValue?.textContent).toBe('Unspecified');
-    expect(el.textContent).toContain('—');
-  });
-
-  it('a note with a filled reason still shows it', () => {
-    const setup = track(
-      makeView(FILLED_REASON_TAG_DIRECTIVE, { place: 'note' }, { labels: LABELS }),
-    );
-    const el = block(setup.view);
-    const reasonValue = el.querySelector<HTMLElement>('.cm-directive-value-role-reason');
-    expect(reasonValue?.textContent).toBe('signed the deal');
-  });
-
-  it('an event with an empty reason still shows the event title', () => {
-    const setup = track(
-      makeView(
-        EMPTY_REASON_TAG_DIRECTIVE,
-        { place: 'event' },
-        { labels: LABELS, defaultReason: 'Battle of Dawn' },
-      ),
-    );
-    const el = block(setup.view);
-    const reasonValue = el.querySelector<HTMLElement>('.cm-directive-value-role-reason');
-    expect(reasonValue?.textContent).toBe('Battle of Dawn');
-  });
-});
-
-describe('relationship directives — errors', () => {
-  it('unknown track shows raw content with error border and title', () => {
-    const setup = track(makeView(UNKNOWN_TRACK_DIRECTIVE, { place: 'event' }, { labels: LABELS }));
-    const el = block(setup.view);
-    expect(el.classList.contains('cm-directive-error')).toBe(true);
-    expect(el.textContent).toBe(UNKNOWN_TRACK_DIRECTIVE);
-    expect(el.title).toBe('Relationship track rp99 not found');
-  });
-
-  it('unknown option shows the sentence with the bad value marked, and the block outlined in danger', () => {
-    const setup = track(makeView(UNKNOWN_OPTION_DIRECTIVE, { place: 'event' }, { labels: LABELS }));
-    const el = block(setup.view);
-    expect(el.classList.contains('cm-directive-error')).toBe(true);
-    expect(el.textContent).toContain('relationship: boss →');
-
-    const optionValue = el.querySelector<HTMLElement>('.cm-directive-value-role-option')!;
-    expect(optionValue.classList.contains('cm-directive-value-error')).toBe(true);
-    expect(optionValue.title).toBe('Unknown option "boss" for Relationship tags');
-  });
-});
-
-describe('relationship directives — wiki-link interop', () => {
-  it('wiki-link decorations never render inside a block', () => {
-    const doc = `See [[e5f6]] also ${FULL_CHANGE_DIRECTIVE}`;
-    const setup = track(makeView(doc, { place: 'event' }, { labels: LABELS, withWikiLinks: {} }));
-    const { view } = setup;
-    const el = block(view);
-    expect(el.querySelector('.cm-note-link')).toBeNull();
-    expect(el.querySelector('.cm-wiki-link-raw')).toBeNull();
-    expect(view.dom.querySelector('.cm-note-link')).not.toBeNull();
-  });
-});
-
-describe('relationship directives — per-view role element registry', () => {
-  it('scopes registered blank elements per EditorView, even for identical documents', () => {
-    const setupA = track(
-      makeView(UNFINISHED_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }),
-    );
-    const setupB = track(
-      makeView(UNFINISHED_CHANGE_DIRECTIVE, { place: 'event' }, { labels: LABELS }),
-    );
-
-    const elA = getDirectiveRoleElement(setupA.view, 0, 'holder');
-    const elB = getDirectiveRoleElement(setupB.view, 0, 'holder');
-
-    expect(elA).not.toBeNull();
-    expect(elB).not.toBeNull();
-    expect(elA).not.toBe(elB);
-    expect(setupA.view.dom.contains(elA!)).toBe(true);
-    expect(setupB.view.dom.contains(elA!)).toBe(false);
-    expect(setupB.view.dom.contains(elB!)).toBe(true);
-    expect(setupA.view.dom.contains(elB!)).toBe(false);
-
-    // Destroying view B's widgets (via view.destroy(), which the harness
-    // does through `track`/`afterEach`) must not clobber view A's entry.
-    setupB.view.destroy();
-    expect(getDirectiveRoleElement(setupA.view, 0, 'holder')).toBe(elA);
-    expect(getDirectiveRoleElement(setupB.view, 0, 'holder')).toBeNull();
-
-    // Prevent the shared afterEach cleanup from destroying setupB's view twice.
-    cleanup = cleanup.filter((s) => s !== setupB);
-    setupB.container.remove();
-  });
-});
-
-describe('relationship directives — read-only', () => {
-  it('renders blocks without the cross; Ctrl+click still opens', () => {
-    const onOpenNote = vi.fn();
-    const setup = track(
-      makeView(
-        FULL_CHANGE_DIRECTIVE,
-        { readOnly: true, onOpenNote, place: 'event' },
-        { labels: LABELS, readOnly: true },
-      ),
-    );
-    const el = block(setup.view);
-    expect(el.querySelector('.cm-directive-cross')).toBeNull();
-
-    const holderValue = el.querySelector<HTMLElement>('.cm-directive-value-role-holder')!;
-    fireClick(holderValue, { ctrlKey: true });
+    const event = mousedown(note, { ctrlKey: true });
     expect(onOpenNote).toHaveBeenCalledWith('c3d4');
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('a click on wording lands the caret in a blank', () => {
+    const view = makeView(`${FULL_CHANGE}\nafter`, { cursor: doc0Length() });
+    const wording = view.dom.querySelector('.cm-directive-wording')!;
+    mousedown(wording);
+    const pos = head(view);
+    const slots = ['amount', 'observer', 'holder', 'reason'].flatMap((r) => [
+      valueStart(view, r),
+      valueEnd(view, r),
+    ]);
+    expect(slots).toContain(pos);
+  });
+
+  it('the cross deletes the whole directive in one undo step', () => {
+    const view = makeView(`${FULL_CHANGE}\nafter`);
+    mousedown(view.dom.querySelector('.cm-directive-cross')!);
+    expect(doc(view)).toBe('\nafter');
+    undo(view);
+    expect(doc(view)).toBe(`${FULL_CHANGE}\nafter`);
   });
 });
+
+function doc0Length(): number {
+  return FULL_CHANGE.length + 6;
+}

@@ -1,6 +1,6 @@
 /**
  * Pure computation of which categorical options are held — used by the
- * "remove" bubble's blanks so they only offer keys/notes that could
+ * blanks of a Remove directive so they only offer keys/notes that could
  * actually be removed. Remove is event-only (see
  * `src/shared/relationships/AGENTS.md`), so this always folds toward a
  * specific event date.

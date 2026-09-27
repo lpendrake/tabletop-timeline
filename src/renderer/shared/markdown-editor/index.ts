@@ -16,16 +16,17 @@ export type { ImageDecorationsOptions } from './extensions/image-decorations';
 export type { MarkdownLinkClickConfig } from './extensions/markdown-link-click';
 export type { RelationshipDirectivesConfig } from './extensions/relationship-directives';
 export type {
-  RelationshipBubbleHostContext,
-  RelationshipBubbleOptions,
+  RelationshipCompletionOptions,
   HeldOptionsQuery,
-} from './extensions/relationship-bubble-view-plugin';
+  ObserverOptionsQuery,
+} from './extensions/relationship-directive-completions';
 export { buildEditorMenuItems } from './extensions/editor-context-menu';
 export type {
   EditorMenuContext,
   EditorMenuExtraItems,
   EditorContextMenuConfig,
 } from './extensions/editor-context-menu';
-export { insertDirective } from './extensions/relationship-bubble-state';
+export { insertDirective } from './extensions/relationship-directives';
+export { isEditorPopupOpen } from './extensions/editor-completions';
 export { composeExtraItems } from './compose-extra-items';
 export * from './commands';

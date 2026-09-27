@@ -5,14 +5,13 @@ import { EditorView } from '@codemirror/view';
 import { history } from '@codemirror/commands';
 import { filterMenu, pickAutoTarget } from '../../shared/context-menu';
 import type { EditorMenuContext } from '../../shared/markdown-editor';
-import { bubbleStateField } from '../../shared/markdown-editor/extensions/relationship-bubble-state';
 import { buildRelationshipMenuItems } from '../editor-menu';
 import type { TrackLibrary } from '../../../shared/relationships';
 
 const LIBRARY: TrackLibrary = { custom: [], optionAdditions: {} };
 
 function makeContext(doc = ''): { ctx: EditorMenuContext; container: HTMLDivElement } {
-  const state = EditorState.create({ doc, extensions: [history(), bubbleStateField] });
+  const state = EditorState.create({ doc, extensions: [history()] });
   const container = document.createElement('div');
   document.body.appendChild(container);
   const view = new EditorView({ state, parent: container });
@@ -92,7 +91,7 @@ describe('buildRelationshipMenuItems', () => {
     expect(target!.labels).toEqual(['Relationships', 'PF2E Reputation', 'Change']);
   });
 
-  it('choosing an action inserts an empty directive and opens its first bubble', () => {
+  it('choosing an action inserts an empty directive with the caret in its first blank', () => {
     const { ctx, container } = makeContext('before\nafter');
     views.push(ctx.view);
     container.remove();
@@ -112,8 +111,9 @@ describe('buildRelationshipMenuItems', () => {
     change.onSelect();
 
     expect(ctx.view.state.doc.toString()).toContain('{{rp01.change ');
-    const bubble = ctx.view.state.field(bubbleStateField, false);
-    expect(bubble).not.toBeNull();
-    expect(bubble!.anchor).toBe(from);
+    // The caret lands in the first empty blank — `{amount:` + nothing + `}`.
+    const doc = ctx.view.state.doc.toString();
+    const amountValue = doc.indexOf('{amount:') + '{amount:'.length;
+    expect(ctx.view.state.selection.main.head).toBe(amountValue);
   });
 });

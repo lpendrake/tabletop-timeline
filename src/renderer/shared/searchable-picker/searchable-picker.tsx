@@ -49,9 +49,8 @@ export interface SearchablePickerProps {
     recentIds?: readonly string[],
   ) => PickerOption[];
   /**
-   * Attached to the rendered option list element — lets a caller (e.g.
-   * `relationship-bubble-view-plugin.ts`, which measures the list's and its
-   * first row's real height to plan the bubble's placement) hold a
+   * Attached to the rendered option list element — lets a caller that needs
+   * to measure the list (or its rows) hold a
    * reference to it instead of querying the DOM for `.searchable-picker-list`
    * or `.searchable-picker-row`. Merged with this component's own internal
    * ref, so both receive the same node.

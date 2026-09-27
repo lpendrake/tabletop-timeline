@@ -3,7 +3,8 @@
  * Adapted for [[Display Text|id]] syntax and 4-character alphanumeric IDs.
  */
 
-import { autocompletion, type Completion, type CompletionContext } from '@codemirror/autocomplete';
+import type { Completion, CompletionContext } from '@codemirror/autocomplete';
+import { completionSources, editorAutocompletion } from './editor-completions';
 import {
   Prec,
   RangeSetBuilder,
@@ -226,44 +227,41 @@ export function buildWikiLinkInsert(
 function wikiLinkCompletions(config: WikiLinksConfig): Extension {
   if (!config.suggest) return [];
 
-  return autocompletion({
-    activateOnTyping: true,
-    icons: false,
-    override: [
-      async (context: CompletionContext) => {
-        const match = context.matchBefore(WIKI_LINK_QUERY_RE);
-        if (!match || (match.from === match.to && !context.explicit)) return null;
+  return [
+    editorAutocompletion,
+    completionSources.of(async (context: CompletionContext) => {
+      const match = context.matchBefore(WIKI_LINK_QUERY_RE);
+      if (!match || (match.from === match.to && !context.explicit)) return null;
 
-        const { prefixLen, query } = parseTrigger(match.text);
-        const suggestions = await config.suggest!(query);
-        if (context.aborted) return null;
+      const { prefixLen, query } = parseTrigger(match.text);
+      const suggestions = await config.suggest!(query);
+      if (context.aborted) return null;
 
-        return {
-          from: match.from + prefixLen,
-          to: context.pos,
-          options: suggestions.map((s) => ({
-            label: s.label,
-            detail: s.detail,
-            apply: (view: EditorView, _completion: Completion, from: number, to: number) => {
-              const nextTwo = view.state.doc.sliceString(to, to + 2);
-              const { insert, replaceFrom, replaceTo } = buildWikiLinkInsert(
-                s,
-                prefixLen,
-                from,
-                to,
-                nextTwo,
-              );
-              view.dispatch({
-                changes: { from: replaceFrom, to: replaceTo, insert },
-                selection: { anchor: replaceFrom + insert.length },
-              });
-            },
-          })),
-          validFor: /^[^\]\n|@]*$/,
-        };
-      },
-    ],
-  });
+      return {
+        from: match.from + prefixLen,
+        to: context.pos,
+        options: suggestions.map((s) => ({
+          label: s.label,
+          detail: s.detail,
+          apply: (view: EditorView, _completion: Completion, from: number, to: number) => {
+            const nextTwo = view.state.doc.sliceString(to, to + 2);
+            const { insert, replaceFrom, replaceTo } = buildWikiLinkInsert(
+              s,
+              prefixLen,
+              from,
+              to,
+              nextTwo,
+            );
+            view.dispatch({
+              changes: { from: replaceFrom, to: replaceTo, insert },
+              selection: { anchor: replaceFrom + insert.length },
+            });
+          },
+        })),
+        validFor: /^[^\]\n|@]*$/,
+      };
+    }),
+  ];
 }
 
 function makeWikiLinkClickHandler(config: WikiLinksConfig): Extension {

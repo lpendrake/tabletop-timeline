@@ -2,14 +2,12 @@
  * Parses relationship directives (`{{trackId.action ...}}`) once per document
  * change and shares the result across every extension that would otherwise
  * call `parseDirectives` on the whole buffer itself: `relationship-directives.ts`
- * (decorations, the boundary/Enter keymaps, `currentDirectiveAt`),
+ * (its model, guard and keymaps), `relationship-directive-completions.ts`,
  * `wiki-links.ts` (`directiveRanges`, to skip `[[id]]` occurrences inside a
- * directive's role tokens), `relationship-bubble-state.ts` (`bubbleStateField`'s
- * per-transaction re-validation), and `relationship-bubble-view-plugin.ts`
- * (`RelationshipBubblePlugin.sync`).
+ * directive's role tokens) and `slash-trigger.ts` (no `/` menu inside one).
  *
  * `parsedDirectivesField` recomputes only when `tr.docChanged` — a
- * selection-only transaction (moving the caret, opening the fill-in bubble)
+ * selection-only transaction (moving the caret between blanks)
  * reuses the previous array. `directivesIn` reads the field when it's wired
  * into the editor's extension stack, and falls back to parsing directly
  * when it isn't (e.g. a unit test that mounts a single extension in

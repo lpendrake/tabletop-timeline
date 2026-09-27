@@ -1,12 +1,12 @@
 /**
- * Shared MRU (most-recently-chosen) store for the relationship bubble's
- * holder/observer note pickers. Deliberately ONE list: used by every
+ * Shared MRU (most-recently-chosen) store for relationship directive
+ * holder/observer blanks. Deliberately ONE list: used by every
  * directive type (PF2E Reputation, Attitude, tags, …), every editor (the
- * note editor, the event editor), and every mounted bubble instance — never
+ * note editor, the event editor), and every mounted editor instance — never
  * per-component state, so switching views (which unmounts and remounts the
  * editor) never resets it. See the root `CLAUDE.md`'s "no business logic
  * inside hooks/components": this is a plain, non-React, non-CodeMirror
- * module — `relationship-bubble-view-plugin.ts` is the only thing that
+ * module — `relationship-directive-completions.ts` is the only thing that
  * reads and writes it.
  *
  * Persisted to `localStorage` (best-effort only — every access is wrapped
@@ -15,13 +15,14 @@
  * full app reload. Also held in memory, so it keeps working for the rest of
  * the session even when `localStorage` throws or isn't available.
  *
- * Not campaign-scoped: no campaign identifier reaches the bubble today (see
- * `relationship-bubble-view-plugin.ts`'s `RelationshipBubbleHostContext` —
+ * Not campaign-scoped: no campaign identifier reaches the editor today (see
+ * `relationship-directive-completions.ts`'s `RelationshipCompletionOptions` —
  * neither host wires one through `editor-host-config.ts` /
  * `use-relationship-editor-config.ts`), so this keeps one list per app
  * session rather than partitioning by campaign.
  */
 
+// Named for the old fill-in bubble; kept so existing recents survive.
 const STORAGE_KEY = 'relationship-bubble:recent-note-ids';
 
 /** How many recently-chosen notes to remember. */
@@ -69,7 +70,7 @@ export function getRecentNoteIds(): readonly string[] {
 
 /**
  * Records `id` as the most recently chosen holder/observer note — shared by
- * every bubble instance, in every editor, for every directive type. No-op
+ * every editor, for every directive type. No-op
  * for a falsy id (e.g. clearing a field, or a non-note role).
  */
 export function rememberRecentNote(id: string | null | undefined): void {

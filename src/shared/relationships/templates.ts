@@ -1,7 +1,7 @@
 /**
  * Pure validation for action templates: sentences with role blanks written
  * `{role}` or `{role:Prompt}`, where `role` is one of `ROLES` and the optional
- * `Prompt` is the question a UI bubble asks when filling that blank in.
+ * `Prompt` is what an empty blank shows until it is filled in.
  */
 
 import { ActionKind, Role, TrackKind } from './spec.js';
