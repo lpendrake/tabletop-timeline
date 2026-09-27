@@ -186,7 +186,7 @@ function buildModels(state: EditorState, place: 'note' | 'event'): DirectiveMode
       resolveTrack: (id) => resolveTrack(id, library),
       undated: place === 'note',
     });
-    const problems = interpreted.status === 'invalid' ? interpreted.problems : [];
+    const problems = interpreted.status === 'ok' ? [] : interpreted.problems;
     const blocking = problems.find(
       (p) => p.code === 'unknown-track' || p.code === 'unknown-action',
     );
@@ -194,7 +194,8 @@ function buildModels(state: EditorState, place: 'note' | 'event'): DirectiveMode
       directive,
       layout: directiveLayout(directive),
       track: track ?? null,
-      status: interpreted.status,
+      // A wrong value outranks an empty blank: show the error straight away.
+      status: problems.length > 0 ? 'invalid' : interpreted.status,
       problems,
       live: !blocking && revealed !== directive.from,
       blockingMessage: blocking?.message ?? null,

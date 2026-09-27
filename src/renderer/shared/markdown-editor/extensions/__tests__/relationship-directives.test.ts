@@ -234,6 +234,19 @@ describe('rendering', () => {
     expect(view.dom.querySelector('.cm-directive-error')).not.toBeNull();
   });
 
+  it('flags a bad value straight away, even while other blanks are still empty', () => {
+    const view = makeView(
+      serialiseTemplate('tg01', 'gains', GAINS_TEMPLATE, { holder: '[[a1b2]]', option: 'marired' }),
+    );
+    const bad = view.dom.querySelector<HTMLElement>('.cm-directive-value-error');
+    expect(bad?.textContent).toBe('marired');
+    expect(bad?.title).toMatch(/marired/);
+    expect(view.dom.querySelector('.cm-directive-chip-error')).not.toBeNull();
+    expect(view.dom.querySelector('.cm-directive-placeholder-attention')?.textContent).toBe(
+      'choose observer',
+    );
+  });
+
   it('maps statuses to outline classes', () => {
     expect(directiveBorderClass('unfinished')).toBe('cm-directive-unfinished');
     expect(directiveBorderClass('invalid')).toBe('cm-directive-error');

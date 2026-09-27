@@ -155,6 +155,8 @@ A directive (`{{trackId.action ...}}`, parsed and interpreted by `src/shared/rel
 | Empty value                          | prompt, or the default reason in italics | zero-width `Decoration.widget` (`cm-directive-placeholder`)                 | the caret sits on the point; typing fills it                    |
 | Closing `}}`                         | hover ×                                  | `CrossWidget` (handles its own mousedown)                                   | atomic                                                          |
 
+A directive whose filled blanks have a problem shows as an error (red chip, underlined value) even while other blanks are still empty; otherwise an empty required blank makes it unfinished (amber).
+
 Everything that isn't a value is merged, per directive, into the stretches between values (`layout.structure`) and registered as `atomicRanges`, so → from the end of one blank lands on the start of the next.
 
 ### Files
