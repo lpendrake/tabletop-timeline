@@ -48,6 +48,34 @@ function formatAmount(value: string): { display: string; problem?: true } {
   return { display: n >= 0 ? `+${n}` : `${n}` };
 }
 
+/**
+ * The label a stored value stands for when it's something the track or the
+ * note index knows: a note link → the note's label, a categorical option
+ * key → the option's label, an ordinal rung key → the rung's label. `null`
+ * for anything else (free text, numbers, unknown keys). Shared by
+ * `readableParts` and the editor's blanks so the two always agree.
+ */
+export function knownValueLabel(
+  role: Role,
+  value: string,
+  track: ResolvedTrack | null,
+  labelForNote: (id: string) => string,
+): { label: string; noteId?: string } | null {
+  if (role === 'holder' || role === 'observer') {
+    const noteId = noteIdOf(value);
+    return noteId ? { label: labelForNote(noteId), noteId } : null;
+  }
+  if (role === 'option' && track?.kind === 'categorical') {
+    const option = track.optionFor(value);
+    return option ? { label: option.label } : null;
+  }
+  if (role === 'value' && track?.kind === 'ordinal') {
+    const label = track.labelFor(value);
+    return typeof label === 'string' ? { label } : null;
+  }
+  return null;
+}
+
 export function readableParts(d: ParsedDirective, ctx: ReadableContext): ReadablePart[] {
   const track = ctx.track;
   if (!track) return [];
@@ -106,27 +134,16 @@ export function readableParts(d: ParsedDirective, ctx: ReadableContext): Readabl
     const problem = problemFor(role);
 
     if (role === 'holder' || role === 'observer') {
-      const noteId = noteIdOf(value);
-      if (noteId) {
-        parts.push({
-          kind: 'value',
-          role,
-          tokenIndex: segment.index,
-          display: ctx.labelForNote(noteId),
-          empty: false,
-          noteId,
-          problem,
-        });
-      } else {
-        parts.push({
-          kind: 'value',
-          role,
-          tokenIndex: segment.index,
-          display: value,
-          empty: false,
-          problem,
-        });
-      }
+      const known = knownValueLabel(role, value, track, ctx.labelForNote);
+      parts.push({
+        kind: 'value',
+        role,
+        tokenIndex: segment.index,
+        display: known?.label ?? value,
+        empty: false,
+        noteId: known?.noteId,
+        problem,
+      });
       continue;
     }
 
@@ -145,12 +162,11 @@ export function readableParts(d: ParsedDirective, ctx: ReadableContext): Readabl
 
     if (role === 'value') {
       if (track.kind === 'ordinal') {
-        const label = track.labelFor(value);
         parts.push({
           kind: 'value',
           role,
           tokenIndex: segment.index,
-          display: typeof label === 'string' ? label : value,
+          display: knownValueLabel(role, value, track, ctx.labelForNote)?.label ?? value,
           empty: false,
           problem,
         });
@@ -169,12 +185,11 @@ export function readableParts(d: ParsedDirective, ctx: ReadableContext): Readabl
     }
 
     if (role === 'option') {
-      const option = track.kind === 'categorical' ? track.optionFor(value) : undefined;
       parts.push({
         kind: 'value',
         role,
         tokenIndex: segment.index,
-        display: option?.label ?? value,
+        display: knownValueLabel(role, value, track, ctx.labelForNote)?.label ?? value,
         empty: false,
         problem,
       });

@@ -5,7 +5,7 @@ import { effectiveLinkLabel } from '../../../shared/entity-labels';
 /**
  * Notes (not events or assets) from the entity index, as searchable-picker
  * options. Shared by the settings default-holder picker and the editor's
- * relationship fill-in bubble note pickers — both need the same "notes
+ * relationship directive holder/observer blanks — both need the same "notes
  * only" filter and label resolution.
  */
 export function notesToPickerOptions(entityIndex: readonly EntityIndexEntry[]): PickerOption[] {

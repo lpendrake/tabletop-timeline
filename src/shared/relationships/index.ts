@@ -96,6 +96,7 @@ export {
   interpretDirective,
   allowedActions,
   readableParts,
+  knownValueLabel,
   promptFor,
   NOTE_DEFAULT_REASON,
   validateRoleValue,

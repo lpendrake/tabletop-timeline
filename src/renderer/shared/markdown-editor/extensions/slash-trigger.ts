@@ -9,10 +9,12 @@
  * (see `wiki-link-query.ts`), or a URL/Link. This is what keeps `and/or`, `1/2`, and `http://` from ever
  * triggering it: the character immediately before the caret in those cases
  * is a letter, digit, colon, or slash, never whitespace or start-of-line.
+ * It never opens inside a relationship directive, whose blanks are plain text.
  */
 import { syntaxTree } from '@codemirror/language';
 import type { EditorState } from '@codemirror/state';
 import { isInWikiLinkQuery } from './wiki-link-query';
+import { directiveRanges } from './parsed-directives';
 
 const BLOCKED_NODE_NAMES = new Set([
   'InlineCode',
@@ -33,6 +35,8 @@ export function shouldOpenSlashMenu(state: EditorState, pos: number): boolean {
   const line = state.doc.lineAt(pos);
   const textBefore = line.text.slice(0, pos - line.from);
   if (isInWikiLinkQuery(textBefore)) return false;
+  // A `/` inside a relationship directive (say, in its reason) is just text.
+  if (directiveRanges(state).some((r) => r.from < pos && pos < r.to)) return false;
 
   const tree = syntaxTree(state);
   let node: ReturnType<typeof tree.resolveInner> | null = tree.resolveInner(pos, -1);

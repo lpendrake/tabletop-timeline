@@ -196,6 +196,24 @@ describe('empty required role → unfinished; empty reason → not unfinished', 
     }
   });
 
+  it('still checks the blanks that are filled, and reports their problems', () => {
+    const raw =
+      '{{rp01.change Rep change: {amount:abc} {observer:} rep for {holder:c3d4} — {reason:}}}';
+    const interpreted = interpretDirective(parseDirectives(raw).directives[0], { resolveTrack });
+    expect(interpreted.status).toBe('unfinished');
+    if (interpreted.status === 'unfinished') {
+      expect(interpreted.missing).toEqual(['observer']);
+      expect(interpreted.problems.map((p) => p.role).sort()).toEqual(['amount', 'holder']);
+    }
+  });
+
+  it('an unfinished directive with good filled blanks has no problems', () => {
+    const raw =
+      '{{rp01.change Rep change: {amount:2} {observer:} rep for {holder:[[c3d4]]} — {reason:}}}';
+    const interpreted = interpretDirective(parseDirectives(raw).directives[0], { resolveTrack });
+    expect(interpreted.status === 'unfinished' && interpreted.problems).toEqual([]);
+  });
+
   it('an empty reason alone does not make a directive unfinished', () => {
     const raw =
       '{{rp01.change Rep change: {amount:2} {observer:[[a1b2]]} rep for {holder:[[c3d4]]} — {reason:}}}';

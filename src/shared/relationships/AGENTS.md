@@ -38,6 +38,9 @@ time. Directives are parsed elsewhere; this module never reads a note or event b
 - **Tags are always multi-valued and user-definable.** A categorical option is an arbitrary
   user-typed string; there is no single-select or "locked" track.
 - Categorical `format()` on an empty selection returns `''`.
+- `interpretDirective` checks every filled blank even when others are still empty: an `'unfinished'`
+  result carries `problems` for the filled ones, so an editor can flag a typo straight away. Only
+  `'ok'` directives produce deltas; unfinished ones are still skipped by `deltasForFile`.
 
 ## Don't
 

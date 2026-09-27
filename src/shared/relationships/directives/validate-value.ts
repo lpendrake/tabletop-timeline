@@ -1,8 +1,8 @@
 /**
  * The one place a directive's `amount`/`value` role text is turned into a
  * number and checked against its track: used by `interpret.ts` (resolving a
- * directive), `readable.ts` (formatting one for display) and the editor's
- * fill-in bubble. A fractional amount on an integer-step track, or garbage
+ * directive, which is how the editor flags a bad value in a blank) and
+ * `readable.ts` (formatting one for display). A fractional amount on an integer-step track, or garbage
  * like `1e3`/`0x10`, is rejected here rather than reaching `ResolvedTrack`.
  */
 

@@ -2,7 +2,7 @@ import { effectiveTitle, type EditorBuffer } from './domain';
 import { NOTE_DEFAULT_REASON } from '../../../shared/relationships';
 
 /**
- * The default `reason` the relationship editor menu/bubble fill in for
+ * The default `reason` relationship directives show and fall back to for
  * directives inserted in the event editor: the event's current effective
  * title (its body H1, falling back to the title field), so it follows
  * renames as the user types — never a stale snapshot from when the event

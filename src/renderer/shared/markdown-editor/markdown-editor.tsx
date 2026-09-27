@@ -35,12 +35,15 @@ import { imagePaste, type ImagePasteConfig } from './extensions/image-paste';
 import { imageDecorations, type ImageDecorationsOptions } from './extensions/image-decorations';
 import { dropLink, type DropLinkConfig } from './extensions/drop-link';
 import { editorContextMenu, type EditorMenuExtraItems } from './extensions/editor-context-menu';
-import { relationshipDirectives, setDirectiveContext } from './extensions/relationship-directives';
 import {
-  relationshipBubble,
-  type RelationshipBubbleHostContext,
-  type RelationshipBubbleOptions,
-} from './extensions/relationship-bubble-view-plugin';
+  directiveGuardBypass,
+  relationshipDirectives,
+  setDirectiveContext,
+} from './extensions/relationship-directives';
+import {
+  relationshipDirectiveCompletions,
+  type RelationshipCompletionOptions,
+} from './extensions/relationship-directive-completions';
 import { formattingKeymap } from './commands';
 import { EMPTY_TRACK_LIBRARY, NOTE_DEFAULT_REASON } from '../../../shared/relationships';
 import type { TrackLibrary } from '../../../shared/relationships';
@@ -80,8 +83,8 @@ export interface RelationshipDirectivesHostConfig {
    * is exactly what let a note wrongly accept Change/Shift/Remove before.
    */
   place: 'note' | 'event';
-  /** Data and callbacks the built-in fill-in bubble needs. Omit to still get a bubble with no note/option pickers wired up. */
-  bubbles?: RelationshipBubbleOptions;
+  /** Data and callbacks the blanks' choices need (notes, held tags, creating a tag). Omit for blanks with no note list. */
+  choices?: RelationshipCompletionOptions;
 }
 
 export interface MarkdownEditorProps {
@@ -132,19 +135,18 @@ export interface MarkdownEditorProps {
   initialCursor?: number;
 }
 
-function makeBubbleHostContext(
+function makeCompletionOptions(
   config: RelationshipDirectivesHostConfig | undefined,
-): RelationshipBubbleHostContext {
+): RelationshipCompletionOptions {
+  const choices = config?.choices;
   return {
-    library: config?.library ?? EMPTY_TRACK_LIBRARY,
-    defaultReason: config?.defaultReason ?? NOTE_DEFAULT_REASON,
-    noteOptions: () => config?.bubbles?.noteOptions() ?? [],
-    defaultHolderId: () => config?.bubbles?.defaultHolderId?.() ?? null,
-    currentNoteId: () => config?.bubbles?.currentNoteId?.() ?? null,
-    onHolderChosenWithoutDefault: config?.bubbles?.onHolderChosenWithoutDefault,
-    createOption: config?.bubbles?.createOption,
-    heldOptions: config?.bubbles?.heldOptions,
-    observerOptions: config?.bubbles?.observerOptions,
+    noteOptions: () => choices?.noteOptions() ?? [],
+    defaultHolderId: () => choices?.defaultHolderId?.() ?? null,
+    currentNoteId: () => choices?.currentNoteId?.() ?? null,
+    onHolderChosenWithoutDefault: choices?.onHolderChosenWithoutDefault,
+    createOption: choices?.createOption,
+    heldOptions: choices?.heldOptions,
+    observerOptions: choices?.observerOptions,
   };
 }
 
@@ -222,7 +224,11 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       }),
     ];
     if (!readOnlyRef.current) {
-      exts.push(relationshipBubble(() => makeBubbleHostContext(relationshipDirectivesRef.current)));
+      exts.push(
+        relationshipDirectiveCompletions(() =>
+          makeCompletionOptions(relationshipDirectivesRef.current),
+        ),
+      );
     }
     return exts;
   }
@@ -337,6 +343,8 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     if (view && content !== view.state.doc.toString()) {
       view.dispatch({
         changes: { from: 0, to: view.state.doc.length, insert: content },
+        // The file on disk is the truth; never let the directive guard edit it.
+        annotations: directiveGuardBypass.of(true),
       });
     }
   }, [content]);

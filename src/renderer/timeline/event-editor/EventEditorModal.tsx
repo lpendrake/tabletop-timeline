@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { EditorView } from '@codemirror/view';
-import { MarkdownEditor, FormatToolbar } from '../../shared/markdown-editor';
+import { MarkdownEditor, FormatToolbar, isEditorPopupOpen } from '../../shared/markdown-editor';
 import { suggestLinks } from '../../shared/suggest-links';
 import { FooterPortal } from '../../components/footer-portal';
 import { useConfirm } from '../../shared/confirm-dialog/confirm-provider';
@@ -39,7 +39,6 @@ import { buildEntityLink } from '../../shared/entity-link';
 import { copyToClipboard } from '../../shared/clipboard';
 import { useNewNoteMenuConfig, entityFromCreatedNote, type CreatedNote } from '../../notes/public';
 import { useRelationshipEditorConfig } from '../../relationships/hooks/use-relationship-editor-config';
-import { isRelationshipBubbleOpen } from '../../shared/markdown-editor/extensions/relationship-bubble-view-plugin';
 import { eventRelationshipDefaultReason } from './relationship-default-reason';
 import { bufferEpochSeconds } from './domain/buffer-epoch-seconds';
 import { CalendarProvider } from '../calendar/provider';
@@ -397,11 +396,10 @@ export function EventEditorModal({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        // A relationship bubble handles its own Escape (closing itself,
-        // leaving remaining blanks as-is) — the modal must not also close
-        // on the same keypress. Checked by containment against the
-        // bubble's own host element, never a DOM data read.
-        if (isRelationshipBubbleOpen(e.target)) return;
+        // An open completion list (a relationship blank's choices, or an
+        // `@` link search) closes on this Escape — the modal must not also
+        // close on the same keypress.
+        if (isEditorPopupOpen(e.target)) return;
         e.stopPropagation();
         requestClose();
         return;

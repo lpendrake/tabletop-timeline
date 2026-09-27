@@ -17,6 +17,15 @@ describe('shouldOpenSlashMenu', () => {
     expect(shouldOpenSlashMenu(state, 0)).toBe(true);
   });
 
+  it('never opens inside a relationship directive, even after a space', () => {
+    const directive =
+      '{{rp01.change Rep change: {amount:1} {observer:} rep for {holder:} — {reason:him }}}';
+    const state = makeState(directive);
+    expect(shouldOpenSlashMenu(state, directive.indexOf('him ') + 4)).toBe(false);
+    const after = makeState(`${directive} `);
+    expect(shouldOpenSlashMenu(after, after.doc.length)).toBe(true);
+  });
+
   it('opens after a space', () => {
     const state = makeState('hello ');
     expect(shouldOpenSlashMenu(state, state.doc.length)).toBe(true);

@@ -11,7 +11,7 @@ export interface MarkdownPreviewProps {
   className?: string;
   /** Sets data-base-dir on the wrapper div so the peek stack can resolve plain <a href> links. */
   baseDir?: string;
-  /** Renders relationship directives as read-only blocks (no cross, no bubbles). */
+  /** Renders relationship directives read-only (no cross, no choices). */
   relationshipDirectives?: RelationshipDirectivesHostConfig;
 }
 

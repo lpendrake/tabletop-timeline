@@ -47,7 +47,13 @@ export interface DirectiveProblem {
 }
 
 export type InterpretedDirective =
-  | { status: 'unfinished'; directive: ParsedDirective; missing: Role[] }
+  | {
+      status: 'unfinished';
+      directive: ParsedDirective;
+      missing: Role[];
+      /** Problems with the blanks that ARE filled — so a typo shows before the rest is done. */
+      problems: DirectiveProblem[];
+    }
   | { status: 'invalid'; directive: ParsedDirective; problems: DirectiveProblem[] }
   | {
       status: 'ok';
@@ -137,19 +143,22 @@ export function interpretDirective(
 
   const required = requiredRoles(action.kind, track.kind);
   const missing = missingRoles(d, required);
-  if (missing.length > 0) {
-    return { status: 'unfinished', directive: d, missing };
-  }
+  // Every filled blank is checked even while others are still empty.
+  const filled = (role: Role) => !missing.includes(role);
 
   const problems: DirectiveProblem[] = [];
-  const holderId = required.includes('holder') ? checkNoteRole(d, 'holder', ctx, problems) : null;
-  const observerId = required.includes('observer')
-    ? checkNoteRole(d, 'observer', ctx, problems)
-    : null;
+  const holderId =
+    required.includes('holder') && filled('holder')
+      ? checkNoteRole(d, 'holder', ctx, problems)
+      : null;
+  const observerId =
+    required.includes('observer') && filled('observer')
+      ? checkNoteRole(d, 'observer', ctx, problems)
+      : null;
 
   let op: DeltaOp | null = null;
 
-  if (action.kind === 'adjust') {
+  if (action.kind === 'adjust' && filled('amount')) {
     const raw = roleValue(d, 'amount') ?? '';
     const result = validateRoleValue('amount', raw, track);
     if (!result.ok) {
@@ -157,7 +166,7 @@ export function interpretDirective(
     } else {
       op = { op: 'adjust', by: result.value };
     }
-  } else if (action.kind === 'set') {
+  } else if (action.kind === 'set' && filled('value')) {
     // Categorical has no Set action (enforced by requiredRoles/templates), so
     // this branch is only ever reached for numeric/ordinal.
     if (track.kind === 'ordinal') {
@@ -180,7 +189,11 @@ export function interpretDirective(
         op = { op: 'set', value: result.value };
       }
     }
-  } else if (track.kind === 'categorical') {
+  } else if (
+    track.kind === 'categorical' &&
+    (action.kind === 'add' || action.kind === 'remove') &&
+    filled('option')
+  ) {
     // add / remove — categorical only, enforced by requiredRoles/templates.
     const raw = roleValue(d, 'option') ?? '';
     const known = track.optionFor(raw);
@@ -193,6 +206,10 @@ export function interpretDirective(
     } else {
       op = { op: action.kind, key: raw };
     }
+  }
+
+  if (missing.length > 0) {
+    return { status: 'unfinished', directive: d, missing, problems };
   }
 
   if (problems.length > 0 || op === null || holderId === null || observerId === null) {
