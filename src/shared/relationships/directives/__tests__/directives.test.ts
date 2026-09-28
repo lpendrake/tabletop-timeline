@@ -177,6 +177,47 @@ describe('ignores directives in fenced and inline code', () => {
     expect(directives).toHaveLength(1);
     expect(directives[0].raw).toBe(directive);
   });
+
+  it('ignores a directive inside an indented code block', () => {
+    const source = ['before', '', `    ${directive}`, '', 'after ' + directive].join('\n');
+    const { directives } = parseDirectives(source);
+    expect(directives).toHaveLength(1);
+    expect(directives[0].raw).toBe(directive);
+  });
+
+  it('ignores a directive inside a fenced code block nested in a list item', () => {
+    const source = [
+      '- item one',
+      '  ```',
+      `  ${directive}`,
+      '  ```',
+      '- item two ' + directive,
+    ].join('\n');
+    const { directives } = parseDirectives(source);
+    expect(directives).toHaveLength(1);
+    expect(directives[0].raw).toBe(directive);
+  });
+
+  it('ignores a directive inside a fenced code block nested in a blockquote', () => {
+    const source = ['> ```', `> ${directive}`, '> ```', 'after ' + directive].join('\n');
+    const { directives } = parseDirectives(source);
+    expect(directives).toHaveLength(1);
+    expect(directives[0].raw).toBe(directive);
+  });
+
+  it('ignores a directive inside an inline code span delimited by multiple backticks', () => {
+    const source = `see \`\`${directive}\`\` for the example, but really ${directive}`;
+    const { directives } = parseDirectives(source);
+    expect(directives).toHaveLength(1);
+    expect(directives[0].raw).toBe(directive);
+  });
+
+  it('still parses a directive immediately after a code span on the same line', () => {
+    const source = `\`some code\` ${directive}`;
+    const { directives } = parseDirectives(source);
+    expect(directives).toHaveLength(1);
+    expect(directives[0].raw).toBe(directive);
+  });
 });
 
 describe('empty required role → unfinished; empty reason → not unfinished', () => {

@@ -11,6 +11,8 @@
  * No IO, no React, no Electron.
  */
 
+import { parser as baseMarkdownParser, GFM, Subscript, Superscript, Emoji } from '@lezer/markdown';
+
 import { Role } from '../spec.js';
 import { isRole } from '../templates.js';
 import { extractWikiLinkIds } from '../../entity-tags.js';
@@ -67,99 +69,40 @@ interface CodeRange {
   to: number;
 }
 
-function isFenceLine(line: string): { char: string; len: number } | null {
-  const match = /^ {0,3}(`{3,}|~{3,})/.exec(line);
-  if (!match) return null;
-  const run = match[1];
-  return { char: run[0], len: run.length };
-}
+// Matches the CodeMirror editor's markdown configuration (see
+// `markdown({ codeLanguages: languages, base: markdownLanguage })` in
+// `src/renderer/shared/markdown-editor/markdown-editor.tsx`), whose
+// `markdownLanguage` is CommonMark configured with these same extensions.
+// Keeping the two in sync means a directive is (in)visible to code detection
+// the same way here as it is in the editor.
+const markdownParser = baseMarkdownParser.configure([GFM, Subscript, Superscript, Emoji]);
 
-/** Line-spans covered by fenced code blocks (``` or ~~~, ≤3 spaces indent). */
-function fencedCodeRanges(source: string): CodeRange[] {
-  const ranges: CodeRange[] = [];
-  let pos = 0;
-  let openFence: { char: string; len: number; start: number } | null = null;
-
-  while (pos <= source.length) {
-    const nl = source.indexOf('\n', pos);
-    const lineEnd = nl === -1 ? source.length : nl;
-    const line = source.slice(pos, lineEnd);
-
-    if (openFence) {
-      const fence = isFenceLine(line);
-      const closes = fence !== null && fence.char === openFence.char && fence.len >= openFence.len;
-      if (closes) {
-        ranges.push({ from: openFence.start, to: lineEnd });
-        openFence = null;
-      }
-    } else {
-      const fence = isFenceLine(line);
-      if (fence) {
-        openFence = { ...fence, start: pos };
-      }
-    }
-
-    if (nl === -1) break;
-    pos = nl + 1;
-  }
-
-  if (openFence) {
-    // Unterminated fence: everything from the opening fence to EOF is code.
-    ranges.push({ from: openFence.start, to: source.length });
-  }
-
-  return ranges;
-}
+const CODE_NODE_NAMES = new Set(['FencedCode', 'CodeBlock', 'InlineCode']);
 
 function within(pos: number, ranges: CodeRange[]): boolean {
   return ranges.some((r) => pos >= r.from && pos < r.to);
 }
 
 /**
- * Inline code spans (backtick runs), skipping anything already inside a
- * fenced block. Pairs the first unmatched run with the next run of the same
- * length, CommonMark-style; an opener with no matching closer is left as
- * plain text.
+ * Source ranges covered by any kind of markdown code — fenced code blocks,
+ * indented code blocks, and inline code spans, wherever they occur (including
+ * nested inside list items and blockquotes). Parsed with `@lezer/markdown`
+ * (the same parser CodeMirror uses) rather than hand-rolled, so directive
+ * detection agrees with what the editor actually renders as code.
  */
-function inlineCodeRanges(source: string, fenced: CodeRange[]): CodeRange[] {
-  const ranges: CodeRange[] = [];
-  const runRe = /`+/g;
-  let match: RegExpExecArray | null;
-  const runs: { from: number; to: number; len: number }[] = [];
-  while ((match = runRe.exec(source)) !== null) {
-    const from = match.index;
-    const to = from + match[0].length;
-    if (within(from, fenced)) continue;
-    runs.push({ from, to, len: match[0].length });
-  }
-
-  let i = 0;
-  while (i < runs.length) {
-    const opener = runs[i];
-    let j = i + 1;
-    let closer: (typeof runs)[number] | undefined;
-    while (j < runs.length) {
-      if (runs[j].len === opener.len) {
-        closer = runs[j];
-        break;
-      }
-      j++;
-    }
-    if (closer) {
-      ranges.push({ from: opener.from, to: closer.to });
-      i = j + 1;
-    } else {
-      i++;
-    }
-  }
-
-  return ranges;
-}
-
 function ignoredRanges(source: string): CodeRange[] {
-  const fenced = fencedCodeRanges(source);
-  const inline = inlineCodeRanges(source, fenced);
-  return [...fenced, ...inline];
+  const tree = markdownParser.parse(source);
+  const ranges: CodeRange[] = [];
+  tree.iterate({
+    enter: (node) => {
+      if (CODE_NODE_NAMES.has(node.name)) {
+        ranges.push({ from: node.from, to: node.to });
+        return false;
+      }
+      return undefined;
+    },
+  });
+  return ranges;
 }
 
 function lineEndAfter(source: string, from: number): number {
@@ -321,7 +264,9 @@ export function parseDirectives(source: string): {
 } {
   const directives: ParsedDirective[] = [];
   const errors: DirectiveParseError[] = [];
-  const ignored = ignoredRanges(source);
+  // No `{{` at all means no possible directive envelope, so skip the
+  // (comparatively expensive) markdown parse entirely.
+  const ignored = source.includes('{{') ? ignoredRanges(source) : [];
 
   let pos = 0;
   let ordinal = 0;
