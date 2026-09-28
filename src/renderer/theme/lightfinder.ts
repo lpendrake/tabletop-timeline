@@ -115,5 +115,8 @@ export const lightfinder: Theme = {
     rowHover: '#e8dcb4',
     dropIndicator: '#8a5e10',
     stepSetBreak: '#8c7848',
+    scaleNegative: '#80281a',
+    scaleNeutral: '#7c6c48',
+    scalePositive: '#2f6a2a',
   },
 };

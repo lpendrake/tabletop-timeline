@@ -79,7 +79,7 @@ unsubscribe(); // call the returned function to remove the listener
 | `notes` | Note-kind accent colors (`kinds.*`) exposed as `--kind-*` CSS variables; `savedIndicator` and `errorToast` exposed as `--notes-saved` / `--notes-error`. |
 | `editor` | CodeMirror-specific tokens. `foldPlaceholder`, `invalid` and `selection` are read via `ThemeProvider.get()` (`selection` is also emitted as `--editor-selection-rgb`, driving the CodeMirror selection highlight color). The `directive*` tokens (`directiveBackground`, `directiveBorder`, `directiveHover`, `directiveValueHighlight`) style relationship-directive blocks and ARE exposed as `--theme-directive-*` CSS vars — see "CSS variable mapping" below. Directive error/attention/delete states reuse `chrome.danger`/`chrome.warning` (`--theme-danger`/`--theme-warning`) rather than their own tokens. |
 | `bootstrap` | Campaign-selector / pre-campaign screens only. A darker, higher-contrast palette for the app before a campaign is loaded. **Do not use `bootstrap` tokens inside campaign views.** |
-| `relationships` | Relationships-view specific tokens (progress bars, ladder rungs, chips, drag/drop, row hover, step-set dividers). Exposed as `--theme-relationships-*` CSS vars — see "CSS variable mapping" below. Relationship error text reuses `chrome.danger` (`--theme-danger`), not its own token. |
+| `relationships` | Relationships-view specific tokens (progress bars, ladder rungs, chips, drag/drop, row hover, step-set dividers, and the `scaleNegative`/`scaleNeutral`/`scalePositive` ramp that colours bands and rungs by position relative to a track's initial value; the spec itself carries no colours). Exposed as `--theme-relationships-*` CSS vars — see "CSS variable mapping" below. Relationship error text reuses `chrome.danger` (`--theme-danger`), not its own token. |
 
 ## Consuming colors
 
@@ -164,6 +164,9 @@ RGB triplet variants (space-separated, suitable for `rgb(var(--theme-x-rgb) / <a
 --theme-relationships-row-hover           relationships.rowHover
 --theme-relationships-drop-indicator      relationships.dropIndicator
 --theme-relationships-step-set-break      relationships.stepSetBreak
+--theme-relationships-scale-negative      relationships.scaleNegative   (copy of the theme's chrome.danger value)
+--theme-relationships-scale-neutral       relationships.scaleNeutral    (copy of the theme's chrome.textMuted value)
+--theme-relationships-scale-positive      relationships.scalePositive   (copy of the theme's bootstrap.success value; bootstrap tokens can't be used in campaign views)
 ```
 
 There are deliberately no `directive-error`/`directive-delete`/`directive-attention`/`relationships-error-text` tokens — error, delete and attention states in directive blocks and the Relationships view reuse the existing `--theme-danger` (errors, the delete cross) and `--theme-warning` (attention/unfinished prompts) chrome tokens instead of duplicating them.

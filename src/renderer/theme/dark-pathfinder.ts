@@ -113,5 +113,8 @@ export const darkPathfinder: Theme = {
     rowHover: '#3a3d2a',
     dropIndicator: '#c9a860',
     stepSetBreak: '#5a4530',
+    scaleNegative: '#c06040',
+    scaleNeutral: '#7a6f58',
+    scalePositive: '#10b981',
   },
 };

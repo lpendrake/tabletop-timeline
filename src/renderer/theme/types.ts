@@ -97,6 +97,9 @@ export interface Theme {
     rowHover: string;
     dropIndicator: string;
     stepSetBreak: string;
+    scaleNegative: string;
+    scaleNeutral: string;
+    scalePositive: string;
   };
 }
 

@@ -69,6 +69,26 @@ export function formatCompact(date: CalendarDate | LegacyDate): string {
   return `${wdPart}${d.day} ${cal.monthName(d.month)} ${d.year}`;
 }
 
+/**
+ * "12 Lamashan 4725" / "12 Lam 4725" with `shortMonth` — no weekday, always the year.
+ * Intercalary days show their name (first 3 letters when `shortMonth`) and the year.
+ */
+export function formatDayMonthYear(
+  date: CalendarDate | LegacyDate,
+  opts: { shortMonth?: boolean } = {},
+): string {
+  const cal = CalendarProvider.get();
+  const d = toCalendarDate(date);
+
+  if (d.kind === 'intercalary') {
+    const name = cal.intercalaryName(d.intercalaryIndex);
+    return `${opts.shortMonth ? name.slice(0, 3) : name} ${d.year}`;
+  }
+
+  const month = opts.shortMonth ? cal.monthAbbrev(d.month) : cal.monthName(d.month);
+  return `${d.day} ${month} ${d.year}`;
+}
+
 /** "Wea 4 Desnus 4726" or "Wea 4 Desnus 4726 — 18:30" when time is set */
 export function formatCompactWithTime(date: CalendarDate | LegacyDate): string {
   const d = toCalendarDate(date);

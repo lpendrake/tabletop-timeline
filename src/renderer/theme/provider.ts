@@ -103,6 +103,9 @@ function applyCssVars(theme: Theme): void {
     'relationships-row-hover': theme.relationships.rowHover,
     'relationships-drop-indicator': theme.relationships.dropIndicator,
     'relationships-step-set-break': theme.relationships.stepSetBreak,
+    'relationships-scale-negative': theme.relationships.scaleNegative,
+    'relationships-scale-neutral': theme.relationships.scaleNeutral,
+    'relationships-scale-positive': theme.relationships.scalePositive,
   };
 
   for (const [key, value] of Object.entries(relationshipsMap)) {
