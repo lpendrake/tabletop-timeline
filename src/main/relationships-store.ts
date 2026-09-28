@@ -44,6 +44,8 @@ export interface StoreChangeResult {
   invalidChanged: boolean;
   /** The known-notes map (path -> id) changed — a note was created, edited, deleted or moved. */
   knownNotesChanged: boolean;
+  /** This file's title was added, changed or removed. */
+  titleChanged: boolean;
 }
 
 /** A note the store should know about, e.g. from the entity index. */
@@ -214,6 +216,7 @@ export class RelationshipsStore {
   updateFile(fileInput: RelationshipFileInput): StoreChangeResult {
     const { path, isEvent, noteId } = fileInput;
     const invalidBefore = this.invalidEntries.get(path);
+    const titleBefore = this.titleOf(path);
 
     const removed = this.clearPath(path);
 
@@ -235,11 +238,19 @@ export class RelationshipsStore {
     const invalidAfter = this.invalidEntries.get(path);
     const invalidChanged = !sameInvalidEntries(invalidBefore, invalidAfter);
 
-    return { touched: [...touched].map(splitLedgerKey), invalidChanged, knownNotesChanged };
+    const titleChanged = titleBefore !== this.titleOf(path);
+
+    return {
+      touched: [...touched].map(splitLedgerKey),
+      invalidChanged,
+      knownNotesChanged,
+      titleChanged,
+    };
   }
 
   removeFile(path: string): StoreChangeResult {
     const invalidBefore = this.invalidEntries.get(path);
+    const titleChanged = this.titleOf(path) !== undefined;
     const removed = this.clearPath(path);
     const touched = new Set(removed);
 
@@ -251,7 +262,26 @@ export class RelationshipsStore {
     const invalidChanged = !sameInvalidEntries(invalidBefore, undefined);
     const knownNotesChanged = noteInfo !== null;
 
-    return { touched: [...touched].map(splitLedgerKey), invalidChanged, knownNotesChanged };
+    return {
+      touched: [...touched].map(splitLedgerKey),
+      invalidChanged,
+      knownNotesChanged,
+      titleChanged,
+    };
+  }
+
+  /** A file's non-empty title, or undefined. */
+  private titleOf(path: string): string | undefined {
+    return this.parsedByPath.get(path)?.title || undefined;
+  }
+
+  /** Path -> title for every indexed file that has one. */
+  titles(): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const [path, record] of this.parsedByPath) {
+      if (record.title) out[path] = record.title;
+    }
+    return out;
   }
 
   ledgers(): Ledger[] {
@@ -353,6 +383,7 @@ export class RelationshipsStore {
         out.push({
           path: d.declaredIn.path,
           ordinal: d.declaredIn.ordinal,
+          trackId: ledger.track,
           from: range.from,
           to: range.to,
           messages: [`Only one note may set this relationship; also set in ${others.join(', ')}`],

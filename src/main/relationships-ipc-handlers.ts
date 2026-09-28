@@ -45,6 +45,10 @@ export function registerRelationshipsIpcHandlers() {
     return getRelationshipsStore().invalid();
   });
 
+  ipcMain.handle('relationships:getTitles', () => {
+    return getRelationshipsStore().titles();
+  });
+
   ipcMain.handle('relationships:getUndatedSets', () => {
     return getRelationshipsStore().undatedSets();
   });
