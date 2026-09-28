@@ -387,18 +387,11 @@ describe('editing is typing into the document', () => {
     expect(doc(view)).toContain('{amount:-3}');
   });
 
-  it('Mod-/ shows the raw source until the caret leaves; structure is editable meanwhile', () => {
-    const view = makeView(`${FULL_CHANGE}\nafter`);
+  it('Mod-/ has no directive binding: the raw source is never shown', () => {
+    const view = makeView(FULL_CHANGE);
     caretAt(view, valueEnd(view, 'reason'));
-    expect(press(view, '/', { ctrlKey: true })).toBe(true);
-    expect(text(view)).toContain('{{rp01.change');
-    const wording = doc(view).indexOf('Rep change') + 3;
-    caretAt(view, wording);
-    type(view, 'X');
-    expect(doc(view)).toContain('RepX change');
-    caretAt(view, doc(view).length);
+    expect(press(view, '/', { ctrlKey: true })).toBe(false);
     expect(text(view)).not.toContain('{{rp01.change');
-    expect(text(view)).toContain('RepX change:');
   });
 });
 

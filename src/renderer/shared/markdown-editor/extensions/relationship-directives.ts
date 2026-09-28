@@ -17,7 +17,6 @@ import {
   EditorSelection,
   EditorState,
   Facet,
-  MapMode,
   Prec,
   StateEffect,
   StateField,
@@ -127,32 +126,6 @@ export function directiveBorderClass(status: InterpretedDirective['status']): st
 }
 
 // ---------------------------------------------------------------------------
-// Show source: Mod-/ inside a directive shows its raw text until the caret
-// leaves it. A revealed directive is plain, unprotected text.
-// ---------------------------------------------------------------------------
-
-const setRevealed = StateEffect.define<number | null>();
-
-const revealedField = StateField.define<number | null>({
-  create: () => null,
-  update(value, tr) {
-    let next = value;
-    for (const e of tr.effects) if (e.is(setRevealed)) next = e.value;
-    if (next === null) return null;
-    if (tr.docChanged) {
-      const mapped = tr.changes.mapPos(next, 1, MapMode.TrackDel);
-      if (mapped === null) return null;
-      next = mapped;
-    }
-    const directive = directivesIn(tr.state).find((d) => d.from === next);
-    if (!directive) return null;
-    const head = tr.state.selection.main.head;
-    if (head < directive.from || head > directive.to) return null;
-    return next;
-  },
-});
-
-// ---------------------------------------------------------------------------
 // The per-document model: every directive, interpreted, with its layout.
 // ---------------------------------------------------------------------------
 
@@ -164,7 +137,7 @@ export interface DirectiveModel {
   problems: DirectiveProblem[];
   /**
    * Rendered as live blanks and protected. False for an unknown track or
-   * action (shown as raw text so it can be fixed) and for a revealed one.
+   * action (shown as raw text so it can be fixed).
    */
   live: boolean;
   /** Why a non-live directive can't render (unknown track/action), if that's the reason. */
@@ -179,7 +152,6 @@ interface DirectiveModelState {
 
 function buildModels(state: EditorState, place: 'note' | 'event'): DirectiveModel[] {
   const { library } = state.field(directiveContextField);
-  const revealed = state.field(revealedField, false) ?? null;
   return directivesIn(state).map((directive) => {
     const track = resolveTrack(directive.trackId, library);
     const interpreted = interpretDirective(directive, {
@@ -197,7 +169,7 @@ function buildModels(state: EditorState, place: 'note' | 'event'): DirectiveMode
       // A wrong value outranks an empty blank: show the error straight away.
       status: problems.length > 0 ? 'invalid' : interpreted.status,
       problems,
-      live: !blocking && revealed !== directive.from,
+      live: !blocking,
       blockingMessage: blocking?.message ?? null,
     };
   });
@@ -455,9 +427,7 @@ const modelStateField = StateField.define<DirectiveModelState>({
   create: (state) => buildModelState(state),
   update(value, tr) {
     const rebuild =
-      tr.docChanged ||
-      tr.startState.field(revealedField, false) !== tr.state.field(revealedField, false) ||
-      tr.effects.some((e) => e.is(setDirectiveContext) || e.is(setEntityLabels));
+      tr.docChanged || tr.effects.some((e) => e.is(setDirectiveContext) || e.is(setEntityLabels));
     return rebuild ? buildModelState(tr.state) : value;
   },
   provide: (f) => [
@@ -738,16 +708,6 @@ function makeBlankEdgeCommand(edge: 'start' | 'end'): Command {
   };
 }
 
-/** Mod-/ inside a directive toggles showing its raw source. */
-const toggleSource: Command = (view) => {
-  const head = view.state.selection.main.head;
-  const directive = directivesIn(view.state).find((d) => d.from <= head && head <= d.to);
-  if (!directive) return false;
-  const current = view.state.field(revealedField, false) ?? null;
-  view.dispatch({ effects: setRevealed.of(current === directive.from ? null : directive.from) });
-  return true;
-};
-
 const nextBlank: Command = (view) => moveToAdjacentBlank(view, 1);
 const previousBlank: Command = (view) => moveToAdjacentBlank(view, -1);
 
@@ -761,7 +721,6 @@ const directiveKeymap = Prec.high(
     { key: 'Delete', run: makeBoundaryCommand('delete') },
     { key: 'Home', run: makeBlankEdgeCommand('start') },
     { key: 'End', run: makeBlankEdgeCommand('end') },
-    { key: 'Mod-/', run: toggleSource },
   ]),
 );
 
@@ -998,7 +957,6 @@ export function relationshipDirectives(config: RelationshipDirectivesConfig): Ex
     // included so the label lookup resolves even without `wikiLinks()`.
     entityLabelMapField,
     parsedDirectivesField,
-    revealedField,
     directiveConfig.of(config),
     modelStateField,
     directiveTheme,
