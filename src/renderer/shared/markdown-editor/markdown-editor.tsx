@@ -39,6 +39,8 @@ import {
   directiveGuardBypass,
   relationshipDirectives,
   setDirectiveContext,
+  setExternalSetConflicts,
+  type ExternalSetConflictEntry,
 } from './extensions/relationship-directives';
 import {
   relationshipDirectiveCompletions,
@@ -85,6 +87,13 @@ export interface RelationshipDirectivesHostConfig {
   place: 'note' | 'event';
   /** Data and callbacks the blanks' choices need (notes, held tags, creating a tag). Omit for blanks with no note list. */
   choices?: RelationshipCompletionOptions;
+  /**
+   * Every undated Set declared in another saved note — used to flag a
+   * cross-file conflict (only one note may Set a relationship). The host
+   * excludes this buffer's own path; omit for an event editor, where it's
+   * meaningless. See `extensions/relationship-directives.ts`.
+   */
+  externalSetConflicts?: ExternalSetConflictEntry[];
 }
 
 export interface MarkdownEditorProps {
@@ -380,6 +389,19 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     relationshipDirectivesConfig?.defaultReason,
     isSourceMode,
   ]);
+
+  // Keep relationship-directive blocks aware of every undated Set declared
+  // in another saved note, so a cross-file conflict flags live.
+  useEffect(() => {
+    const view = internalViewRef.current;
+    if (view && !isSourceMode) {
+      view.dispatch({
+        effects: setExternalSetConflicts.of(
+          relationshipDirectivesConfig?.externalSetConflicts ?? [],
+        ),
+      });
+    }
+  }, [relationshipDirectivesConfig?.externalSetConflicts, isSourceMode]);
 
   return <div ref={editorRef} className="markdown-editor-container" />;
 };

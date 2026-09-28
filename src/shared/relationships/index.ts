@@ -114,3 +114,17 @@ export type {
   LedgerKeyTriple,
 } from './derive-file-deltas.js';
 export { deltasForFile, ledgerKey, splitLedgerKey } from './derive-file-deltas.js';
+
+// Undated-Set conflict detection (shared by the main store and the editor)
+export type {
+  UndatedSetKey,
+  BufferUndatedSet,
+  ExternalUndatedSet,
+  SetConflict,
+} from './set-conflicts.js';
+export {
+  undatedSetGroupKey,
+  conflictingGroups,
+  findSetConflicts,
+  setConflictMessage,
+} from './set-conflicts.js';

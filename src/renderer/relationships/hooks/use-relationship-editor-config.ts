@@ -6,9 +6,11 @@ import type {
 } from '../../shared/markdown-editor';
 import { composeExtraItems } from '../../shared/markdown-editor';
 import type { EntityIndexEntry } from '../../../types/global';
+import type { ExternalUndatedSet } from '../../../shared/relationships';
 import { relationshipsData } from '../data';
 import { useRelationshipLibraryContext } from '../library-context';
 import { notesToPickerOptions } from '../domain/entity-picker-options';
+import { externalSetConflictEntries } from '../domain/external-set-conflicts';
 import { notePath, findEntityIdByNotePath } from '../../notes/domain/link-resolution';
 import { buildRelationshipMenuItems } from '../editor-menu';
 import { buildRelationshipEditorConfig, makeHeldTagsResolver } from '../editor-host-config';
@@ -81,6 +83,28 @@ export function useRelationshipEditorConfig(
     };
   }, []);
 
+  // Every undated Set declared in another saved note, for the cross-file
+  // conflict check — note editors only (events never conflict). Refreshed
+  // whenever any file's relationships change (the same event the frozen
+  // Relationships view listens to).
+  const [undatedSets, setUndatedSets] = useState<ExternalUndatedSet[]>([]);
+
+  useEffect(() => {
+    if (opts.place !== 'note') return;
+    let active = true;
+    const load = () => {
+      void relationshipsData.getUndatedSets().then((next) => {
+        if (active) setUndatedSets(next);
+      });
+    };
+    load();
+    const unsubscribe = relationshipsData.onChanged(load);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [opts.place]);
+
   const entityIndexRef = useRef(opts.entityIndex);
   entityIndexRef.current = opts.entityIndex;
   const optsRef = useRef(opts);
@@ -99,6 +123,12 @@ export function useRelationshipEditorConfig(
     return active ? notePath(active.folder, active.path) : null;
   };
 
+  const activePath = currentPath();
+  const externalSetConflicts =
+    opts.place === 'note'
+      ? externalSetConflictEntries(undatedSets, activePath, opts.entityIndex)
+      : undefined;
+
   const relationshipDirectives = useMemo(() => {
     const heldTags = makeHeldTagsResolver({
       library,
@@ -115,8 +145,16 @@ export function useRelationshipEditorConfig(
       defaultHolderId: () => defaultHolderId,
       currentNoteId,
       heldTags,
+      externalSetConflicts,
     });
-  }, [library, opts.defaultReason, opts.onOpenNote, opts.place, defaultHolderId]);
+  }, [
+    library,
+    opts.defaultReason,
+    opts.onOpenNote,
+    opts.place,
+    defaultHolderId,
+    externalSetConflicts,
+  ]);
 
   const contextMenu = useMemo(
     () => ({

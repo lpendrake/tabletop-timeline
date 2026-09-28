@@ -367,3 +367,48 @@ describe('more than one undated Set on the same relationship', () => {
     expect(ledger?.deltas[0].declaredIn.path).toBe('notes/n1.md');
   });
 });
+
+describe('undatedSets', () => {
+  it('lists every undated Set from the raw ledgers — including conflicting ones cleanLedger would drop', () => {
+    const store = newStore();
+    store.rebuild([
+      noteFile('notes/n1.md', repSetDirective(A, C, 5, 'first')),
+      noteFile('notes/n2.md', repSetDirective(A, C, 9, 'second')),
+    ]);
+
+    // cleanLedger (via ledgers()) drops both conflicting Sets...
+    const ledger = store.ledgersFor(A, 'holder').find((l) => l.track === 'rp01');
+    expect(ledger?.deltas).toHaveLength(0);
+
+    // ...but undatedSets() still reports both, straight from the raw ledger.
+    const undated = store.undatedSets();
+    expect(undated).toHaveLength(2);
+    expect(undated.map((u) => u.path).sort()).toEqual(['notes/n1.md', 'notes/n2.md']);
+    for (const u of undated) {
+      expect(u.holder).toBe(A);
+      expect(u.observer).toBe(C);
+      expect(u.trackId).toBe('rp01');
+    }
+  });
+
+  it('excludes Change deltas and dated (event) Sets', () => {
+    const store = newStore();
+    store.rebuild([
+      noteFile('notes/n1.md', repSetDirective(A, C, 5, 'first')),
+      eventFile('events/e1.md', repSetDirective(A, C, 9, 'dated'), 1000),
+      eventFile('events/e2.md', repChangeDirective(A, C, 2, 'change'), 2000),
+    ]);
+
+    const undated = store.undatedSets();
+    expect(undated).toEqual([{ trackId: 'rp01', holder: A, observer: C, path: 'notes/n1.md' }]);
+  });
+
+  it('reflects a removed file', () => {
+    const store = newStore();
+    store.rebuild([noteFile('notes/n1.md', repSetDirective(A, C, 5, 'first'))]);
+    expect(store.undatedSets()).toHaveLength(1);
+
+    store.removeFile('notes/n1.md');
+    expect(store.undatedSets()).toHaveLength(0);
+  });
+});

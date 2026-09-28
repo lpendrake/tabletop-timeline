@@ -21,7 +21,8 @@ export type DirectiveProblemCode =
   | 'zero-amount'
   | 'out-of-range'
   | 'not-integer'
-  | 'not-allowed-in-note';
+  | 'not-allowed-in-note'
+  | 'set-conflict';
 
 /** Action kinds allowed in a note (undated) vs an event — see AGENTS.md. */
 const NOTE_ONLY_DISALLOWED: ReadonlySet<ActionKind> = new Set(['adjust', 'remove']);

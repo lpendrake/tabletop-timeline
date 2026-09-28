@@ -45,6 +45,10 @@ export function registerRelationshipsIpcHandlers() {
     return getRelationshipsStore().invalid();
   });
 
+  ipcMain.handle('relationships:getUndatedSets', () => {
+    return getRelationshipsStore().undatedSets();
+  });
+
   ipcMain.handle('relationships:getDirectives', (_event, paths: string[]) => {
     return getRelationshipsStore().directivesIn(paths);
   });

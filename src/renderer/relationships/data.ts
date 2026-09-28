@@ -1,5 +1,6 @@
 import type {
   AddOptionResult,
+  ExternalUndatedSet,
   InvalidDirectiveEntry,
   Ledger,
   LedgersAs,
@@ -35,6 +36,10 @@ export const relationshipsData = {
 
   async getInvalid(): Promise<InvalidDirectiveEntry[]> {
     return window.fsApi.getInvalidRelationshipDirectives();
+  },
+
+  async getUndatedSets(): Promise<ExternalUndatedSet[]> {
+    return window.fsApi.getUndatedRelationshipSets();
   },
 
   async getDirectives(

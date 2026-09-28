@@ -4,7 +4,10 @@
  * inline in a hook or component body) keeps the wiring — and its IO — named
  * and testable in isolation from React.
  */
-import type { RelationshipDirectivesHostConfig } from '../shared/markdown-editor';
+import type {
+  ExternalSetConflictEntry,
+  RelationshipDirectivesHostConfig,
+} from '../shared/markdown-editor';
 import type { PickerOption } from '../shared/searchable-picker';
 import { parseDirectives, resolveTrack, type TrackLibrary } from '../../shared/relationships';
 import { relationshipsData } from './data';
@@ -70,6 +73,8 @@ export interface RelationshipEditorConfigDeps {
   defaultHolderId: () => string | null;
   currentNoteId: () => string | null;
   heldTags?: HeldTagsResolver;
+  /** Every undated Set declared in another saved note (this buffer's own path already excluded). Note editors only. */
+  externalSetConflicts?: ExternalSetConflictEntry[];
 }
 
 /** Assembles the full `relationshipDirectives` host config from its pieces. */
@@ -81,6 +86,7 @@ export function buildRelationshipEditorConfig(
     defaultReason: deps.defaultReason,
     onOpenNote: deps.onOpenNote,
     place: deps.place,
+    externalSetConflicts: deps.externalSetConflicts,
     choices: {
       noteOptions: () => deps.noteOptions() as PickerOption[],
       defaultHolderId: deps.defaultHolderId,

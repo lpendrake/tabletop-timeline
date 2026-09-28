@@ -164,6 +164,7 @@ contextBridge.exposeInMainWorld('fsApi', {
   addRelationshipOption: (trackId: string, input: { label: string; mutual: boolean }) =>
     ipcRenderer.invoke('relationships:addOption', trackId, input),
   getInvalidRelationshipDirectives: () => ipcRenderer.invoke('relationships:getInvalid'),
+  getUndatedRelationshipSets: () => ipcRenderer.invoke('relationships:getUndatedSets'),
   getRelationshipDirectives: (paths: string[]) =>
     ipcRenderer.invoke('relationships:getDirectives', paths),
   getDefaultReputationHolder: () => ipcRenderer.invoke('relationships:getDefaultHolder'),

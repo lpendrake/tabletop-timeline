@@ -14,6 +14,7 @@ export type { EntityIndexEntry, EntityIndexDelta } from '../shared/entity-index-
 import type { CalendarSpec } from '../shared/calendar';
 import type {
   AddOptionResult,
+  ExternalUndatedSet,
   InvalidDirectiveEntry,
   Ledger,
   LedgersAs,
@@ -156,6 +157,7 @@ declare global {
         input: { label: string; mutual: boolean },
       ) => Promise<AddOptionResult>;
       getInvalidRelationshipDirectives: () => Promise<InvalidDirectiveEntry[]>;
+      getUndatedRelationshipSets: () => Promise<ExternalUndatedSet[]>;
       getRelationshipDirectives: (
         paths: string[],
       ) => Promise<Array<{ path: string; title?: string; directives: ParsedDirective[] }>>;

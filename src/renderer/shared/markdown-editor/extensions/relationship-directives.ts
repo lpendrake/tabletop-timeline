@@ -46,12 +46,17 @@ import {
   noteIdOf,
   parseDirectives,
   sanitiseValue,
+  findSetConflicts,
+  setConflictMessage,
   EMPTY_TRACK_LIBRARY,
   NOTE_DEFAULT_REASON,
+  type BufferUndatedSet,
   type DirectiveProblem,
+  type ExternalUndatedSet,
   type InterpretedDirective,
   type ParsedDirective,
   type ResolvedTrack,
+  type SetConflict,
   type TrackLibrary,
 } from '../../../../shared/relationships';
 import { UNKNOWN_ENTITY_LABEL } from '../../../../shared/entity-labels';
@@ -114,6 +119,30 @@ export const directiveContextField = StateField.define<DirectiveContext>({
   },
 });
 
+/** One undated Set declared in another saved note, as pushed in by the host. */
+export interface ExternalSetConflictEntry extends ExternalUndatedSet {
+  /** Display title for that note, when known (falls back to its path). */
+  title?: string;
+}
+
+/**
+ * Dispatch to push every undated Set declared in OTHER saved notes (the
+ * host excludes this buffer's own path — the buffer is the truth for it).
+ * Only meaningful for a note editor (`place: 'note'`); events never
+ * conflict. See `src/shared/relationships/set-conflicts.ts`.
+ */
+export const setExternalSetConflicts = StateEffect.define<ExternalSetConflictEntry[]>();
+
+export const externalSetConflictsField = StateField.define<ExternalSetConflictEntry[]>({
+  create: () => [],
+  update(value, tr) {
+    for (const e of tr.effects) {
+      if (e.is(setExternalSetConflicts)) return e.value;
+    }
+    return value;
+  },
+});
+
 /**
  * Which outline class (if any) a directive gets from its interpreted status:
  * unfinished (an empty required blank) → warning, invalid → danger, a
@@ -150,15 +179,54 @@ interface DirectiveModelState {
   atomic: RangeSet<Decoration>;
 }
 
+/**
+ * Undated Sets, currently valid, may be Set by at most one note directive
+ * (see `src/shared/relationships/AGENTS.md`). This buffer-side check finds
+ * this buffer's own duplicates plus any conflict with an undated Set the
+ * host has pushed in from another saved note (`externalSetConflictsField`).
+ * Only meaningful for a note editor — events never conflict.
+ */
+function bufferSetConflicts(
+  state: EditorState,
+  place: 'note' | 'event',
+  interpreted: Array<{ directive: ParsedDirective; result: InterpretedDirective }>,
+): Map<number, SetConflict> {
+  if (place !== 'note') return new Map();
+  const buffer: BufferUndatedSet[] = [];
+  for (const { directive, result } of interpreted) {
+    if (result.status === 'ok' && result.op.op === 'set') {
+      buffer.push({
+        ordinal: directive.ordinal,
+        holder: result.holder,
+        observer: result.observer,
+        trackId: result.trackId,
+      });
+    }
+  }
+  const external = state.field(externalSetConflictsField, false) ?? [];
+  return new Map(findSetConflicts(buffer, external).map((c) => [c.ordinal, c]));
+}
+
 function buildModels(state: EditorState, place: 'note' | 'event'): DirectiveModel[] {
   const { library } = state.field(directiveContextField);
-  return directivesIn(state).map((directive) => {
-    const track = resolveTrack(directive.trackId, library);
-    const interpreted = interpretDirective(directive, {
+  const interpreted = directivesIn(state).map((directive) => ({
+    directive,
+    result: interpretDirective(directive, {
       resolveTrack: (id) => resolveTrack(id, library),
       undated: place === 'note',
-    });
-    const problems = interpreted.status === 'ok' ? [] : interpreted.problems;
+    }),
+  }));
+  const conflicts = bufferSetConflicts(state, place, interpreted);
+  const externalTitles = state.field(externalSetConflictsField, false) ?? [];
+  const titleFor = (path: string) => externalTitles.find((e) => e.path === path)?.title;
+
+  return interpreted.map(({ directive, result: interpretedDirective }) => {
+    const track = resolveTrack(directive.trackId, library);
+    const problems = interpretedDirective.status === 'ok' ? [] : [...interpretedDirective.problems];
+    const conflict = conflicts.get(directive.ordinal);
+    if (conflict) {
+      problems.push({ code: 'set-conflict', message: setConflictMessage(conflict, titleFor) });
+    }
     const blocking = problems.find(
       (p) => p.code === 'unknown-track' || p.code === 'unknown-action',
     );
@@ -167,7 +235,7 @@ function buildModels(state: EditorState, place: 'note' | 'event'): DirectiveMode
       layout: directiveLayout(directive),
       track: track ?? null,
       // A wrong value outranks an empty blank: show the error straight away.
-      status: problems.length > 0 ? 'invalid' : interpreted.status,
+      status: problems.length > 0 ? 'invalid' : interpretedDirective.status,
       problems,
       live: !blocking,
       blockingMessage: blocking?.message ?? null,
@@ -326,9 +394,17 @@ function buildModelState(state: EditorState): DirectiveModelState {
     }
 
     const statusClass = directiveBorderClass(model.status);
+    // A problem with no single role (e.g. a Set conflict, which spans the
+    // whole directive) has nowhere else to show its message — put it on the
+    // directive's own outline so it's visible on hover anywhere in it.
+    const directiveMessage = model.problems
+      .filter((p) => !p.role)
+      .map((p) => p.message)
+      .join('; ');
     decorations.push(
       Decoration.mark({
         class: statusClass ? `cm-directive ${statusClass}` : 'cm-directive',
+        attributes: directiveMessage ? { title: directiveMessage } : undefined,
       }).range(directive.from, directive.to),
     );
     decorations.push(
@@ -427,7 +503,10 @@ const modelStateField = StateField.define<DirectiveModelState>({
   create: (state) => buildModelState(state),
   update(value, tr) {
     const rebuild =
-      tr.docChanged || tr.effects.some((e) => e.is(setDirectiveContext) || e.is(setEntityLabels));
+      tr.docChanged ||
+      tr.effects.some(
+        (e) => e.is(setDirectiveContext) || e.is(setEntityLabels) || e.is(setExternalSetConflicts),
+      );
     return rebuild ? buildModelState(tr.state) : value;
   },
   provide: (f) => [
@@ -953,6 +1032,7 @@ export function relationshipDirectives(config: RelationshipDirectivesConfig): Ex
   const readOnly = Boolean(config.readOnly);
   return [
     directiveContextField,
+    externalSetConflictsField,
     // Read-only here (labels are pushed by the host via `setEntityLabels`);
     // included so the label lookup resolves even without `wikiLinks()`.
     entityLabelMapField,

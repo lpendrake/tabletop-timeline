@@ -15,6 +15,7 @@ import { acceptCompletion, completionStatus, currentCompletions } from '@codemir
 import {
   relationshipDirectives,
   setDirectiveContext,
+  setExternalSetConflicts,
   directiveBorderClass,
   directiveGuardBypass,
   insertDirective,
@@ -788,6 +789,83 @@ describe('pointer', () => {
     expect(doc(view)).toBe('\nafter');
     undo(view);
     expect(doc(view)).toBe(`${FULL_CHANGE}\nafter`);
+  });
+});
+
+const SET_TEMPLATE = pf2eReputationSpec.actions.find((a) => a.key === 'set')!.template;
+
+function repSet(holder: string, observer: string, value: string): string {
+  return serialiseTemplate('rp01', 'set', SET_TEMPLATE, {
+    holder: `[[${holder}]]`,
+    observer: `[[${observer}]]`,
+    value,
+    reason: 'gift',
+  });
+}
+
+describe('undated Set conflicts', () => {
+  it('flags two Sets in the same note for the same relationship, both with a message, and clears both when one is removed', () => {
+    const first = repSet('c3d4', 'a1b2', '-10');
+    const second = repSet('c3d4', 'a1b2', '-9');
+    const view = makeView(`${first}\n${second}`, { config: { place: 'note' } });
+
+    const flagged = [...view.dom.querySelectorAll('.cm-directive-error')];
+    expect(flagged).toHaveLength(2);
+    for (const el of flagged as HTMLElement[]) {
+      expect(el.title).toMatch(/Only one note may set this relationship/);
+      expect(el.title).toMatch(/set more than once in this note/);
+    }
+
+    // Delete the second directive — the first's flag clears.
+    const secondFrom = view.state.doc.toString().indexOf(second);
+    view.dispatch({
+      changes: { from: secondFrom - 1, to: view.state.doc.length, insert: '' },
+    });
+    expect(view.dom.querySelector('.cm-directive-error')).toBeNull();
+  });
+
+  it('does not conflict when the holder/observer differ', () => {
+    const view = makeView(`${repSet('c3d4', 'a1b2', '-10')}\n${repSet('c3d4', 'e5f6', '-9')}`, {
+      config: { place: 'note' },
+    });
+    expect(view.dom.querySelector('.cm-directive-error')).toBeNull();
+  });
+
+  it('flags a note Set that conflicts with an undated Set pushed in from another saved file, naming it by title', () => {
+    const view = makeView(repSet('c3d4', 'a1b2', '-10'), { config: { place: 'note' } });
+    view.dispatch({
+      effects: setExternalSetConflicts.of([
+        {
+          holder: 'c3d4',
+          observer: 'a1b2',
+          trackId: 'rp01',
+          path: 'notes/other.md',
+          title: 'The Party',
+        },
+      ]),
+    });
+
+    const flagged = view.dom.querySelector<HTMLElement>('.cm-directive-error');
+    expect(flagged).not.toBeNull();
+    expect(flagged?.title).toMatch(/Only one note may set this relationship/);
+    expect(flagged?.title).toMatch(/also set in The Party/);
+  });
+
+  it('an event editor never flags an undated-Set conflict', () => {
+    const view = makeView(`${repSet('c3d4', 'a1b2', '-10')}\n${repSet('c3d4', 'a1b2', '-9')}`, {
+      config: { place: 'event' },
+    });
+    expect(view.dom.querySelector('.cm-directive-error')).toBeNull();
+  });
+
+  it('ignores an invalid directive — it never joins a conflict group', () => {
+    const view = makeView(`${repSet('c3d4', 'a1b2', '-10')}\n${UNKNOWN_OPTION}`, {
+      config: { place: 'note' },
+    });
+    const flagged = [...view.dom.querySelectorAll('.cm-directive-error')];
+    // Only the unknown-option directive is invalid; the lone Set has no conflict.
+    expect(flagged).toHaveLength(1);
+    expect(flagged[0].title).not.toMatch(/Only one note may set this relationship/);
   });
 });
 

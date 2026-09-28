@@ -12,8 +12,10 @@
 import type { Ledger, RelationshipDelta, TrackLibrary } from '../shared/relationships/index.js';
 import type { ParsedDirective } from '../shared/relationships/index.js';
 import type { LedgerKeyTriple } from '../shared/relationships/index.js';
+import type { ExternalUndatedSet } from '../shared/relationships/index.js';
 import {
   EMPTY_TRACK_LIBRARY,
+  conflictingGroups,
   deltasForFile,
   splitLedgerKey,
 } from '../shared/relationships/index.js';
@@ -256,6 +258,28 @@ export class RelationshipsStore {
     return [...this.ledgerObjects.values()].map((l) => this.cleanLedger(l));
   }
 
+  /**
+   * Every undated Set declared in a saved file, straight from the raw
+   * ledgers (not `cleanLedger`, which drops conflicting Sets) — the editor
+   * needs the full picture, including conflicts, to flag them live.
+   */
+  undatedSets(): ExternalUndatedSet[] {
+    const out: ExternalUndatedSet[] = [];
+    for (const ledger of this.ledgerObjects.values()) {
+      for (const d of ledger.deltas) {
+        if (d.op === 'set' && d.at === null) {
+          out.push({
+            trackId: ledger.track,
+            holder: ledger.holder,
+            observer: ledger.observer,
+            path: d.declaredIn.path,
+          });
+        }
+      }
+    }
+    return out;
+  }
+
   ledgersFor(entityId: string, as: LedgersAs): Ledger[] {
     return this.ledgers().filter((l) => {
       if (as === 'holder') return l.holder === entityId;
@@ -290,8 +314,19 @@ export class RelationshipsStore {
    */
   private conflictingDeltaKeys(ledger: Ledger): Set<string> {
     const undatedSets = ledger.deltas.filter((d) => d.op === 'set' && d.at === null);
-    if (undatedSets.length <= 1) return new Set();
-    return new Set(undatedSets.map(deltaIdentity));
+    const groups = conflictingGroups(
+      undatedSets.map((delta) => ({
+        holder: ledger.holder,
+        observer: ledger.observer,
+        trackId: ledger.track,
+        delta,
+      })),
+    );
+    const conflicting = new Set<string>();
+    for (const group of groups.values()) {
+      for (const { delta } of group) conflicting.add(deltaIdentity(delta));
+    }
+    return conflicting;
   }
 
   private cleanLedger(ledger: Ledger): Ledger {
