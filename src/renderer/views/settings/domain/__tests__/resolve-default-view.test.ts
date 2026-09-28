@@ -22,8 +22,8 @@ describe('resolveDefaultView', () => {
     expect(resolveDefaultView('')).toBe('timeline');
   });
 
-  it('returns timeline when saved value is "relationships" (out of scope, not selectable)', () => {
-    expect(resolveDefaultView('relationships')).toBe('timeline');
+  it('returns relationships when saved value is "relationships"', () => {
+    expect(resolveDefaultView('relationships')).toBe('relationships');
   });
 
   it('returns timeline when saved value is an unknown string', () => {

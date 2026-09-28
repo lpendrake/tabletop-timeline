@@ -46,6 +46,7 @@ vi.mock('../entity-index-handlers.js', () => ({
 import { registerIpcHandlers } from '../ipcHandlers.js';
 import { LATEST_VERSION } from '../migration/registry.js';
 import { getCampaignVersion } from '../migration/campaign-version.js';
+import { getDefaultReputationHolder } from '../settings/relationship-settings.js';
 
 const tmpDirs: string[] = [];
 
@@ -153,5 +154,29 @@ describe('campaign:create IPC handler', () => {
     const campaignMd = fs.readFileSync(path.join(first.path!, 'campaign.md'), 'utf-8');
     expect(campaignMd).toContain('first time');
     expect(campaignMd).not.toContain('second attempt');
+  });
+
+  it('creates The Party note and sets it as the default reputation holder', async () => {
+    const rootDir = makeTmpDir();
+    const create = handlers.get('campaign:create')!;
+
+    const result = (await create({}, rootDir, 'Party Campaign', '')) as {
+      success: boolean;
+      path?: string;
+    };
+    expect(result.success).toBe(true);
+
+    const partyPath = path.join(result.path!, 'notes', 'party', 'the-party.md');
+    expect(fs.existsSync(partyPath)).toBe(true);
+    const partyContent = fs.readFileSync(partyPath, 'utf-8');
+    expect(partyContent).toContain('title: The Party');
+    expect(partyContent).toContain('# The Party');
+    expect(partyContent).toContain('## Members');
+    expect(partyContent).toMatch(/^id: \S+/m);
+
+    const idMatch = /^id: (\S+)/m.exec(partyContent);
+    const partyId = idMatch?.[1];
+    expect(partyId).toBeTruthy();
+    expect(getDefaultReputationHolder(result.path!)).toBe(partyId);
   });
 });

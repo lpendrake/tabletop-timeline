@@ -59,7 +59,13 @@ vi.mock('../../../notes/new-note-from-editor', () => ({
 
 // Render MarkdownEditor as a simple textarea so onChange is testable.
 // FormatToolbar renders its footerSlot inline so buttons are discoverable.
+// Lets tests simulate "a completion list is open in the editor" without
+// mounting a real CodeMirror view — set `popupOpenTarget` to the element an
+// Escape keydown should be treated as originating from.
+let popupOpenTarget: EventTarget | null = null;
 vi.mock('../../../shared/markdown-editor', () => ({
+  isEditorPopupOpen: (target: EventTarget | null) =>
+    popupOpenTarget !== null && target === popupOpenTarget,
   MarkdownEditor: (props: { onChange: (s: string) => void; content: string }) => {
     lastMarkdownEditorProps.current = props;
     return (
@@ -73,6 +79,27 @@ vi.mock('../../../shared/markdown-editor', () => ({
     isEditable: boolean;
     viewRef: unknown;
   }) => <div data-testid="format-toolbar">{footerSlot}</div>,
+  composeExtraItems:
+    (...fns: (((ctx: unknown) => unknown[]) | undefined)[]) =>
+    (ctx: unknown) =>
+      fns.flatMap((fn) => fn?.(ctx) ?? []),
+}));
+
+vi.mock('../../../relationships/data', () => ({
+  relationshipsData: {
+    getTracks: () => Promise.resolve({ custom: [], optionAdditions: {} }),
+    getAllLedgers: () => Promise.resolve([]),
+    getDefaultHolder: () => Promise.resolve(null),
+    setDefaultHolder: vi.fn().mockResolvedValue(undefined),
+    addOption: vi.fn().mockResolvedValue({ ok: false, reason: 'unknown-track' }),
+    onChanged: () => () => {},
+    onLibraryChanged: () => () => {},
+    onDefaultHolderChanged: () => () => {},
+  },
+}));
+
+vi.mock('../../../relationships/editor-menu', () => ({
+  buildRelationshipMenuItems: () => [],
 }));
 
 // FooterPortal renders inline so portal contents are in the same container.
@@ -249,6 +276,7 @@ describe('EventEditorModal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     confirmMock.mockReset().mockResolvedValue(true);
+    popupOpenTarget = null;
     Object.defineProperty(window, 'fsApi', {
       value: fsApiStub,
       configurable: true,
@@ -259,6 +287,7 @@ describe('EventEditorModal', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.useRealTimers();
+    popupOpenTarget = null;
     teardown();
   });
 
@@ -443,6 +472,29 @@ describe('EventEditorModal', () => {
     expect(confirmMock).not.toHaveBeenCalled();
     expect(timelinePort.updateEvent).toHaveBeenCalledTimes(1);
     expect(onSaved).toHaveBeenCalledTimes(1);
+  });
+
+  it('Escape while a completion list is open does not close (or save-and-close) the modal', async () => {
+    setup();
+    const { onClose, onSaved } = await renderEdit();
+    await dirtyBuffer();
+
+    const editorContent = document.createElement('div');
+    document.body.appendChild(editorContent);
+    popupOpenTarget = editorContent;
+
+    await act(async () => {
+      editorContent.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+      );
+    });
+    await flush();
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(timelinePort.updateEvent).not.toHaveBeenCalled();
+
+    editorContent.remove();
   });
 
   // ── Verify autosave delay is 500ms not 2000ms ──

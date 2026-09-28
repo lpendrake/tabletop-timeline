@@ -3,6 +3,7 @@ export type {
   MarkdownEditorProps,
   SavedEditorInstance,
   WikiLinksHostConfig,
+  RelationshipDirectivesHostConfig,
 } from './markdown-editor';
 export { MarkdownPreview } from './markdown-preview';
 export type { MarkdownPreviewProps } from './markdown-preview';
@@ -13,10 +14,21 @@ export type { ImagePasteConfig } from './extensions/image-paste';
 export type { DropLinkConfig, DropInsert } from './extensions/drop-link';
 export type { ImageDecorationsOptions } from './extensions/image-decorations';
 export type { MarkdownLinkClickConfig } from './extensions/markdown-link-click';
+export type {
+  RelationshipDirectivesConfig,
+  ExternalSetConflictEntry,
+} from './extensions/relationship-directives';
+export type {
+  RelationshipCompletionOptions,
+  HeldTagsQuery,
+} from './extensions/relationship-directive-completions';
 export { buildEditorMenuItems } from './extensions/editor-context-menu';
 export type {
   EditorMenuContext,
   EditorMenuExtraItems,
   EditorContextMenuConfig,
 } from './extensions/editor-context-menu';
+export { insertDirective } from './extensions/relationship-directives';
+export { isEditorPopupOpen } from './extensions/editor-completions';
+export { composeExtraItems } from './compose-extra-items';
 export * from './commands';

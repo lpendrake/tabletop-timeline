@@ -22,29 +22,12 @@ import {
 import { setCampaignVersion } from './migration/campaign-version.js';
 import { LATEST_VERSION } from './migration/registry.js';
 import { writeNewFile } from './write-new-file.js';
+import { readRootDir } from './settings/root-dir.js';
+import { getSettings, saveSettings } from './settings/app-config.js';
+import { registerRelationshipsIpcHandlers } from './relationships-ipc-handlers.js';
+import { setDefaultReputationHolder } from './settings/relationship-settings.js';
 
 const { autoUpdater } = pkg;
-
-const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json');
-
-function getSettings() {
-  try {
-    if (fs.existsSync(CONFIG_PATH)) {
-      return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
-    }
-  } catch (e) {
-    console.error('Failed to read config:', e);
-  }
-  return {};
-}
-
-function saveSettings(settings: Record<string, unknown>) {
-  try {
-    fs.writeFileSync(CONFIG_PATH, JSON.stringify(settings, null, 2));
-  } catch (e) {
-    console.error('Failed to save config:', e);
-  }
-}
 
 export function registerIpcHandlers() {
   // Directory Selection
@@ -67,7 +50,7 @@ export function registerIpcHandlers() {
 
   // Settings
   ipcMain.handle('settings:getRootDir', async () => {
-    return getSettings().rootDir || null;
+    return readRootDir();
   });
 
   ipcMain.handle('settings:setRootDir', async (event, rootDir: string) => {
@@ -185,6 +168,14 @@ ${description}
           path.join(campaignPath, 'timeline', 'state.json'),
           JSON.stringify({ in_game_now: '', campaign_start: '' }, null, 2),
         );
+
+        // Every new campaign starts with a "The Party" note, set as the
+        // default holder for reputation-style directives (the GM almost
+        // always wants faction reputation tracked against the party).
+        const partyId = generateShortId();
+        const partyContent = `---\nid: ${partyId}\ntitle: The Party\n---\n# The Party\n\n## Members\n\n- Member 1\n- Member 2\n- Member 3\n- Member 4\n`;
+        writeNewFile(path.join(campaignPath, 'notes', 'party', 'the-party.md'), partyContent);
+        setDefaultReputationHolder(campaignPath, partyId);
 
         // Stamp the new campaign with the latest known migration version so it
         // skips all existing migrations the first time it is opened.
@@ -362,6 +353,7 @@ ${description}
 
   registerTimelineIpcHandlers();
   registerEntityIndexHandlers();
+  registerRelationshipsIpcHandlers();
 
   ipcMain.handle('template:read', async (_event, campaignPath: string, name: string) =>
     readTemplate(campaignPath, name),

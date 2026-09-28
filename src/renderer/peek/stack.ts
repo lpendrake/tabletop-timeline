@@ -3,6 +3,7 @@ import { showPeek, type PeekHandle } from './show';
 import { resolvePeekTarget } from './resolve';
 import { buildEntityLabelMap } from '../../shared/entity-labels';
 import { isContextMenuOpen, onContextMenuOpenChange } from '../shared/context-menu';
+import { NOTE_DEFAULT_REASON, type TrackLibrary } from '../../shared/relationships';
 
 const OPEN_DELAY_MS = 150;
 const CLOSE_DELAY_MS = 250;
@@ -25,6 +26,8 @@ export interface PeekStackConfig {
   fetcher: (path: string, signal: AbortSignal) => Promise<string>;
   getEntityIndex: () => readonly EntityIndexEntry[];
   onOpenById?: (id: string) => void;
+  /** Injected by the app, since peek can't import from notes/timeline/views. */
+  getRelationshipLibrary?: () => TrackLibrary;
 }
 
 function cancelOpen() {
@@ -91,6 +94,9 @@ function openWindow(path: string, anchor: HTMLElement, depth: number) {
     fetcher: stackConfig!.fetcher,
     onOpenById: stackConfig!.onOpenById,
     entityLabels,
+    relationshipDirectives: stackConfig!.getRelationshipLibrary
+      ? { library: stackConfig!.getRelationshipLibrary(), defaultReason: NOTE_DEFAULT_REASON }
+      : undefined,
     stackDepth: Math.min(depth, MAX_DEPTH - 1),
     onPin: () => {
       stack = stack.filter((e) => e.handle !== handle);

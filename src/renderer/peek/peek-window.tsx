@@ -11,7 +11,9 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { MarkdownPreview } from '../shared/markdown-editor/markdown-preview';
+import type { RelationshipDirectivesHostConfig } from '../shared/markdown-editor/markdown-editor';
 import { parseMd } from './parse-md';
+import { placeForPeekPath } from './place-for-path';
 
 export interface PeekWindowProps {
   path: string;
@@ -28,6 +30,8 @@ export interface PeekWindowProps {
   entityLabels?: Map<string, string>;
   onPin?: () => void;
   onClose?: () => void;
+  /** Read-only relationship-directive rendering, injected by the app (peek can't import from notes/timeline/views). */
+  relationshipDirectives?: Pick<RelationshipDirectivesHostConfig, 'library' | 'defaultReason'>;
 }
 
 export interface PeekWindowHandle {
@@ -76,7 +80,17 @@ function isNotFound(err: unknown): boolean {
 }
 
 export const PeekWindow = forwardRef<PeekWindowHandle, PeekWindowProps>(function PeekWindow(
-  { path, anchorRect, stackDepth: _stackDepth, fetcher, onOpenById, entityLabels, onPin, onClose },
+  {
+    path,
+    anchorRect,
+    stackDepth: _stackDepth,
+    fetcher,
+    onOpenById,
+    entityLabels,
+    onPin,
+    onClose,
+    relationshipDirectives,
+  },
   ref,
 ) {
   const [loadState, setLoadState] = useState<LoadState>({ status: 'loading' });
@@ -240,6 +254,21 @@ export const PeekWindow = forwardRef<PeekWindowHandle, PeekWindowProps>(function
             baseDir={loadState.baseDir}
             wikiLinks={
               onOpenById || entityLabels ? { onOpen: onOpenById, entityLabels } : undefined
+            }
+            relationshipDirectives={
+              relationshipDirectives
+                ? {
+                    ...relationshipDirectives,
+                    defaultReason: loadState.title || relationshipDirectives.defaultReason,
+                    // Peek shows both notes and events through the same
+                    // read-only preview — derive which this file is from
+                    // its own campaign-relative path so it validates
+                    // directives the same way the real editor would,
+                    // instead of always assuming the permissive 'event'
+                    // context.
+                    place: placeForPeekPath(path),
+                  }
+                : undefined
             }
           />
         )}

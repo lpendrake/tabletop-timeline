@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { EditorView } from '@codemirror/view';
-import { MarkdownEditor, FormatToolbar } from '../../shared/markdown-editor';
+import { MarkdownEditor, FormatToolbar, isEditorPopupOpen } from '../../shared/markdown-editor';
 import { suggestLinks } from '../../shared/suggest-links';
 import { FooterPortal } from '../../components/footer-portal';
 import { useConfirm } from '../../shared/confirm-dialog/confirm-provider';
@@ -38,6 +38,10 @@ import { entityIndex as entityIndexStore } from '../../shared/entity-index';
 import { buildEntityLink } from '../../shared/entity-link';
 import { copyToClipboard } from '../../shared/clipboard';
 import { useNewNoteMenuConfig, entityFromCreatedNote, type CreatedNote } from '../../notes/public';
+import { useRelationshipEditorConfig } from '../../relationships/hooks/use-relationship-editor-config';
+import { eventRelationshipDefaultReason } from './relationship-default-reason';
+import { bufferEpochSeconds } from './domain/buffer-epoch-seconds';
+import { CalendarProvider } from '../calendar/provider';
 import './EventEditorModal.css';
 
 function TagChipList({
@@ -175,6 +179,18 @@ export function EventEditorModal({
 
   const viewRef = useRef<EditorView | null>(null);
   const autoSaveTimerRef = useRef<number | null>(null);
+
+  const { relationshipDirectives: relationshipDirectivesConfig, contextMenu: editorContextMenu } =
+    useRelationshipEditorConfig({
+      entityIndex,
+      defaultReason: eventRelationshipDefaultReason(buffer),
+      onOpenNote: onOpenById,
+      place: 'event',
+      currentPath: () => (filenameRef.current ? `timeline/${filenameRef.current}` : null),
+      at: () => bufferEpochSeconds(bufferRef.current, CalendarProvider.get()),
+      getDocText: () => bufferRef.current.body,
+      extraMenuItems: newNoteMenuConfig.extraItems,
+    });
 
   // Clear pending timers if the modal unmounts mid-flight
   useEffect(() => {
@@ -379,6 +395,10 @@ export function EventEditorModal({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        // An open completion list (a relationship blank's choices, or an
+        // `@` link search) closes on this Escape — the modal must not also
+        // close on the same keypress.
+        if (isEditorPopupOpen(e.target)) return;
         e.stopPropagation();
         requestClose();
         return;
@@ -559,7 +579,8 @@ export function EventEditorModal({
                     knownIds,
                     entityLabels: entityLabelMap,
                   }}
-                  contextMenu={newNoteMenuConfig}
+                  contextMenu={editorContextMenu}
+                  relationshipDirectives={relationshipDirectivesConfig}
                 />
               </div>
 

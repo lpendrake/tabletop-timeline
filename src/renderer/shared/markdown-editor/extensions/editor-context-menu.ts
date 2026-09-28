@@ -243,7 +243,7 @@ export function buildEditorMenuItems(
  * Rect shape returned by `view.coordsAtPos` — also what our line-block
  * fallback below produces.
  */
-interface CaretRect {
+export interface CaretRect {
   left: number;
   right: number;
   top: number;
@@ -270,7 +270,7 @@ interface CaretRect {
  * for horizontal position — which is exactly where the caret sits at the
  * start of a line with no indentation.
  */
-function getCaretRect(view: EditorView, pos: number): CaretRect | null {
+export function getCaretRect(view: EditorView, pos: number): CaretRect | null {
   const direct = view.coordsAtPos(pos, 1) ?? view.coordsAtPos(pos, -1);
   if (direct) return direct;
 

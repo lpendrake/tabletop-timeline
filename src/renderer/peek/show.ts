@@ -1,7 +1,7 @@
 import { createElement, createRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PeekWindow } from './peek-window';
-import type { PeekWindowHandle } from './peek-window';
+import type { PeekWindowHandle, PeekWindowProps } from './peek-window';
 
 export interface PeekHandle {
   pin(): void;
@@ -24,10 +24,20 @@ export interface ShowPeekOptions {
   stackDepth?: number;
   onPin?: () => void;
   onClose?: () => void;
+  relationshipDirectives?: PeekWindowProps['relationshipDirectives'];
 }
 
 export function showPeek(opts: ShowPeekOptions): PeekHandle {
-  const { targetEl, linkInfo, fetcher, onOpenById, stackDepth = 0, onPin, onClose } = opts;
+  const {
+    targetEl,
+    linkInfo,
+    fetcher,
+    onOpenById,
+    stackDepth = 0,
+    onPin,
+    onClose,
+    relationshipDirectives,
+  } = opts;
 
   let currentEntityLabels = opts.entityLabels;
 
@@ -55,6 +65,7 @@ export function showPeek(opts: ShowPeekOptions): PeekHandle {
         fetcher,
         onOpenById,
         entityLabels: currentEntityLabels,
+        relationshipDirectives,
         onPin,
         onClose: () => {
           onClose?.();

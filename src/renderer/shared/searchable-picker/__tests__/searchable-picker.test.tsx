@@ -158,4 +158,28 @@ describe('SearchablePicker', () => {
     const highlightedIndex = rows.findIndex((r) => r.className.includes('is-highlighted'));
     expect(rows[highlightedIndex].textContent).toBe('locations');
   });
+
+  it('ArrowDown/Up move freely when a value is highlighted — no snap-back mid-navigation', () => {
+    const onPick = vi.fn();
+    act(() => {
+      root.render(<SearchablePicker options={OPTIONS} onPick={onPick} value="locations" />);
+    });
+
+    // Starts highlighted on the current value's row (index 4), not the top row.
+    expect(getRows()[4].className).toContain('is-highlighted');
+
+    act(() => {
+      fireEvent.keyDown(getInput(), { key: 'ArrowUp' });
+    });
+    // Moves off the value's row and STAYS there — a re-render alone (from
+    // the highlight-state change) must not recompute `results` and snap
+    // the highlight back to the value's row.
+    expect(getRows()[3].className).toContain('is-highlighted');
+    expect(getRows()[4].className).not.toContain('is-highlighted');
+
+    act(() => {
+      fireEvent.keyDown(getInput(), { key: 'ArrowUp' });
+    });
+    expect(getRows()[2].className).toContain('is-highlighted');
+  });
 });

@@ -22,7 +22,8 @@ Matching is path-aware: a query is split on `/` and each segment must match
 a successive path segment of the option's `path` (see
 `shared/search/path-match.ts`), so `storm/spies` finds
 `factions/the-house-of-storms/spies` without requiring every intermediate
-folder to be typed.
+folder to be typed. This is `rankPickerOptions`, the default — built for the
+New Note folder picker.
 
 ## Recents
 
@@ -33,7 +34,8 @@ empty-query view.
 
 ## Key handling contract
 
-- `ArrowUp` / `ArrowDown` move the highlight (via `moveHighlight`), wrapping.
+- `ArrowUp` / `ArrowDown` move the highlight (via `moveHighlight`), wrapping
+  across the ranked results.
 - `Enter` picks the highlighted option; does nothing when there are no
   results. Calls `preventDefault()` + `stopPropagation()`.
 - `Escape` calls `onCancel`, with `preventDefault()` + `stopPropagation()` so

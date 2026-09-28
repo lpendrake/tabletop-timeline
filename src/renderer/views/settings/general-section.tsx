@@ -4,6 +4,7 @@ import { SettingRow } from './controls/setting-row';
 import { SelectField } from './controls/select-field';
 import { defaultViewSettingsData } from './default-view-settings-data';
 import { resolveDefaultView } from './domain/resolve-default-view';
+import { DefaultHolderRow } from './default-holder-row';
 
 interface Props {
   activeCampaign: Campaign | null;
@@ -36,20 +37,24 @@ export function GeneralSection({ activeCampaign }: Props) {
   };
 
   return (
-    <SettingRow
-      label="Default view"
-      description="The view shown first when this campaign is opened."
-      htmlFor="general-default-view"
-    >
-      <SelectField
-        id="general-default-view"
-        value={defaultView}
-        options={[
-          { value: 'timeline', label: 'Timeline' },
-          { value: 'notes', label: 'Notes' },
-        ]}
-        onChange={handleChange}
-      />
-    </SettingRow>
+    <>
+      <SettingRow
+        label="Default view"
+        description="The view shown first when this campaign is opened."
+        htmlFor="general-default-view"
+      >
+        <SelectField
+          id="general-default-view"
+          value={defaultView}
+          options={[
+            { value: 'timeline', label: 'Timeline' },
+            { value: 'notes', label: 'Notes' },
+            { value: 'relationships', label: 'Relationships' },
+          ]}
+          onChange={handleChange}
+        />
+      </SettingRow>
+      {activeCampaign && <DefaultHolderRow campaignPath={activeCampaign.path} />}
+    </>
   );
 }

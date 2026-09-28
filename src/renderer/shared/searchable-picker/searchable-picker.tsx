@@ -41,9 +41,10 @@ export function SearchablePicker({
     () => rankPickerOptions(options, query, recentIds),
     [options, query, recentIds],
   );
+  const rowCount = results.length;
 
   useEffect(() => {
-    if (results.length === 0) {
+    if (rowCount === 0) {
       setHighlight(-1);
       return;
     }
@@ -55,7 +56,9 @@ export function SearchablePicker({
       }
     }
     setHighlight(0);
-    // Only recompute the initial highlight when the result set itself changes.
+    // Only recompute the initial highlight when the result set changes —
+    // not on every highlight move, which is what keeps Arrow keys from
+    // snapping back mid-navigation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [results]);
 
@@ -70,12 +73,12 @@ export function SearchablePicker({
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setHighlight((h) => moveHighlight(h, results.length, 1));
+      setHighlight((h) => moveHighlight(h, rowCount, 1));
       return;
     }
     if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setHighlight((h) => moveHighlight(h, results.length, -1));
+      setHighlight((h) => moveHighlight(h, rowCount, -1));
       return;
     }
     if (e.key === 'Enter') {
@@ -107,25 +110,22 @@ export function SearchablePicker({
         onKeyDown={onKeyDown}
       />
       <div className="searchable-picker-list" role="listbox" ref={listRef}>
-        {results.length === 0 ? (
-          <div className="searchable-picker-empty">{emptyText}</div>
-        ) : (
-          results.map((option, index) => (
-            <div
-              key={option.id}
-              role="option"
-              aria-selected={index === highlight}
-              className={`searchable-picker-row${index === highlight ? ' is-highlighted' : ''}`}
-              onMouseEnter={() => setHighlight(index)}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                onPick(option);
-              }}
-            >
-              {option.label ?? option.path}
-            </div>
-          ))
-        )}
+        {results.length === 0 && <div className="searchable-picker-empty">{emptyText}</div>}
+        {results.map((option, index) => (
+          <div
+            key={option.id}
+            role="option"
+            aria-selected={index === highlight}
+            className={`searchable-picker-row${index === highlight ? ' is-highlighted' : ''}`}
+            onMouseEnter={() => setHighlight(index)}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              onPick(option);
+            }}
+          >
+            {option.label ?? option.path}
+          </div>
+        ))}
       </div>
     </div>
   );

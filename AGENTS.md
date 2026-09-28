@@ -27,9 +27,10 @@ A campaign is a directory inside a user-chosen root folder. The app scans the ro
       0001-01-15-battle-of-dawn.md
       state.json                  # { in_game_now_seconds, campaign_start_seconds } — epoch-seconds
     sessions.json                 # session records (top-level, optional)
-    settings.json                 # campaign settings: { calendar, version, ... } (optional)
+    settings.json                 # campaign settings: { calendar, version, defaultReputationHolder, ... } (optional)
     tags.json                     # tag registry { [tagName]: { color, description } } (optional)
-    relationships/                # created on campaign init, not yet used by the app
+    relationships/                # created on campaign init; holds view-order.json
+  relationship-tracks.json        # workspace-wide custom relationship tracks + option additions
 ```
 
 The app creates `notes/player characters`, `notes/factions`, `notes/locations`, `notes/npcs`, and `notes/plots` on first open if they do not exist.
@@ -97,6 +98,7 @@ Event body markdown.
 
 Must contain a h1 title as it drives the title field of the file, which in turn dictates the file name, and tag and link labels
 Wiki links here drive the `id:XXXX` entity tags automatically.
+This includes the holder/observer `[[id]]` values inside relationship directives (`{{trackId.action ...}}`): they intentionally feed `extractWikiLinkIds` → `syncEntityTags` too, so an event is tagged with every note whose relationship it changes (epic #261 — filtering the timeline by, say, the Party finds every event that changed the Party's relationships, not just events that mention it in prose).
 ```
 
 `epochSeconds` is an integer count of seconds since the active calendar's epoch (Golarion epoch = 0000-01-01 midnight). Older files may also carry a legacy `date` string; the app reads it as a fallback but no longer writes it.
@@ -135,10 +137,16 @@ Top-level array of session records:
 Each campaign folder may contain a `settings.json` sidecar:
 
 ```json
-{ "calendar": "glrn" }
+{ "calendar": "glrn", "defaultReputationHolder": "a1b2" }
 ```
 
 The `calendar` key is a 4-character calendar ID referencing the active calendar for the campaign. Defaults to Golarion (`"glrn"`) when absent. Custom calendar specs are stored workspace-wide in a single calendars.json file at the root workspace folder (shared by all campaigns); system calendars (Golarion, Gregorian) are built in.
+
+The `defaultReputationHolder` key is the entity id (usually "The Party") relationship directives default to as `holder` when not otherwise specified. New campaigns create a "The Party" note (`notes/party/the-party.md`) and set it here automatically.
+
+## Relationships
+
+Relationship values are derived from directives (`{{trackId.actionKey ...}}`) written in note/event bodies — see `src/shared/relationships/AGENTS.md`. Custom relationship tracks and options added to system tracks are stored workspace-wide in `<root>/relationship-tracks.json`. Nothing computed is persisted; the on-open relationship index (`src/main/relationships-index.ts`) re-derives everything from file contents.
 
 ## Tags on events
 

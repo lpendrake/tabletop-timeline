@@ -12,6 +12,12 @@ import { CampaignLoader } from './campaign-loader.js';
 import { buildEntityIndex } from './entity-index.js';
 import type { EntityIndexEntry } from './entity-index.js';
 import { buildMigrationTasks } from './migration/build-migration-tasks.js';
+import { buildRelationshipIndex } from './relationships-index.js';
+import { getRelationshipsStore } from './relationships-store.js';
+import type { RelationshipFileInput } from './relationships-store.js';
+import { readRootDir } from './settings/root-dir.js';
+import { readTrackLibrary } from './settings/relationship-tracks.js';
+import { EMPTY_TRACK_LIBRARY } from '../shared/relationships/index.js';
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -54,23 +60,49 @@ app.whenReady().then(() => {
     await fileWatcher.start(campaignPath, mainWindow);
 
     let entityIndex: EntityIndexEntry[] = [];
+    // Filled in by the entity-index scan below (one read per file) and
+    // reused by the relationship-index task so campaign open never walks or
+    // reads notes/timeline twice.
+    let relationshipInputs: RelationshipFileInput[] = [];
     const loader = new CampaignLoader([
       ...buildMigrationTasks(resolvedPath),
       {
         name: 'Building entity index',
         task: async (onProgress) => {
-          entityIndex = buildEntityIndex(resolvedPath, onProgress);
+          relationshipInputs = [];
+          entityIndex = buildEntityIndex(resolvedPath, onProgress, relationshipInputs);
           return `${entityIndex.length} files indexed`;
+        },
+      },
+      {
+        name: 'Building relationship index',
+        task: async (onProgress) => {
+          const rootDir = readRootDir();
+          const library = rootDir ? readTrackLibrary(rootDir) : EMPTY_TRACK_LIBRARY;
+          const knownNotes = entityIndex
+            .filter((e) => e.type === 'note')
+            .map((e) => ({ path: e.path, id: e.id }));
+          return buildRelationshipIndex(
+            resolvedPath,
+            library,
+            knownNotes,
+            onProgress,
+            relationshipInputs,
+          );
         },
       },
     ]);
 
     try {
+      // The main process outlives a renderer reload — never let a previous
+      // campaign's relationship data leak into this one.
+      getRelationshipsStore().clear();
       const messages = await loader.run(event.sender);
       return { success: true, entityIndex, messages };
     } catch (err) {
       setCampaignPath(null);
       fileWatcher.stop();
+      getRelationshipsStore().clear();
       const message = err instanceof Error ? err.message : String(err);
       return { success: false, error: message };
     }
@@ -79,6 +111,7 @@ app.whenReady().then(() => {
   ipcMain.handle('campaign:close', async () => {
     setCampaignPath(null);
     fileWatcher.stop();
+    getRelationshipsStore().clear();
     return true;
   });
 

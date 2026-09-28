@@ -19,12 +19,17 @@ export function resolveLinkById(
   return { kind: 'note', folder: parts[1], path: parts.slice(2).join('/') };
 }
 
+/** The campaign-relative path for a note's (folder, path) pair. */
+export function notePath(folder: string, path: string): string {
+  return `notes/${folder}/${path}`;
+}
+
 export function findEntityIdByNotePath(
   entityIndex: readonly EntityIndexEntry[],
   folder: string,
   path: string,
 ): string | null {
-  return entityIndex.find((e) => e.path === `notes/${folder}/${path}`)?.id ?? null;
+  return entityIndex.find((e) => e.path === notePath(folder, path))?.id ?? null;
 }
 
 export function resolveMarkdownHref(
