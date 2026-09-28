@@ -1,8 +1,11 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import matter from 'gray-matter';
 import type { TrackLibrary } from '../shared/relationships/index.js';
-import { parseNote } from '../shared/frontmatter.js';
-import { parseEventFile, SAFE_FILENAME_RE } from './timelineIpcHandlers.js';
+import { parseNote, extractH1 } from '../shared/frontmatter.js';
+import type { NoteFrontmatter } from '../shared/frontmatter.js';
+import { SAFE_FILENAME_RE } from './timelineIpcHandlers.js';
+import { MATTER_OPTS } from './matter-opts.js';
 import {
   getRelationshipsStore,
   type KnownNote,
@@ -11,31 +14,16 @@ import {
 import type { InvalidDirectiveEntry } from './relationships-store.js';
 
 /**
- * Reads one campaign-relative file (a note under `notes/` or an event under
- * `timeline/`) and returns it as a `RelationshipFileInput`, the single shape
- * both the initial campaign scan and the file watcher hand to the store.
+ * Builds a note's `RelationshipFileInput` from frontmatter/body already
+ * parsed once (e.g. by the entity index's own `parseNote` call) — no extra
+ * read or parse needed, since both the entity index and the relationship
+ * index derive from the same plain-YAML parse of a note file.
  */
-export function readRelationshipFileInput(
-  campaignPath: string,
+export function relationshipInputFromParsedNote(
   relPath: string,
+  frontmatter: NoteFrontmatter,
+  body: string,
 ): RelationshipFileInput {
-  const full = path.join(campaignPath, relPath);
-
-  if (relPath.startsWith('timeline/')) {
-    const filename = path.basename(relPath);
-    const { event } = parseEventFile(full, filename);
-    return {
-      path: relPath,
-      source: event.body,
-      title: event.title,
-      isEvent: true,
-      epochSeconds: event.epochSeconds ?? null,
-    };
-  }
-
-  const content = fs.readFileSync(full, 'utf-8');
-  const fallbackTitle = path.basename(relPath, '.md');
-  const { frontmatter, body } = parseNote(content, fallbackTitle);
   return {
     path: relPath,
     source: body,
@@ -43,6 +31,51 @@ export function readRelationshipFileInput(
     isEvent: false,
     noteId: frontmatter.id,
   };
+}
+
+/**
+ * Builds an event's `RelationshipFileInput` from the file's raw content.
+ * Events are parsed with `MATTER_OPTS` (CORE_SCHEMA) rather than the plain
+ * engine `parseNote` uses, so date-like frontmatter (a `date` field, a
+ * Golarion year) is never silently cast to a JS `Date` — see matter-opts.ts.
+ * This is a second, still read-free, in-memory parse of content the caller
+ * (the entity index scan, or `readRelationshipFileInput` below) already
+ * has in hand — never a second disk read.
+ */
+export function relationshipInputFromEventContent(
+  relPath: string,
+  content: string,
+): RelationshipFileInput {
+  const { data, content: rawBody } = matter(content, MATTER_OPTS);
+  const body = rawBody.trimStart();
+  const h1 = extractH1(body);
+  const title = h1 ?? String(data.title ?? '');
+  const epochSeconds = data.epochSeconds !== undefined ? Number(data.epochSeconds) : null;
+  return { path: relPath, source: body, title, isEvent: true, epochSeconds };
+}
+
+/**
+ * Reads one campaign-relative file (a note under `notes/` or an event under
+ * `timeline/`) and returns it as a `RelationshipFileInput`. Used by the file
+ * watcher (which only ever has one changed file to re-read) and directly in
+ * tests. The initial campaign scan does not call this — it reuses the
+ * content it already read via `relationshipInputFromParsedNote` /
+ * `relationshipInputFromEventContent` instead of reading each file twice.
+ */
+export function readRelationshipFileInput(
+  campaignPath: string,
+  relPath: string,
+): RelationshipFileInput {
+  const full = path.join(campaignPath, relPath);
+  const content = fs.readFileSync(full, 'utf-8');
+
+  if (relPath.startsWith('timeline/')) {
+    return relationshipInputFromEventContent(relPath, content);
+  }
+
+  const fallbackTitle = path.basename(relPath, '.md');
+  const { frontmatter, body } = parseNote(content, fallbackTitle);
+  return relationshipInputFromParsedNote(relPath, frontmatter, body);
 }
 
 function countMdFiles(dir: string): number {
@@ -117,27 +150,44 @@ function summarizeInvalid(invalid: InvalidDirectiveEntry[]): string {
 }
 
 /**
- * Scans `notes/` (recursively) and `timeline/` (flat) for relationship
- * directives and rebuilds the relationship store from scratch. `knownNotes`
- * seeds the store's known-notes map before any directive is interpreted, so
- * a directive referencing a note resolves correctly regardless of scan order.
+ * Rebuilds the relationship store from scratch, from `RelationshipFileInput`s
+ * for every note (recursively under `notes/`) and event (flat, under
+ * `timeline/`) in the campaign. `knownNotes` seeds the store's known-notes
+ * map before any directive is interpreted, so a directive referencing a note
+ * resolves correctly regardless of scan order.
+ *
+ * When `scannedFiles` is provided (the campaign-open path, where the entity
+ * index scan already read and parsed every file) those inputs are used
+ * as-is and `notes/` / `timeline/` are not walked or read again. Omit it to
+ * have this function scan the campaign itself (used directly in tests and by
+ * any other standalone caller).
  */
 export function buildRelationshipIndex(
   campaignPath: string,
   library: TrackLibrary,
   knownNotes: Iterable<KnownNote>,
   onProgress?: (completed: number, total: number) => void,
+  scannedFiles?: RelationshipFileInput[],
 ): string {
-  const notesDir = path.join(campaignPath, 'notes');
-  const timelineDir = path.join(campaignPath, 'timeline');
+  let files: RelationshipFileInput[];
 
-  const total = countMdFiles(notesDir) + countTimelineFiles(timelineDir);
-  let completed = 0;
-  const tick = () => onProgress?.(++completed, total);
+  if (scannedFiles) {
+    files = scannedFiles;
+    const total = files.length;
+    let completed = 0;
+    for (let i = 0; i < files.length; i++) onProgress?.(++completed, total);
+  } else {
+    const notesDir = path.join(campaignPath, 'notes');
+    const timelineDir = path.join(campaignPath, 'timeline');
 
-  const files: RelationshipFileInput[] = [];
-  if (fs.existsSync(notesDir)) scanNotes(notesDir, notesDir, campaignPath, files, tick);
-  scanTimeline(timelineDir, campaignPath, files, tick);
+    const total = countMdFiles(notesDir) + countTimelineFiles(timelineDir);
+    let completed = 0;
+    const tick = () => onProgress?.(++completed, total);
+
+    files = [];
+    if (fs.existsSync(notesDir)) scanNotes(notesDir, notesDir, campaignPath, files, tick);
+    scanTimeline(timelineDir, campaignPath, files, tick);
+  }
 
   const store = getRelationshipsStore();
   store.seedKnownNotes(knownNotes);

@@ -4,6 +4,12 @@ import { parseNote, stringifyNote } from '../shared/frontmatter.js';
 import { ASSET_EXTENSIONS } from '../shared/fileKinds.js';
 import type { EntityIndexEntry } from '../shared/entity-index-entry.js';
 export type { EntityIndexEntry } from '../shared/entity-index-entry.js';
+import {
+  relationshipInputFromParsedNote,
+  relationshipInputFromEventContent,
+} from './relationships-index.js';
+import { SAFE_FILENAME_RE } from './timelineIpcHandlers.js';
+import type { RelationshipFileInput } from './relationships-store.js';
 
 export { ASSET_EXTENSIONS };
 
@@ -37,9 +43,21 @@ function findMdById(id: string, dir: string): string | null {
   return null;
 }
 
+/**
+ * Scans `notes/` and `timeline/` once, building the entity index. When
+ * `relationshipInputs` is passed, each note/event `.md` file also appends a
+ * `RelationshipFileInput` to it (derived from the same file content this
+ * scan already read from disk), so `buildRelationshipIndex` can build the
+ * relationship store from that array afterwards without walking or reading
+ * the campaign a second time. Assets and files outside the directive scope
+ * (nested timeline files, unsafe timeline filenames) are not tracked as
+ * relationship inputs, matching what `buildRelationshipIndex`'s own scan
+ * has always read.
+ */
 export function buildEntityIndex(
   campaignPath: string,
   onProgress?: (completed: number, total: number) => void,
+  relationshipInputs?: RelationshipFileInput[],
 ): EntityIndexEntry[] {
   const index: EntityIndexEntry[] = [];
   const notesDir = path.join(campaignPath, 'notes');
@@ -54,10 +72,10 @@ export function buildEntityIndex(
     : undefined;
 
   if (fs.existsSync(notesDir)) {
-    scanDir(notesDir, 'note', notesDir, index, tick);
+    scanDir(notesDir, 'note', notesDir, index, tick, relationshipInputs);
   }
   if (fs.existsSync(timelineDir)) {
-    scanDir(timelineDir, 'event', timelineDir, index, tick);
+    scanDir(timelineDir, 'event', timelineDir, index, tick, relationshipInputs);
   }
 
   return index;
@@ -68,7 +86,21 @@ export function buildEntityIndex(
  * Writes back frontmatter if id/title were auto-generated.
  * Returns null if the file is not a tracked markdown file.
  */
-export function indexSingleEntity(fullPath: string, campaignPath: string): EntityIndexEntry | null {
+/**
+ * Index a single .md file and return its entry.
+ * Writes back frontmatter if id/title were auto-generated.
+ * Returns null if the file is not a tracked markdown file.
+ *
+ * When `relationshipInputs` is passed and the file is a note or a (flat,
+ * safely-named) event, a `RelationshipFileInput` derived from the same read
+ * is appended to it — so the file watcher can update the relationship store
+ * from the same content instead of reading the file again.
+ */
+export function indexSingleEntity(
+  fullPath: string,
+  campaignPath: string,
+  relationshipInputs?: RelationshipFileInput[],
+): EntityIndexEntry | null {
   const ext = path.extname(fullPath).toLowerCase();
   const rel = path.relative(campaignPath, fullPath).replace(/\\/g, '/');
   const isNote = rel.startsWith('notes/');
@@ -98,6 +130,22 @@ export function indexSingleEntity(fullPath: string, campaignPath: string): Entit
         entry.tags = (frontmatter.tags as unknown[]).filter(
           (t): t is string => typeof t === 'string',
         );
+
+      if (relationshipInputs) {
+        try {
+          if (isNote) {
+            relationshipInputs.push(relationshipInputFromParsedNote(rel, frontmatter, body));
+          } else if (rel.split('/').length === 2 && SAFE_FILENAME_RE.test(path.basename(rel))) {
+            // Matches buildRelationshipIndex's own scan: timeline is flat and
+            // only ever contains files matching SAFE_FILENAME_RE.
+            relationshipInputs.push(relationshipInputFromEventContent(rel, content));
+          }
+        } catch {
+          // Relationship parsing is best-effort here — never fail the
+          // entity index update because of it.
+        }
+      }
+
       return entry;
     } catch {
       return null;
@@ -136,17 +184,19 @@ function scanDir(
   baseDir: string,
   index: EntityIndexEntry[],
   tick?: () => void,
+  relationshipInputs?: RelationshipFileInput[],
 ) {
   const entries = fs.readdirSync(currentDir, { withFileTypes: true });
 
   for (const entry of entries) {
     const fullPath = path.join(currentDir, entry.name);
     if (entry.isDirectory()) {
-      scanDir(fullPath, type, baseDir, index, tick);
+      scanDir(fullPath, type, baseDir, index, tick, relationshipInputs);
     } else if (entry.isFile()) {
       const ext = path.extname(entry.name).toLowerCase();
       const relPath = path.relative(baseDir, fullPath).replace(/\\/g, '/');
       const prefix = type === 'note' ? 'notes/' : 'timeline/';
+      const campaignRelPath = prefix + relPath;
 
       if (ext === '.md') {
         const content = fs.readFileSync(fullPath, 'utf-8');
@@ -157,7 +207,7 @@ function scanDir(
         }
         const indexEntry: EntityIndexEntry = {
           id: frontmatter.id,
-          path: prefix + relPath,
+          path: campaignRelPath,
           title: frontmatter.title,
           type,
         };
@@ -171,9 +221,21 @@ function scanDir(
           );
         index.push(indexEntry);
         tick?.();
+
+        if (relationshipInputs) {
+          if (type === 'note') {
+            relationshipInputs.push(
+              relationshipInputFromParsedNote(campaignRelPath, frontmatter, body),
+            );
+          } else if (currentDir === baseDir && SAFE_FILENAME_RE.test(entry.name)) {
+            // Matches buildRelationshipIndex's own scan: timeline is flat and
+            // only ever contains files matching SAFE_FILENAME_RE.
+            relationshipInputs.push(relationshipInputFromEventContent(campaignRelPath, content));
+          }
+        }
       } else if (type === 'note' && ASSET_EXTENSIONS.has(ext)) {
         const title = path.basename(entry.name, ext);
-        index.push({ id: '', path: prefix + relPath, title, type: 'asset' });
+        index.push({ id: '', path: campaignRelPath, title, type: 'asset' });
         tick?.();
       }
     }
