@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { rankPickerOptions, moveHighlight, type PickerOption } from '../picker-model';
+import {
+  rankPickerOptions,
+  moveHighlight,
+  groupPickerOptions,
+  flattenGroups,
+  flatIndexOf,
+  highlightSegments,
+  type PickerOption,
+} from '../picker-model';
 
 const FOLDER_OPTIONS: PickerOption[] = [
   { id: 'npcs', path: 'npcs' },
@@ -77,5 +85,61 @@ describe('moveHighlight', () => {
     expect(moveHighlight(1, 3, -1)).toBe(0);
     expect(moveHighlight(0, 0, 1)).toBe(-1);
     expect(moveHighlight(-1, 0, -1)).toBe(-1);
+  });
+});
+
+describe('groupPickerOptions', () => {
+  const vanguard: PickerOption = { id: 'v', path: 'The Vanguard', count: 15 };
+  const all: PickerOption = { id: 'a', path: 'All holders', count: 33 };
+  const options: PickerOption[] = [
+    { id: 'z', path: 'Zed', count: 20 },
+    vanguard,
+    { id: 'q', path: 'Quill', count: 2 },
+  ];
+
+  it('empty query shows pinned group then all group', () => {
+    const groups = groupPickerOptions(options, '', { pinned: [all, vanguard] });
+    expect(groups.map((g) => g.key)).toEqual(['pinned', 'all']);
+    expect(groups[0].label).toBe('Pinned');
+    expect(groups[1].label).toBe('All');
+    expect(groups[0].options.map((o) => o.id)).toEqual(['a', 'v']);
+    expect(groups[1].options.map((o) => o.id)).toEqual(['z', 'v', 'q']);
+  });
+
+  it('query filters both groups and drops empty groups', () => {
+    const groups = groupPickerOptions(options, 'quil', { pinned: [all, vanguard] });
+    expect(groups.map((g) => g.key)).toEqual(['all']);
+    expect(groups[0].options.map((o) => o.id)).toEqual(['q']);
+    expect(groupPickerOptions(options, 'nomatch', { pinned: [all] })).toEqual([]);
+  });
+
+  it('without pinned returns one unlabelled all group', () => {
+    expect(groupPickerOptions(options, '')).toEqual([{ key: 'all', options }]);
+  });
+
+  it('an option in both pinned and all is navigable twice', () => {
+    const groups = groupPickerOptions(options, '', { pinned: [all, vanguard] });
+    const flat = flattenGroups(groups);
+    expect(flat.map((e) => e.index)).toEqual([0, 1, 2, 3, 4]);
+    const vanguardEntries = flat.filter((e) => e.option.id === 'v');
+    expect(vanguardEntries.map((e) => [e.index, e.groupKey])).toEqual([
+      [1, 'pinned'],
+      [3, 'all'],
+    ]);
+    for (const e of flat) {
+      expect(flatIndexOf(groups, e.groupIndex, e.optionIndex)).toBe(e.index);
+    }
+    expect(flatIndexOf(groups, 1, 9)).toBe(-1);
+  });
+});
+
+describe('highlightSegments', () => {
+  it('splits label into matched and unmatched segments', () => {
+    expect(highlightSegments('The Vanguard', 'VAN')).toEqual([
+      { text: 'The ', match: false },
+      { text: 'Van', match: true },
+      { text: 'guard', match: false },
+    ]);
+    expect(highlightSegments('Zed', '')).toEqual([{ text: 'Zed', match: false }]);
   });
 });
