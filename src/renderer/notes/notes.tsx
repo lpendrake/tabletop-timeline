@@ -15,7 +15,6 @@ import { buildEntityLink, buildAssetLink } from '../shared/entity-link';
 import { copyToClipboard } from '../shared/clipboard';
 import { useRelationshipEditorConfig } from '../relationships/hooks/use-relationship-editor-config';
 import { NOTE_DEFAULT_REASON } from '../../shared/relationships';
-import { useConfirm } from '../shared/confirm-dialog/confirm-provider';
 import { NoteContextMenu } from './components/note-context-menu.tsx';
 import { LabelOverrideEditor } from '../shared/components/label-override-editor';
 import { EditorTabs } from './components/editor-tabs.tsx';
@@ -79,7 +78,6 @@ export function NotesApp({
     onCreated: ctrl.handleNoteCreatedFromEditor,
   });
 
-  const { confirm } = useConfirm();
   const activeTabRef = useRef(ctrl.activeTab);
   activeTabRef.current = ctrl.activeTab;
   const { relationshipDirectives: relationshipDirectivesConfig, contextMenu: editorContextMenu } =
@@ -94,7 +92,6 @@ export function NotesApp({
           : null,
       at: () => null,
       getDocText: () => ctrl.activeFile?.content ?? '',
-      confirm,
       extraMenuItems: newNoteMenuConfig.extraItems,
     });
 

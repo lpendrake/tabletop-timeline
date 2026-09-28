@@ -564,14 +564,47 @@ describe('choices', () => {
     await vi.waitFor(() => expect(doc(view)).toContain('{holder:[[a1b2]]}'));
   });
 
-  it('holder picked with no default holder set tells the host', async () => {
-    const onHolderChosenWithoutDefault = vi.fn();
-    const view = makeView(EMPTY_CHANGE, { choices: { onHolderChosenWithoutDefault } });
+  it('with no default holder set, the holder blank offers an extra "make it the default" row alongside the normal pick', async () => {
+    const view = makeView(EMPTY_CHANGE, { choices: { setDefaultHolder: vi.fn() } });
     caretAt(view, valueStart(view, 'holder'));
     type(view, 'party');
+    expect(await openList(view)).toEqual([
+      'The Party',
+      'Use The Party and make it the default holder',
+    ]);
+  });
+
+  it('a default holder already set: no extra row, just the normal pick', async () => {
+    const view = makeView(EMPTY_CHANGE, {
+      choices: { setDefaultHolder: vi.fn(), defaultHolderId: () => 'c3d4' },
+    });
+    caretAt(view, valueStart(view, 'holder'));
+    type(view, 'party');
+    expect(await openList(view)).toEqual(['The Party']);
+  });
+
+  it('picking the normal row inserts the note without setting a default holder', async () => {
+    const setDefaultHolder = vi.fn();
+    const view = makeView(EMPTY_CHANGE, { choices: { setDefaultHolder } });
+    caretAt(view, valueStart(view, 'holder'));
+    type(view, 'party');
+    press(view, 'Tab');
+    await vi.waitFor(() => expect(doc(view)).toContain('{holder:[[c3d4]]}'));
+    expect(setDefaultHolder).not.toHaveBeenCalled();
+  });
+
+  it('picking "…and make it the default holder" inserts the note AND sets it as the default holder — no dialog, no focus loss', async () => {
+    const setDefaultHolder = vi.fn();
+    const view = makeView(EMPTY_CHANGE, { choices: { setDefaultHolder } });
+    caretAt(view, valueStart(view, 'holder'));
+    type(view, 'party');
+    await openList(view);
+    await settle();
+    keydown(view, 'ArrowDown'); // move highlight onto the "make it default" row
     press(view, 'Enter');
-    await vi.waitFor(() => expect(onHolderChosenWithoutDefault).toHaveBeenCalledWith('c3d4'));
-    expect(doc(view)).toContain('{holder:[[c3d4]]}');
+    await vi.waitFor(() => expect(doc(view)).toContain('{holder:[[c3d4]]}'));
+    expect(setDefaultHolder).toHaveBeenCalledWith('c3d4');
+    expect(isEditorPopupOpen(view.contentDOM)).toBe(false);
   });
 
   it('a tag blank lists the track tags; an Add blank offers to create an unknown one', async () => {
@@ -635,21 +668,21 @@ describe('choices', () => {
   });
 
   it('a Remove tag blank lists only held tags and never offers create', async () => {
-    const heldOptions = vi.fn(async () => ['married']);
+    const heldTags = vi.fn(async () => new Map([['e5f6', ['married']]]));
     const view = makeView(LOSES_WITH_HOLDER, {
-      choices: { heldOptions, createOption: vi.fn() },
+      choices: { heldTags, createOption: vi.fn() },
     });
     caretAt(view, valueStart(view, 'option'));
     type(view, 'ma');
     expect(await openList(view)).toEqual(['married']);
-    expect(heldOptions).toHaveBeenCalledWith(
-      expect.objectContaining({ trackId: 'tg01', holder: 'c3d4', observer: null, anchor: 0 }),
+    expect(heldTags).toHaveBeenCalledWith(
+      expect.objectContaining({ trackId: 'tg01', holder: 'c3d4', anchor: 0 }),
     );
   });
 
   it('a failed held-tag lookup shows every tag instead of hanging', async () => {
     const view = makeView(LOSES_WITH_HOLDER, {
-      choices: { heldOptions: () => Promise.reject(new Error('io')) },
+      choices: { heldTags: () => Promise.reject(new Error('io')) },
     });
     caretAt(view, valueStart(view, 'option'));
     type(view, 'm');
@@ -657,18 +690,42 @@ describe('choices', () => {
   });
 
   it("a Remove observer blank lists only notes sharing the holder's tag", async () => {
-    const observerOptions = vi.fn(async () => ['e5f6']);
+    const heldTags = vi.fn(async () => new Map([['e5f6', ['married']]]));
     const doc0 = serialiseTemplate('tg01', 'loses', LOSES_TEMPLATE, {
       holder: '[[c3d4]]',
       option: 'married',
     });
-    const view = makeView(doc0, { choices: { observerOptions } });
+    const view = makeView(doc0, { choices: { heldTags } });
     caretAt(view, valueEnd(view, 'option'));
     press(view, 'Tab');
     expect(await openList(view)).toEqual(['Spire Watch']);
-    expect(observerOptions).toHaveBeenCalledWith(
-      expect.objectContaining({ holder: 'c3d4', option: 'married' }),
-    );
+    expect(heldTags).toHaveBeenCalledWith(expect.objectContaining({ holder: 'c3d4' }));
+  });
+
+  it('one heldTags lookup per holder is shared by the tag and observer blanks, and any edit starts fresh', async () => {
+    const heldTags = vi.fn(async () => new Map([['e5f6', ['married']]]));
+    const doc0 = serialiseTemplate('tg01', 'loses', LOSES_TEMPLATE, {
+      holder: '[[c3d4]]',
+      option: 'married',
+    });
+    const view = makeView(doc0, { choices: { heldTags } });
+
+    // Arriving on the (already filled) tag blank by Tab opens its list.
+    caretAt(view, valueStart(view, 'holder'));
+    press(view, 'Tab');
+    await openList(view);
+    // Tab again (the filled value isn't a typed query) lands on the empty
+    // observer blank and opens its list too — sharing the same lookup.
+    press(view, 'Tab');
+    await openList(view);
+    expect(heldTags).toHaveBeenCalledTimes(1);
+
+    // An edit invalidates the per-document cache.
+    view.dispatch({ changes: { from: 0, insert: ' ' } });
+    caretAt(view, valueStart(view, 'holder') + 1);
+    press(view, 'Tab');
+    await settle();
+    expect(heldTags.mock.calls.length).toBeGreaterThan(1);
   });
 
   it('free-text blanks (amount, reason) offer no list', async () => {

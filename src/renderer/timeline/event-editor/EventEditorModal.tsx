@@ -189,7 +189,6 @@ export function EventEditorModal({
       currentPath: () => (filenameRef.current ? `timeline/${filenameRef.current}` : null),
       at: () => bufferEpochSeconds(bufferRef.current, CalendarProvider.get()),
       getDocText: () => bufferRef.current.body,
-      confirm,
       extraMenuItems: newNoteMenuConfig.extraItems,
     });
 

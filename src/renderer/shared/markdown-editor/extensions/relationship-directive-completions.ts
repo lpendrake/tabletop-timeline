@@ -16,7 +16,6 @@ import {
   completionStatus,
   pickedCompletion,
   selectedCompletion,
-  startCompletion,
   type Completion,
   type CompletionContext,
   type CompletionResult,
@@ -44,31 +43,17 @@ import {
   allowsCreateOption,
   filterHeldOptions,
   noteChoices,
+  observersHoldingTag,
   rankLabelled,
-  shouldNotifyHolderChosen,
   shouldOfferCreateOption,
+  unionHeldTags,
 } from './relationship-value-logic';
 import { getRecentNoteIds, rememberRecentNote } from './relationship-recent-notes';
 
-/**
- * Which (track, holder, observer) ledger a Remove's tag blank should fold to
- * find the tags currently held, plus the directive's position and the
- * buffer's text so the host can exclude this directive's own delta.
- */
-export interface HeldOptionsQuery {
-  trackId: string;
-  holder: string | null;
-  /** `null` while the observer is still empty — the host then unions tags the holder holds with anyone. */
-  observer: string | null;
-  anchor: number;
-  doc: string;
-}
-
-/** Which notes a Remove's observer blank may offer: those that hold `option` with `holder`. */
-export interface ObserverOptionsQuery {
+/** Which holder a Remove blank's tags should be fetched for, plus the directive's position and the buffer's text so the host can exclude this directive's own delta. */
+export interface HeldTagsQuery {
   trackId: string;
   holder: string;
-  option: string;
   anchor: number;
   doc: string;
 }
@@ -78,17 +63,15 @@ export interface RelationshipCompletionOptions {
   noteOptions: () => readonly PickerOption[];
   defaultHolderId?: () => string | null;
   currentNoteId?: () => string | null;
-  /** Called after a holder is picked while no default holder is set (e.g. to offer making it the default). */
-  onHolderChosenWithoutDefault?: (id: string) => void | Promise<void>;
+  /** Sets the default reputation holder (e.g. from the holder blank's "…and make it the default holder" row). */
+  setDefaultHolder?: (id: string) => void | Promise<void>;
   createOption?: (
     trackId: string,
     label: string,
     mutual: boolean,
   ) => Promise<{ key: string } | null>;
-  /** Tag keys currently held on the ledger. A rejection shows every tag, unfiltered. */
-  heldOptions?: (q: HeldOptionsQuery) => Promise<string[]>;
-  /** Note ids that can be a Remove's observer. A rejection shows every note, unfiltered. */
-  observerOptions?: (q: ObserverOptionsQuery) => Promise<string[]>;
+  /** The holder's held tags, by observer, at the declaring event's date. A rejection shows every tag/note, unfiltered. */
+  heldTags?: (q: HeldTagsQuery) => Promise<Map<string, string[]>>;
 }
 
 /** At most this many notes are listed; typing narrows the rest. */
@@ -99,23 +82,23 @@ const NOTE_LIMIT = 50;
  * unchanged. Keyed on the immutable `Text` object, so any edit starts fresh
  * and a stale answer can never be served for a changed buffer.
  */
-const lookupCache = new WeakMap<Text, Map<string, Promise<string[] | null>>>();
+const lookupCache = new WeakMap<Text, Map<string, Promise<unknown>>>();
 
-function cachedLookup(
+function cachedLookup<T>(
   doc: Text,
   key: string,
-  run: (() => Promise<string[]>) | null,
-): Promise<string[] | null> {
+  run: (() => Promise<T>) | null,
+): Promise<T | null> {
   if (!run) return Promise.resolve(null);
   let byKey = lookupCache.get(doc);
   if (!byKey) {
     byKey = new Map();
     lookupCache.set(doc, byKey);
   }
-  let pending = byKey.get(key);
+  let pending = byKey.get(key) as Promise<T | null> | undefined;
   if (!pending) {
     pending = run().then(
-      (ids) => ids,
+      (result) => result,
       () => null,
     );
     byKey.set(key, pending);
@@ -174,23 +157,32 @@ function noteCompletions(
 ): Completion[] {
   const defaultHolderId = opts.defaultHolderId?.() ?? null;
   const currentNoteId = opts.currentNoteId?.() ?? null;
-  return choices.slice(0, NOTE_LIMIT).map((option) => {
+  // No default reputation holder is set yet: alongside the normal pick, the
+  // holder blank offers a second row that also makes the note the default —
+  // there's no separate dialog, so the list never loses focus.
+  const offerDefault = role === 'holder' && !defaultHolderId && Boolean(opts.setDefaultHolder);
+  return choices.slice(0, NOTE_LIMIT).flatMap((option) => {
+    const label = option.label ?? option.path;
     const detail =
       role === 'holder' && option.id === defaultHolderId
         ? 'default holder'
         : option.id === currentNoteId
           ? 'this note'
           : undefined;
-    return pick(noteRoleValue(option.id), option.label ?? option.path, detail, (view) => {
+    const plain = pick(noteRoleValue(option.id), label, detail, () => {
       rememberRecentNote(option.id);
-      if (!shouldNotifyHolderChosen(role, defaultHolderId)) return;
-      void Promise.resolve(opts.onHolderChosenWithoutDefault?.(option.id)).then(() => {
-        if (!view.dom.isConnected) return;
-        // A dialog may have taken focus (closing the list); pick up where we were.
-        view.focus();
-        startCompletion(view);
-      });
     });
+    if (!offerDefault) return [plain];
+    const makeDefault = pick(
+      noteRoleValue(option.id),
+      `Use ${label} and make it the default holder`,
+      undefined,
+      () => {
+        rememberRecentNote(option.id);
+        void opts.setDefaultHolder?.(option.id);
+      },
+    );
+    return [plain, makeDefault];
   });
 }
 
@@ -327,34 +319,35 @@ function baseChoices(
 }
 
 /** The async narrowing a Remove applies: held tags, or observers sharing the tag. `null` = no narrowing. */
-function narrowing(
+async function narrowing(
   state: EditorState,
   directive: ParsedDirective,
   role: Role,
   actionKind: ActionKind | undefined,
   opts: RelationshipCompletionOptions,
 ): Promise<string[] | null> {
-  if (actionKind !== 'remove') return Promise.resolve(null);
+  if (actionKind !== 'remove' || (role !== 'observer' && role !== 'option')) {
+    return Promise.resolve(null);
+  }
   const holder = noteIdOf(roleValue(directive, 'holder') ?? '');
+  if (role === 'observer' && !roleValue(directive, 'option')) return Promise.resolve(null);
+
   const doc = state.doc.toString();
-  if (role === 'observer') {
-    const option = roleValue(directive, 'option') || null;
-    const lookup = opts.observerOptions;
-    const run =
-      holder && option && lookup
-        ? () => lookup({ trackId: directive.trackId, holder, option, anchor: directive.from, doc })
-        : null;
-    return cachedLookup(state.doc, `observers:${directive.from}:${holder}:${option}`, run);
-  }
-  if (role === 'option') {
-    const observer = noteIdOf(roleValue(directive, 'observer') ?? '');
-    const lookup = opts.heldOptions;
-    const run = lookup
-      ? () => lookup({ trackId: directive.trackId, holder, observer, anchor: directive.from, doc })
+  const lookup = opts.heldTags;
+  const run =
+    holder && lookup
+      ? () => lookup({ trackId: directive.trackId, holder, anchor: directive.from, doc })
       : null;
-    return cachedLookup(state.doc, `held:${directive.from}:${holder}:${observer}`, run);
+  // One cached call per holder, shared by both the tag and observer blanks.
+  const byObserver = await cachedLookup(state.doc, `held:${directive.from}:${holder}`, run);
+  if (byObserver === null) return null;
+
+  if (role === 'observer') {
+    const option = roleValue(directive, 'option') as string;
+    return observersHoldingTag(byObserver, option);
   }
-  return Promise.resolve(null);
+  const observer = noteIdOf(roleValue(directive, 'observer') ?? '');
+  return observer ? (byObserver.get(observer) ?? []) : unionHeldTags(byObserver);
 }
 
 async function completeBlank(

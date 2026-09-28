@@ -17,8 +17,7 @@ export type { MarkdownLinkClickConfig } from './extensions/markdown-link-click';
 export type { RelationshipDirectivesConfig } from './extensions/relationship-directives';
 export type {
   RelationshipCompletionOptions,
-  HeldOptionsQuery,
-  ObserverOptionsQuery,
+  HeldTagsQuery,
 } from './extensions/relationship-directive-completions';
 export { buildEditorMenuItems } from './extensions/editor-context-menu';
 export type {

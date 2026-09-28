@@ -38,7 +38,6 @@ function Host() {
     currentPath: () => 'timeline/e.md',
     at: () => 100,
     getDocText: () => '',
-    confirm: vi.fn(),
   });
   lastDefaultHolderId = relationshipDirectives.choices?.defaultHolderId?.();
   return null;

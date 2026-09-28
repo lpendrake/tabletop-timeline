@@ -143,10 +143,9 @@ function makeCompletionOptions(
     noteOptions: () => choices?.noteOptions() ?? [],
     defaultHolderId: () => choices?.defaultHolderId?.() ?? null,
     currentNoteId: () => choices?.currentNoteId?.() ?? null,
-    onHolderChosenWithoutDefault: choices?.onHolderChosenWithoutDefault,
+    setDefaultHolder: choices?.setDefaultHolder,
     createOption: choices?.createOption,
-    heldOptions: choices?.heldOptions,
-    observerOptions: choices?.observerOptions,
+    heldTags: choices?.heldTags,
   };
 }
 

@@ -8,17 +8,10 @@ import { composeExtraItems } from '../../shared/markdown-editor';
 import type { EntityIndexEntry } from '../../../types/global';
 import { relationshipsData } from '../data';
 import { useRelationshipLibraryContext } from '../library-context';
-import { resolveEntityLabel } from '../domain/label-for';
-import { notesToPickerOptions } from '../domain/note-picker-options';
+import { notesToPickerOptions } from '../domain/entity-picker-options';
 import { notePath, findEntityIdByNotePath } from '../../notes/domain/link-resolution';
 import { buildRelationshipMenuItems } from '../editor-menu';
-import {
-  buildRelationshipEditorConfig,
-  makeHeldOptionsResolver,
-  makeHolderChosenHandler,
-  makeObserverOptionsResolver,
-  type ConfirmFn,
-} from '../editor-host-config';
+import { buildRelationshipEditorConfig, makeHeldTagsResolver } from '../editor-host-config';
 
 export interface UseRelationshipEditorConfigOptions {
   entityIndex: readonly EntityIndexEntry[];
@@ -46,7 +39,6 @@ export interface UseRelationshipEditorConfigOptions {
   at: () => number | null;
   /** The editor's current document text, to locate the directive being edited. */
   getDocText: () => string;
-  confirm: ConfirmFn;
   /** Extra context-menu item builders (e.g. "New note") composed alongside the Relationships submenu. */
   extraMenuItems?: EditorMenuExtraItems;
 }
@@ -108,14 +100,7 @@ export function useRelationshipEditorConfig(
   };
 
   const relationshipDirectives = useMemo(() => {
-    const labelFor = (id: string): string =>
-      resolveEntityLabel(id, new Map(), entityIndexRef.current);
-    const heldOptions = makeHeldOptionsResolver({
-      library,
-      currentPath,
-      at: () => optsRef.current.at(),
-    });
-    const observerOptions = makeObserverOptionsResolver({
+    const heldTags = makeHeldTagsResolver({
       library,
       currentPath,
       at: () => optsRef.current.at(),
@@ -129,11 +114,9 @@ export function useRelationshipEditorConfig(
       noteOptions: () => notesToPickerOptions(entityIndexRef.current),
       defaultHolderId: () => defaultHolderId,
       currentNoteId,
-      onHolderChosenWithoutDefault: makeHolderChosenHandler(opts.confirm, labelFor),
-      heldOptions,
-      observerOptions,
+      heldTags,
     });
-  }, [library, opts.defaultReason, opts.onOpenNote, opts.place, opts.confirm, defaultHolderId]);
+  }, [library, opts.defaultReason, opts.onOpenNote, opts.place, defaultHolderId]);
 
   const contextMenu = useMemo(
     () => ({
