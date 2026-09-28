@@ -134,3 +134,16 @@ describe('buildRelationshipIndex summary', () => {
     expect(summary).toMatch(/no date/i);
   });
 });
+
+describe('titles from the built index', () => {
+  it('maps notes and events to their titles', () => {
+    const campaign = makeCampaign();
+    writeNote(campaign, 'a.md', 'prose');
+    writeEvent(campaign, '0001-001-e.md', 500, 'prose');
+    buildRelationshipIndex(campaign, EMPTY_LIBRARY, []);
+    expect(getRelationshipsStore().titles()).toEqual({
+      'notes/a.md': 'Note',
+      'timeline/0001-001-e.md': 'Event',
+    });
+  });
+});

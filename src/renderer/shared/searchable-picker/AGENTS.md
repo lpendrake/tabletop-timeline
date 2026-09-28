@@ -25,6 +25,25 @@ a successive path segment of the option's `path` (see
 folder to be typed. This is `rankPickerOptions`, the default — built for the
 New Note folder picker.
 
+## Pinned groups, counts, highlight
+
+- `pinned?: PickerOption[]` renders a labelled Pinned group before the All
+  group (`pinnedLabel` / `allLabel`, default "Pinned" / "All"). Empty query:
+  pinned in the given order, All in the caller's order (caller pre-sorts, e.g.
+  by count). With a query both groups are filtered/ranked and empty groups
+  dropped. Without `pinned` there are no headers — the picker renders as a
+  flat list. Grouping is `groupPickerOptions`.
+- An option may be in both groups; both rows are kept.
+- **Flat-index rule:** highlight state is one index into
+  `flattenGroups(groups)` (headers excluded), so Up/Down skip headers and
+  wrap across groups, and a duplicated option has two distinct indexes. Rows
+  carry `data-index`; scroll-into-view looks up `[data-index]` — never
+  `children[highlight]`, since headers are children too.
+- `PickerOption.count` renders muted on the right of the row.
+- `highlightMatches` wraps the typed text in `<mark class="searchable-picker-match">`
+  using `highlightSegments` (built on `matchRanges` in `shared/search/rank.ts`,
+  all case-insensitive occurrences of the trimmed query in the label).
+
 ## Recents
 
 When the query is empty, options whose id is in `recentIds` are shown first

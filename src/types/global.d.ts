@@ -157,6 +157,7 @@ declare global {
         input: { label: string; mutual: boolean },
       ) => Promise<AddOptionResult>;
       getInvalidRelationshipDirectives: () => Promise<InvalidDirectiveEntry[]>;
+      getRelationshipTitles: () => Promise<Record<string, string>>;
       getUndatedRelationshipSets: () => Promise<ExternalUndatedSet[]>;
       getRelationshipDirectives: (
         paths: string[],

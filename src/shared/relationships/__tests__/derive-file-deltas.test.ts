@@ -151,3 +151,21 @@ describe('deltasForFile: notes-vs-events rule enforced via undated', () => {
     ]);
   });
 });
+
+describe('deltasForFile: undated events and unfinished drafts', () => {
+  const draft =
+    '{{rp01.change Rep change: {amount:} {observer:[[a1b2]]} rep for {holder:} — {reason:}}}';
+  const undated = { path: 'timeline/e1.md', isEvent: true, epochSeconds: null };
+
+  it('stays silent about an unfinished draft in an undated event', () => {
+    const result = deltasForFile({ ...undated, source: draft }, ctx);
+    expect(result.invalid).toHaveLength(0);
+  });
+
+  it('still reports a finished directive in an undated event, with its trackId', () => {
+    const result = deltasForFile({ ...undated, source: repChangeDirective(A, C, -2, 'x') }, ctx);
+    expect(result.invalid).toHaveLength(1);
+    expect(result.invalid[0].trackId).toBe('rp01');
+    expect(result.invalid[0].messages).toEqual(['Event has no date']);
+  });
+});

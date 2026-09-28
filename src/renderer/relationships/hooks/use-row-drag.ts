@@ -3,14 +3,14 @@ import type { DragEvent } from 'react';
 import { canDrop, dropPosition, type DropTarget, type RowDragPayload } from '../domain';
 
 /**
- * Native HTML5 drag-and-drop for reordering an outer or inner row within its
- * parent (see `folder-sidebar.tsx` for the sibling pattern that drags *onto*
+ * Native HTML5 drag-and-drop for reordering a row within its list (a holder's
+ * observers, or the holder groups under All holders; see `folder-sidebar.tsx` for the sibling pattern that drags *onto*
  * a row to reparent; this one drags *between* rows to reorder).
  *
  * The full payload can only be read from `dataTransfer` on the `drop` event
  * — browsers block `getData` during `dragover` for security. So whether a
- * row currently being dragged over is a *valid* target (same mode/level/
- * parent — see `canDrop`) is decided during `dragover` using a second,
+ * row currently being dragged over is a *valid* target (same list key — see
+ * `canDrop`) is decided during `dragover` using a second,
  * scope-encoding MIME type set at drag start: its mere *presence* in
  * `dataTransfer.types` is readable during `dragover`, even though its value
  * isn't. `drop` still re-validates with the real payload before doing
@@ -21,7 +21,7 @@ import { canDrop, dropPosition, type DropTarget, type RowDragPayload } from '../
 const DRAG_MIME = 'application/x-relationships-row';
 
 function scopeMime(target: DropTarget): string {
-  return `${DRAG_MIME}-scope-${target.mode}-${target.level}-${encodeURIComponent(target.parentKey)}`.toLowerCase();
+  return `${DRAG_MIME}-scope-${encodeURIComponent(target.listKey)}`.toLowerCase();
 }
 
 export interface UseRowDragResult {
@@ -35,20 +35,17 @@ export interface UseRowDragResult {
 }
 
 /**
- * `rowPayload` identifies this row itself (its own mode/level/parent/id) —
- * used both as the payload when a drag *starts* here, and as the target
- * (its mode/level/parent for `canDrop`, its id as the "move before/after
- * this" anchor) when something is dropped *on* it.
+ * `rowPayload` identifies this row itself (its list key and id) — used both
+ * as the payload when a drag *starts* here, and as the target (its list key
+ * for `canDrop`, its id as the "move before/after this" anchor) when
+ * something is dropped *on* it.
  */
 export function useRowDrag(
   rowPayload: RowDragPayload,
   onDrop: (dragged: RowDragPayload, position: 'before' | 'after', targetId: string) => void,
 ): UseRowDragResult {
   const [indicator, setIndicator] = useState<'before' | 'after' | null>(null);
-  const target: DropTarget = useMemo(
-    () => ({ mode: rowPayload.mode, level: rowPayload.level, parentKey: rowPayload.parentKey }),
-    [rowPayload.mode, rowPayload.level, rowPayload.parentKey],
-  );
+  const target: DropTarget = useMemo(() => ({ listKey: rowPayload.listKey }), [rowPayload.listKey]);
   const targetScope = useMemo(() => scopeMime(target), [target]);
 
   const handleDragStart = useCallback(

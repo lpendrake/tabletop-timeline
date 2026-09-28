@@ -5,43 +5,32 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
 import { fireEvent } from '@testing-library/react';
-
-import { parseDirectives } from '../../../../shared/relationships';
-import type { Ledger, RelationshipDelta } from '../../../../shared/relationships';
-import type { InvalidDirectiveEntry } from '../../../../shared/relationships';
+import type {
+  InvalidDirectiveEntry,
+  Ledger,
+  RelationshipDelta,
+} from '../../../../shared/relationships';
 import type { EntityIndexEntry } from '../../../../types/global';
 
 // ---- Hoisted mock state (mutable across a test, read inside the mock factories) ----
 
 const state = vi.hoisted(() => ({
-  ledgers: [] as Ledger[],
-  invalid: [] as InvalidDirectiveEntry[],
-  filesByPath: {} as Record<string, { title?: string; directives: unknown[] }>,
-  getDirectivesSpy: vi.fn(),
-  getAllLedgersSpy: vi.fn(),
-  onChangedCb: null as ((data: { paths: string[] }) => void) | null,
-  showContextMenuSpy: vi.fn(),
+  ledgers: [] as unknown[],
+  invalid: [] as unknown[],
+  titles: {} as Record<string, string>,
+  onChangedCb: null as (() => void) | null,
+  saveSpy: vi.fn(),
+  contextMenuSpy: vi.fn(),
 }));
 
 vi.mock('../../../relationships/data', () => ({
   relationshipsData: {
-    getTracks: vi.fn().mockResolvedValue({ custom: [], optionAdditions: {} }),
-    getAllLedgers: (...args: unknown[]) => {
-      state.getAllLedgersSpy(...args);
-      return Promise.resolve(state.ledgers);
-    },
+    getAllLedgers: () => Promise.resolve(state.ledgers),
     getInvalid: () => Promise.resolve(state.invalid),
-    getDirectives: (paths: string[]) => {
-      state.getDirectivesSpy(paths);
-      return Promise.resolve(
-        paths.map((path) => ({
-          path,
-          title: state.filesByPath[path]?.title,
-          directives: state.filesByPath[path]?.directives ?? [],
-        })),
-      );
-    },
-    onChanged: (cb: (data: { paths: string[] }) => void) => {
+    getTitles: () => Promise.resolve(state.titles),
+    getDefaultHolder: () => Promise.resolve(null),
+    onDefaultHolderChanged: () => () => {},
+    onChanged: (cb: () => void) => {
       state.onChangedCb = cb;
       return () => {
         state.onChangedCb = null;
@@ -50,9 +39,24 @@ vi.mock('../../../relationships/data', () => ({
   },
 }));
 
+vi.mock('../../../relationships/view-order-data', async () => {
+  const domain = await vi.importActual<typeof import('../../../relationships/domain')>(
+    '../../../relationships/domain',
+  );
+  return {
+    viewOrderData: {
+      load: () => Promise.resolve(domain.defaultViewOrder()),
+      save: (...args: unknown[]) => {
+        state.saveSpy(...args);
+        return Promise.resolve();
+      },
+    },
+  };
+});
+
 vi.mock('../../../timeline/data/ports', () => ({
   timelinePort: {
-    getState: vi.fn().mockResolvedValue({ in_game_now_seconds: 100 }),
+    getState: vi.fn().mockResolvedValue({ in_game_now_seconds: 4725 * 31_536_000 + 1000 }),
   },
 }));
 
@@ -66,32 +70,38 @@ vi.mock('../../../shared/context-menu', async (importOriginal) => {
   return {
     ...actual,
     showContextMenu: (...args: Parameters<typeof actual.showContextMenu>) => {
-      state.showContextMenuSpy(...args);
+      state.contextMenuSpy(...args);
       return { close: () => {} };
     },
   };
 });
 
-// ---- Imports after mocks ----
-
 import { RelationshipsView } from '../relationships-view';
 
-// ---- Test data ----
+// ---- Fixtures ----
 //
-// aaaa (Zara) holds a PF2E Reputation ledger on bbbb (Anna): one applied
-// adjust step, one future set step (declared in an event, "timeline/meeting.md").
-// aaaa (Zara) also holds an Attitude ledger on cccc (Mira) with only a future
-// delta (only-future fade).
-// cccc (Mira) holds a mutual "married" tag with bbbb (Anna), declared on a
-// note ("notes/npcs/cccc.md"); its mirror lives on bbbb's ledger toward cccc.
+// Holders: aaaa Zara, dddd Kel. Observers: bbbb Anna, cccc Mira.
+//
+// rp01 (PF2E Reputation, numeric): Zara→Anna +5 (event "Docks defence", reason "Defended the
+// docks"), Zara→Mira −3 (undated note), Kel→Anna +10 (event).
+// at01 (Attitude, ordinal): Zara→Anna and Zara→Mira set friendly; Kel→Anna set hostile.
+// tg01 (Relationship tags): no ledgers — the empty-state track.
 
-const labels: Record<string, string> = { aaaa: 'Zara', bbbb: 'Anna', cccc: 'Mira' };
+const labels: Record<string, string> = { aaaa: 'Zara', bbbb: 'Anna', cccc: 'Mira', dddd: 'Kel' };
 const entityLabelMap = new Map(Object.entries(labels));
+
+const entityIndex: EntityIndexEntry[] = [
+  { id: 'e-docks', path: 'timeline/docks.md', title: 'Docks defence', type: 'event' },
+];
 
 function delta(
   partial: Partial<RelationshipDelta> & Pick<RelationshipDelta, 'op'>,
 ): RelationshipDelta {
-  return { at: null, declaredIn: { path: 'a.md', ordinal: 0 }, ...partial } as RelationshipDelta;
+  return {
+    at: null,
+    declaredIn: { path: 'notes/npcs/a.md', ordinal: 0 },
+    ...partial,
+  } as RelationshipDelta;
 }
 
 function ledger(
@@ -103,531 +113,449 @@ function ledger(
   return { holder, observer, track, deltas };
 }
 
-const meetingSource =
-  '{{rp01.change {amount:10} {observer:[[bbbb]]} rep for {holder:[[aaaa]]} — {reason:Helped defend the town}}}\n' +
-  '{{rp01.set {holder:[[aaaa]]} rep is {value:20} with {observer:[[bbbb]]} — {reason:}}}';
+// Dated entries sit around year 4725 so the year shows in their date labels.
+const T = 4725 * 31_536_000;
 
-const cccdSource =
-  '{{tg01.gains {holder:[[cccc]]} is now {option:married} with {observer:[[bbbb]]} — {reason:}}}';
+function inDocks(ordinal: number) {
+  return { path: 'timeline/docks.md', ordinal };
+}
 
-function resetFixtures() {
-  const meetingParsed = parseDirectives(meetingSource).directives;
-  const cccdParsed = parseDirectives(cccdSource).directives;
-
-  state.filesByPath = {
-    'timeline/meeting.md': { title: 'Meeting at the docks', directives: meetingParsed },
-    'notes/npcs/cccc.md': { directives: cccdParsed },
-  };
-
-  state.ledgers = [
+function fixtureLedgers(): Ledger[] {
+  return [
     ledger('aaaa', 'bbbb', 'rp01', [
       delta({
         op: 'adjust',
-        by: 10,
-        at: 50,
-        declaredIn: { path: 'timeline/meeting.md', ordinal: 0 },
+        by: 5,
+        at: T + 10,
+        reason: 'Defended the docks',
+        declaredIn: inDocks(0),
       }),
+    ]),
+    ledger('aaaa', 'cccc', 'rp01', [
       delta({
-        op: 'set',
-        value: 20,
-        at: 200,
-        declaredIn: { path: 'timeline/meeting.md', ordinal: 1 },
+        op: 'adjust',
+        by: -3,
+        reason: 'Stole grain',
+        declaredIn: { path: 'notes/npcs/mira.md', ordinal: 0 },
       }),
+    ]),
+    ledger('dddd', 'bbbb', 'rp01', [
+      delta({ op: 'adjust', by: 10, at: T + 30, declaredIn: inDocks(1) }),
+    ]),
+    ledger('aaaa', 'bbbb', 'at01', [
+      delta({ op: 'set', value: 'friendly', at: T + 20, declaredIn: inDocks(2) }),
     ]),
     ledger('aaaa', 'cccc', 'at01', [
-      delta({ op: 'set', value: 'friendly', at: 300, declaredIn: { path: 'x.md', ordinal: 0 } }),
+      delta({ op: 'set', value: 'friendly', at: T + 25, declaredIn: inDocks(3) }),
     ]),
-    ledger('cccc', 'bbbb', 'tg01', [
-      delta({
-        op: 'add',
-        key: 'married',
-        at: null,
-        declaredIn: { path: 'notes/npcs/cccc.md', ordinal: 0 },
-      }),
-    ]),
-    ledger('bbbb', 'cccc', 'tg01', [
-      delta({
-        op: 'add',
-        key: 'married',
-        at: null,
-        declaredIn: { path: 'notes/npcs/cccc.md', ordinal: 0 },
-        mirrored: true,
-      }),
+    ledger('dddd', 'bbbb', 'at01', [
+      delta({ op: 'set', value: 'hostile', at: T + 26, declaredIn: inDocks(4) }),
     ]),
   ];
-
-  state.invalid = [
-    { path: 'notes/bad.md', ordinal: 0, from: 0, to: 10, messages: ['Unknown note [[zzzz]]'] },
-  ];
-
-  state.getDirectivesSpy.mockClear();
-  state.getAllLedgersSpy.mockClear();
-  state.onChangedCb = null;
-  state.showContextMenuSpy.mockClear();
 }
 
-// ---- window.fsApi (used directly by view-order-data.ts, the relationships
-// view's own order/collapse-state persistence layer) ----
-
-const fsApi = {
-  readSpy: vi.fn().mockResolvedValue(null),
-  writeSpy: vi.fn().mockResolvedValue(true),
-  mkdirSpy: vi.fn().mockResolvedValue(true),
-};
-
-function setupFsApi() {
-  fsApi.readSpy = vi.fn().mockResolvedValue(null);
-  fsApi.writeSpy = vi.fn().mockResolvedValue(true);
-  fsApi.mkdirSpy = vi.fn().mockResolvedValue(true);
-  Object.defineProperty(window, 'fsApi', {
-    configurable: true,
-    value: {
-      read: (path: string) => fsApi.readSpy(path),
-      write: (path: string, content: string) => fsApi.writeSpy(path, content),
-      mkdir: (path: string) => fsApi.mkdirSpy(path),
-    },
-  });
+function invalidEntry(path: string, trackId = 'rp01'): InvalidDirectiveEntry {
+  return { path, trackId, ordinal: 0, from: 0, to: 5, messages: ['Bad amount'] };
 }
 
-/** Waits out the view-order save debounce (300ms) plus a little slack. */
-async function flushSaveDebounce() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 350));
-  });
-}
-
-// ---- Test harness ----
+// ---- Harness ----
 
 let container: HTMLDivElement;
 let root: Root;
-let footerSlot: HTMLDivElement;
-
-function setup() {
-  resetFixtures();
-  setupFsApi();
-  container = document.createElement('div');
-  document.body.appendChild(container);
-  footerSlot = document.createElement('div');
-  footerSlot.id = 'footer-slot-right';
-  document.body.appendChild(footerSlot);
-  root = createRoot(container);
-}
-
-function teardown() {
-  act(() => root.unmount());
-  container.remove();
-  footerSlot.remove();
-}
+const onOpenById = vi.fn();
+const onOpenEvent = vi.fn();
 
 async function flush() {
   await act(async () => {
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    for (let i = 0; i < 6; i++) await Promise.resolve();
   });
 }
 
-function renderView(
-  overrides: { onOpenById?: (id: string) => void; onOpenEvent?: (f: string) => void } = {},
-) {
-  const entityIndex: EntityIndexEntry[] = [
-    { id: 'cccc', path: 'notes/npcs/cccc.md', title: 'Mira', type: 'note' },
-  ];
-  const onOpenById = overrides.onOpenById ?? vi.fn();
-  const onOpenEvent = overrides.onOpenEvent ?? vi.fn();
-  act(() => {
+async function mount(campaignPath = '/camp') {
+  act(() =>
     root.render(
       <RelationshipsView
-        campaignPath="/campaign"
+        campaignPath={campaignPath}
         entityLabelMap={entityLabelMap}
         getEntityIndex={() => entityIndex}
         onOpenById={onOpenById}
         onOpenEvent={onOpenEvent}
       />,
-    );
+    ),
+  );
+  await flush();
+}
+
+async function remount(campaignPath = '/camp') {
+  act(() => root.unmount());
+  root = createRoot(container);
+  await mount(campaignPath);
+}
+
+const $ = (sel: string) => container.querySelector(sel) as HTMLElement;
+const $$ = (sel: string) => Array.from(container.querySelectorAll(sel)) as HTMLElement[];
+const tabButtons = () => $$('[role="tab"]');
+const rowNames = () => $$('.rel-row-name').map((n) => n.textContent);
+const holderName = () => $('.rel-holder-name').textContent;
+
+function tab(name: string): HTMLElement {
+  const found = tabButtons().find((t) => t.textContent?.startsWith(name));
+  if (!found) throw new Error(`no tab ${name}`);
+  return found;
+}
+
+function activeTabName() {
+  return tabButtons().find((t) => t.getAttribute('aria-selected') === 'true')?.textContent ?? null;
+}
+
+async function selectTab(name: string) {
+  act(() => {
+    fireEvent.click(tab(name));
   });
-  return { onOpenById, onOpenEvent };
+  await flush();
 }
 
-/** Finds an `.rel-outer-row` whose label text matches, by its `EntityLink` text. */
-function findOuterRow(label: string): HTMLElement {
-  const row = Array.from(container.querySelectorAll('.rel-outer-row')).find(
-    (el) => el.querySelector('.rel-outer-label')?.textContent === label,
+async function pickHolder(label: string) {
+  act(() => {
+    fireEvent.click($('.rel-holder-button'));
+  });
+  const option = $$('.searchable-picker-row').find((r) =>
+    r.querySelector('.searchable-picker-label')?.textContent?.startsWith(label),
   );
-  if (!row) throw new Error(`No outer row for "${label}"`);
-  return row as HTMLElement;
+  if (!option) throw new Error(`no holder option ${label}`);
+  act(() => {
+    fireEvent.mouseDown(option);
+  });
+  await flush();
 }
 
-function findInnerRow(outer: HTMLElement, label: string): HTMLElement {
-  const row = Array.from(outer.querySelectorAll('.rel-inner-row')).find(
-    (el) => el.querySelector('.rel-inner-label')?.textContent === label,
+async function search(query: string) {
+  act(() => {
+    fireEvent.change($('.rel-search-input'), { target: { value: query } });
+  });
+  await flush();
+}
+
+function toggleScope(label: string) {
+  const chip = $$('.rel-scope').find((s) => s.textContent === label);
+  if (!chip) throw new Error(`no scope ${label}`);
+  act(() => {
+    fireEvent.click(chip);
+  });
+}
+
+function sortOption(label: string): HTMLElement {
+  return $$('.rel-sort-option').find((b) => b.textContent === label) as HTMLElement;
+}
+
+function rowFor(name: string, scope: HTMLElement = container): HTMLElement {
+  const row = Array.from(scope.querySelectorAll<HTMLElement>('.rel-row')).find(
+    (r) => r.querySelector('.rel-row-name')?.textContent === name,
   );
-  if (!row) throw new Error(`No inner row for "${label}"`);
-  return row as HTMLElement;
+  if (!row) throw new Error(`no row ${name}`);
+  return row;
 }
 
-function findTrackRow(inner: HTMLElement, trackName: string): HTMLElement {
-  const row = Array.from(inner.querySelectorAll('.rel-track-row')).find(
-    (el) => el.querySelector('.rel-track-name')?.textContent === trackName,
-  );
-  if (!row) throw new Error(`No track row for "${trackName}"`);
-  return row as HTMLElement;
-}
+beforeEach(() => {
+  localStorage.clear();
+  state.ledgers = fixtureLedgers();
+  state.invalid = [];
+  state.titles = { 'timeline/docks.md': 'Docks defence' };
+  state.onChangedCb = null;
+  state.saveSpy.mockClear();
+  state.contextMenuSpy.mockClear();
+  onOpenById.mockClear();
+  onOpenEvent.mockClear();
+  container = document.createElement('div');
+  document.body.appendChild(container);
+  root = createRoot(container);
+});
 
-function expandToggle(el: HTMLElement) {
-  fireEvent.click(el.querySelector('.rel-expand-toggle')!);
-}
-
-function dragHandle(row: HTMLElement): HTMLElement {
-  return row.querySelector('.rel-drag-handle') as HTMLElement;
-}
-
-/** A minimal DataTransfer stand-in: happy-dom's own is incomplete for our purposes. */
-function makeDataTransfer() {
-  const store = new Map<string, string>();
-  return {
-    setData: (type: string, value: string) => store.set(type.toLowerCase(), value),
-    getData: (type: string) => store.get(type.toLowerCase()) ?? '',
-    get types() {
-      return Array.from(store.keys());
-    },
-    dropEffect: 'none',
-    effectAllowed: 'none',
-  };
-}
-
-/**
- * happy-dom's `DragEvent` doesn't extend `MouseEvent` (no `clientY`), so
- * `fireEvent.dragOver(el, { clientY })` silently drops it. Build plain
- * `Event`s instead and attach `dataTransfer`/`clientY` as own properties —
- * our handlers only duck-type on them, same as real drag events.
- */
-function makeDragEvent(type: string, dataTransfer: unknown, clientY?: number): Event {
-  const event = new Event(type, { bubbles: true, cancelable: true });
-  Object.defineProperty(event, 'dataTransfer', { value: dataTransfer, configurable: true });
-  if (clientY !== undefined) {
-    Object.defineProperty(event, 'clientY', { value: clientY, configurable: true });
-  }
-  return event;
-}
-
-/** Drags `source`'s handle onto `target`, landing "before" or "after" it. */
-function dragRowOnto(source: HTMLElement, target: HTMLElement, position: 'before' | 'after') {
-  const dataTransfer = makeDataTransfer();
-  const rect = { top: 100, left: 0, right: 100, bottom: 120, height: 20, width: 100 };
-  target.getBoundingClientRect = () => rect as DOMRect;
-  const clientY = position === 'before' ? rect.top + 2 : rect.top + rect.height - 2;
-
-  fireEvent(dragHandle(source), makeDragEvent('dragstart', dataTransfer));
-  fireEvent(target, makeDragEvent('dragover', dataTransfer, clientY));
-  fireEvent(target, makeDragEvent('drop', dataTransfer, clientY));
-}
-
-/** The "Group by …" footer button portals into `footerSlot`, not `container`. */
-function groupByToggle(): HTMLElement {
-  const button = Array.from(footerSlot.querySelectorAll('button')).find((b) =>
-    b.textContent?.startsWith('Group by'),
-  );
-  if (!button) throw new Error('Group by toggle not found');
-  return button as HTMLElement;
-}
-
-beforeEach(setup);
-afterEach(teardown);
+afterEach(() => {
+  act(() => root.unmount());
+  container.remove();
+});
 
 describe('RelationshipsView', () => {
-  it('renders holders with observers nested; toggling grouping inverts the nesting', async () => {
-    renderView();
-    await flush();
-
-    const zaraOuter = findOuterRow('Zara');
-    expandToggle(zaraOuter);
-    await flush();
-    expect(findInnerRow(zaraOuter, 'Anna')).toBeTruthy(); // bbbb nested under aaaa (holder mode)
-
-    fireEvent.click(groupByToggle());
-    await flush();
-
-    const annaOuter = findOuterRow('Anna');
-    expandToggle(annaOuter);
-    await flush();
-    expect(findInnerRow(annaOuter, 'Zara')).toBeTruthy(); // now inverted: aaaa nested under bbbb
+  it('one tab per track in track order with kind · count', async () => {
+    await mount();
+    expect(tabButtons().map((t) => t.textContent)).toEqual([
+      'PF2E Reputation numeric · 3',
+      'Attitude ordinal · 3',
+      'Relationship tags categorical · 0',
+    ]);
+    expect(activeTabName()).toContain('PF2E Reputation');
   });
 
-  it('the same relationship reads identically in both grouping modes', async () => {
-    renderView();
-    await flush();
-
-    const zaraOuter = findOuterRow('Zara');
-    expandToggle(zaraOuter);
-    await flush();
-    const annaInner = findInnerRow(zaraOuter, 'Anna');
-    expandToggle(annaInner);
-    await flush();
-    const repTrack = findTrackRow(annaInner, 'PF2E Reputation');
-    const holderFormatted = repTrack.querySelector('.rel-value-bar-label')?.textContent;
-    expect(holderFormatted).toBeTruthy();
-
-    fireEvent.click(groupByToggle());
-    await flush();
-
-    const annaOuter = findOuterRow('Anna');
-    expandToggle(annaOuter);
-    await flush();
-    const zaraInner = findInnerRow(annaOuter, 'Zara');
-    expandToggle(zaraInner);
-    await flush();
-    const repTrack2 = findTrackRow(zaraInner, 'PF2E Reputation');
-    const observerFormatted = repTrack2.querySelector('.rel-value-bar-label')?.textContent;
-
-    expect(observerFormatted).toBe(holderFormatted);
+  it("a track with no relationships shows the '/' empty state", async () => {
+    await mount();
+    await selectTab('Relationship tags');
+    const empty = $('.rel-empty');
+    expect(empty.textContent).toBe(
+      'No Relationship tags changes yet. Type / in an event or note and choose Relationships › Relationship tags.',
+    );
+    expect(empty.querySelector('code')?.textContent).toBe('/');
+    expect($$('.rel-row')).toHaveLength(0);
   });
 
-  it('rows collapse and expand independently', async () => {
-    renderView();
-    await flush();
+  it('the selected tab persists per campaign', async () => {
+    await mount('/camp-a');
+    await selectTab('Attitude');
+    expect(activeTabName()).toContain('Attitude');
 
-    const zaraOuter = findOuterRow('Zara');
-    const miraOuter = findOuterRow('Mira');
+    await remount('/camp-a');
+    expect(activeTabName()).toContain('Attitude');
 
-    expandToggle(zaraOuter);
-    await flush();
-    expect(zaraOuter.querySelector('.rel-inner-list')).toBeTruthy();
-    expect(miraOuter.querySelector('.rel-inner-list')).toBeFalsy();
-
-    expandToggle(zaraOuter); // collapse it back
-    await flush();
-    expect(zaraOuter.querySelector('.rel-inner-list')).toBeFalsy();
+    await remount('/camp-b');
+    expect(activeTabName()).toContain('PF2E Reputation');
   });
 
-  it('steps are only computed and fetched for expanded rows', async () => {
-    renderView();
-    await flush();
-    expect(state.getDirectivesSpy).not.toHaveBeenCalled();
+  it('the selected holder persists per track', async () => {
+    await mount();
+    expect(holderName()).toBe('Zara');
+    await pickHolder('Kel');
+    expect(holderName()).toBe('Kel');
+    expect(rowNames()).toEqual(['Anna']);
 
-    const zaraOuter = findOuterRow('Zara');
-    expandToggle(zaraOuter);
-    await flush();
-    const annaInner = findInnerRow(zaraOuter, 'Anna');
-    expandToggle(annaInner);
-    await flush();
-    expect(state.getDirectivesSpy).not.toHaveBeenCalled(); // track row itself still collapsed
+    await selectTab('Attitude');
+    expect(holderName()).toBe('Zara');
+    await selectTab('PF2E Reputation');
+    expect(holderName()).toBe('Kel');
 
-    const repTrack = findTrackRow(annaInner, 'PF2E Reputation');
-    expandToggle(repTrack);
-    await flush();
-
-    expect(state.getDirectivesSpy).toHaveBeenCalledWith(['timeline/meeting.md']);
+    await remount();
+    expect(holderName()).toBe('Kel');
+    await selectTab('Attitude');
+    expect(holderName()).toBe('Zara');
   });
 
-  it('steps show the directive sentence, fade future steps, mark set breaks and mirrored steps', async () => {
-    renderView();
-    await flush();
-
-    const zaraOuter = findOuterRow('Zara');
-    expandToggle(zaraOuter);
-    await flush();
-    const annaInner = findInnerRow(zaraOuter, 'Anna');
-    expandToggle(annaInner);
-    await flush();
-    const repTrack = findTrackRow(annaInner, 'PF2E Reputation');
-    expandToggle(repTrack);
-    await flush();
-    await flush();
-
-    const steps = repTrack.querySelectorAll('.rel-step');
-    expect(steps.length).toBe(2);
-    expect(steps[0].textContent).toContain('Helped defend the town');
-    expect(steps[0].classList.contains('rel-step-future')).toBe(false);
-    expect(steps[1].classList.contains('rel-step-future')).toBe(true);
-    expect(steps[1].classList.contains('rel-step-set-break')).toBe(true);
-    expect(steps[1].textContent).toContain('Meeting at the docks'); // empty reason -> event title
-
-    // Mirrored tag step: in observer mode, the mirror ledger (holder bbbb,
-    // observer cccc) inverts to outer=cccc(Mira), inner=bbbb(Anna).
-    fireEvent.click(groupByToggle());
-    await flush();
-
-    const miraOuter = findOuterRow('Mira');
-    expandToggle(miraOuter);
-    await flush();
-    const annaInner2 = findInnerRow(miraOuter, 'Anna');
-    expandToggle(annaInner2);
-    await flush();
-    const tagTrack = findTrackRow(annaInner2, 'Relationship tags');
-    expandToggle(tagTrack);
-    await flush();
-    await flush();
-
-    expect(tagTrack.textContent).toContain('mirrored from');
-    expect(tagTrack.textContent).toContain('Mira');
-  });
-
-  it('relationships with only future changes render faded at the initial value', async () => {
-    renderView();
-    await flush();
-
-    const zaraOuter = findOuterRow('Zara');
-    expandToggle(zaraOuter);
-    await flush();
-    const miraInner = findInnerRow(zaraOuter, 'Mira');
-    expandToggle(miraInner);
-    await flush();
-    const attitudeTrack = findTrackRow(miraInner, 'Attitude');
-
-    expect(attitudeTrack.classList.contains('rel-track-only-future')).toBe(true);
-    expect(attitudeTrack.textContent).toContain('Indifferent'); // initial rung, not the future 'friendly'
-  });
-
-  it('ctrl+click on a holder opens the note; plain click does not', async () => {
-    const { onOpenById } = renderView();
-    await flush();
-
-    const holderLink = findOuterRow('Zara').querySelector('.rel-outer-label') as HTMLElement;
-    fireEvent.click(holderLink);
-    expect(onOpenById).not.toHaveBeenCalled();
-
-    fireEvent.click(holderLink, { ctrlKey: true });
-    expect(onOpenById).toHaveBeenCalledWith('aaaa');
-  });
-
-  it('invalid directives are listed as problems', async () => {
-    renderView();
-    await flush();
-
-    expect(container.textContent).toContain('Problems');
-    expect(container.textContent).toContain('notes/bad.md');
-    expect(container.textContent).toContain('Unknown note [[zzzz]]');
-  });
-
-  it('reloads when relationships change', async () => {
-    renderView();
-    await flush();
-
-    expect(state.getAllLedgersSpy).toHaveBeenCalledTimes(1);
-    expect(state.onChangedCb).toBeTruthy();
+  it('the problems badge counts invalid directives and lists them', async () => {
+    state.invalid = [invalidEntry('timeline/docks.md'), invalidEntry('notes/npcs/mira.md')];
+    await mount();
+    const pill = $('.rel-problems-pill');
+    expect(pill.textContent).toBe('2 problems');
 
     act(() => {
-      state.onChangedCb!({ paths: ['timeline/meeting.md'] });
+      fireEvent.click(pill);
+    });
+    const items = $$('.rel-problems-list .rel-problem');
+    expect(items.map((i) => i.querySelector('.rel-problem-path')?.textContent)).toEqual([
+      'timeline/docks.md',
+      'notes/npcs/mira.md',
+    ]);
+    expect(items[0].textContent).toContain('Bad amount');
+
+    act(() => {
+      fireEvent.click(items[0].querySelector('.rel-problem-open') as HTMLElement);
+    });
+    expect(onOpenEvent).toHaveBeenCalledWith('docks.md');
+  });
+
+  it('an unfinished draft does not change the problems count', async () => {
+    // The index never reports drafts, so a file holding only a draft leaves getInvalid unchanged.
+    await mount();
+    expect($('.rel-problems-pill')).toBeNull();
+
+    await act(async () => {
+      state.onChangedCb?.();
     });
     await flush();
+    expect($('.rel-problems-pill')).toBeNull();
 
-    expect(state.getAllLedgersSpy).toHaveBeenCalledTimes(2);
+    state.invalid = [invalidEntry('timeline/docks.md')];
+    await act(async () => {
+      state.onChangedCb?.();
+    });
+    await flush();
+    expect($('.rel-problems-pill').textContent).toBe('1 problem');
+
+    // Another file gains only a draft: the index still reports the same single invalid entry.
+    await act(async () => {
+      state.onChangedCb?.();
+    });
+    await flush();
+    expect($('.rel-problems-pill').textContent).toBe('1 problem');
   });
 
-  it('no editing affordance is rendered', async () => {
-    renderView();
-    await flush();
+  it('search: words combine as AND and N of M shows; × clears', async () => {
+    await mount();
+    await pickHolder('All holders');
+    expect(rowNames()).toEqual(['Anna', 'Anna', 'Mira']);
 
-    const zaraOuter = findOuterRow('Zara');
-    expandToggle(zaraOuter);
-    await flush();
-    const annaInner = findInnerRow(zaraOuter, 'Anna');
-    expandToggle(annaInner);
-    await flush();
+    await search('an');
+    expect($('.rel-search-count').textContent).toBe('2 of 3');
+    expect(rowNames()).toEqual(['Anna', 'Anna']);
 
-    expect(container.querySelectorAll('input, select, textarea').length).toBe(0);
-    const buttonLabels = Array.from(container.querySelectorAll('button')).map((b) => b.textContent);
-    for (const label of buttonLabels) {
-      expect(label).not.toMatch(/save|edit|delete|adjust|set value/i);
-    }
+    await search('an grain');
+    expect($('.rel-search-count').textContent).toBe('0 of 3');
+    expect($('.rel-empty').textContent).toBe('Nothing matches "an grain"');
+
+    await search('mira grain');
+    expect($('.rel-search-count').textContent).toBe('1 of 3');
+    expect(rowNames()).toEqual(['Mira']);
+
+    act(() => {
+      fireEvent.click($('.rel-search-clear'));
+    });
+    await flush();
+    expect(($('.rel-search-input') as HTMLInputElement).value).toBe('');
+    expect($('.rel-search-count')).toBeNull();
+    expect(rowNames()).toEqual(['Anna', 'Anna', 'Mira']);
   });
 
-  function outerLabels(): (string | null)[] {
-    return Array.from(container.querySelectorAll('.rel-outer-label')).map((el) => el.textContent);
-  }
+  it('search: disabling a scope excludes it and the empty message mentions enabled scopes', async () => {
+    await mount();
+    await search('mira');
+    expect(rowNames()).toEqual(['Mira']);
 
-  it('a relationship absent from the file still renders', async () => {
-    // Holder-mode top level only lists 'cccc' (Mira); aaaa/bbbb are unlisted.
-    fsApi.readSpy.mockResolvedValue(
-      JSON.stringify({
-        version: 1,
-        holder: { order: { '': ['cccc'] }, expanded: { outer: [], inner: [], track: [] } },
-        observer: { order: {}, expanded: { outer: [], inner: [], track: [] } },
-      }),
-    );
-    renderView();
+    toggleScope('Name');
     await flush();
+    expect(rowNames()).toEqual([]);
+    expect($('.rel-empty').textContent).toBe('Nothing matches "mira" in the enabled scopes');
+    expect($('.rel-search-count').textContent).toBe('0 of 2');
 
-    // All three holders still render: the listed one first, the rest appended alphabetically.
-    expect(outerLabels()).toEqual(['Mira', 'Anna', 'Zara']);
+    toggleScope('Name');
+    await flush();
+    expect(rowNames()).toEqual(['Mira']);
   });
 
-  it('order is stored per grouping mode', async () => {
-    renderView();
-    await flush();
+  it('search through history auto-opens rows, tints hits and dims the rest', async () => {
+    await mount();
+    await pickHolder('All holders');
+    expect($$('.rel-entry')).toHaveLength(0);
 
-    // Reorder the two observer-mode outer rows (Anna, Mira).
-    fireEvent.click(groupByToggle());
-    await flush();
-    expect(outerLabels()).toEqual(['Anna', 'Mira']);
+    await search('grain');
+    expect(rowNames()).toEqual(['Mira']);
+    const entries = $$('.rel-entry');
+    expect(entries).toHaveLength(1);
+    expect(entries[0].classList.contains('is-hit')).toBe(true);
+    expect($$('mark.rel-match').map((m) => m.textContent)).toEqual(['grain']);
+    expect($('.rel-entry-reason').textContent).toBe('Stole grain');
 
-    dragRowOnto(findOuterRow('Mira'), findOuterRow('Anna'), 'before');
-    await flush();
-    expect(outerLabels()).toEqual(['Mira', 'Anna']);
-
-    // Holder mode (3 outer rows: Anna, Mira, Zara) is unaffected.
-    fireEvent.click(groupByToggle());
-    await flush();
-    expect(outerLabels()).toEqual(['Anna', 'Mira', 'Zara']);
-
-    await flushSaveDebounce();
-    const [, content] = fsApi.writeSpy.mock.calls.at(-1)!;
-    const saved = JSON.parse(content);
-    expect(saved.observer.order['']).toEqual(['cccc', 'bbbb']); // Mira, Anna
-    expect(saved.holder.order['']).toBeUndefined();
+    // "docks" matches Zara→Anna by reason and event title; Kel→Anna's entry has the event
+    // title "Docks defence" too, so make the dimmed entry come from a word only one entry has.
+    await search('anna defended');
+    expect(rowNames()).toEqual(['Anna']);
+    expect($$('.rel-entry.is-hit')).toHaveLength(1);
+    expect($$('mark.rel-match').map((m) => m.textContent)).toEqual(['Defended']);
   });
 
-  it('context menu offers move to top/up/down and disables inapplicable items', async () => {
-    renderView();
-    await flush();
+  it('All holders groups rows by holder', async () => {
+    await mount();
+    await pickHolder('All holders');
+    const groups = $$('.rel-group');
+    expect(groups.map((g) => g.querySelector('.rel-group-name')?.textContent)).toEqual([
+      'Kel',
+      'Zara',
+    ]);
+    expect(groups.map((g) => g.querySelector('.rel-group-count')?.textContent)).toEqual([
+      'standing with 1',
+      'standing with 2',
+    ]);
+    expect(groups[1].querySelectorAll('.rel-row-name')).toHaveLength(2);
 
-    // Anna is first alphabetically: "move to top"/"move up" are inapplicable.
-    fireEvent.contextMenu(findOuterRow('Anna'), { clientX: 5, clientY: 5 });
-    expect(state.showContextMenuSpy).toHaveBeenCalledTimes(1);
-    const firstItems = state.showContextMenuSpy.mock.calls[0][0] as Array<{
+    act(() => {
+      fireEvent.click(groups[0].querySelector('.rel-group-header') as HTMLElement);
+    });
+    expect($$('.rel-group')[0].querySelectorAll('.rel-row')).toHaveLength(0);
+  });
+
+  it('drag handles only in My order without a query; moving a row saves under rp01:<holder>', async () => {
+    await mount();
+    expect($$('.rel-drag-handle')).toHaveLength(2);
+
+    await search('a');
+    expect($$('.rel-drag-handle')).toHaveLength(0);
+    await search('');
+    expect($$('.rel-drag-handle')).toHaveLength(2);
+
+    act(() => {
+      fireEvent.click(sortOption('By value'));
+    });
+    expect($$('.rel-drag-handle')).toHaveLength(0);
+    act(() => {
+      fireEvent.click(sortOption('My order'));
+    });
+    expect(rowNames()).toEqual(['Anna', 'Mira']);
+
+    act(() => {
+      fireEvent.contextMenu(rowFor('Anna'));
+    });
+    const items = state.contextMenuSpy.mock.calls[0][0] as Array<{
       label: string;
-      disabled?: boolean;
       onSelect: () => void;
     }>;
-    const firstByLabel = Object.fromEntries(firstItems.map((i) => [i.label, i]));
-    expect(firstByLabel['Move to top'].disabled).toBe(true);
-    expect(firstByLabel['Move up'].disabled).toBe(true);
-    expect(firstByLabel['Move down'].disabled).toBe(false);
+    act(() => {
+      items.find((i) => i.label === 'Move down')!.onSelect();
+    });
+    expect(rowNames()).toEqual(['Mira', 'Anna']);
 
-    state.showContextMenuSpy.mockClear();
-
-    // Zara is last alphabetically: "move down" is inapplicable.
-    fireEvent.contextMenu(findOuterRow('Zara'), { clientX: 5, clientY: 5 });
-    const lastItems = state.showContextMenuSpy.mock.calls[0][0] as Array<{
-      label: string;
-      disabled?: boolean;
-      onSelect: () => void;
-    }>;
-    const lastByLabel = Object.fromEntries(lastItems.map((i) => [i.label, i]));
-    expect(lastByLabel['Move down'].disabled).toBe(true);
-    expect(lastByLabel['Move to top'].disabled).toBe(false);
-
-    // Selecting an enabled item actually reorders the rows.
-    act(() => lastByLabel['Move to top'].onSelect());
-    await flush();
-    expect(outerLabels()).toEqual(['Zara', 'Anna', 'Mira']);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 400));
+    });
+    expect(state.saveSpy).toHaveBeenCalled();
+    const saved = state.saveSpy.mock.calls.at(-1)![1] as { order: Record<string, string[]> };
+    expect(saved.order['rp01:aaaa']).toEqual(['cccc', 'bbbb']);
   });
 
-  it('dragging a row onto the gap before another moves it there and saves', async () => {
-    renderView();
-    await flush();
-    expect(outerLabels()).toEqual(['Anna', 'Mira', 'Zara']);
+  it('clicking a name opens the entity note without toggling the row', async () => {
+    await mount();
+    const row = rowFor('Anna');
+    expect(row.getAttribute('aria-expanded')).toBe('false');
+    act(() => {
+      fireEvent.click(row.querySelector('.rel-row-name') as HTMLElement);
+    });
+    expect(onOpenById).toHaveBeenCalledWith('bbbb');
+    expect(rowFor('Anna').getAttribute('aria-expanded')).toBe('false');
+    expect($$('.rel-entry')).toHaveLength(0);
 
-    dragRowOnto(findOuterRow('Zara'), findOuterRow('Anna'), 'before');
-    await flush();
-    expect(outerLabels()).toEqual(['Zara', 'Anna', 'Mira']);
+    act(() => {
+      fireEvent.click(row);
+    });
+    expect(rowFor('Anna').getAttribute('aria-expanded')).toBe('true');
+  });
 
-    await flushSaveDebounce();
-    expect(fsApi.mkdirSpy).toHaveBeenCalledWith('/campaign/relationships');
-    const [path, content] = fsApi.writeSpy.mock.calls.at(-1)!;
-    expect(path).toBe('/campaign/relationships/view-order.json');
-    const saved = JSON.parse(content);
-    expect(saved.holder.order['']).toEqual(['aaaa', 'bbbb', 'cccc']); // Zara, Anna, Mira
+  it("dates carry the in-game year and undated entries read 'Undated note'", async () => {
+    await mount();
+    act(() => {
+      fireEvent.click(rowFor('Anna'));
+    });
+    act(() => {
+      fireEvent.click(rowFor('Mira'));
+    });
+    const dates = $$('.rel-entry-date').map((d) => d.textContent ?? '');
+    expect(dates).toHaveLength(2);
+    expect(dates.filter((d) => d === 'Undated note')).toHaveLength(1);
+    const dated = dates.find((d) => d !== 'Undated note') as string;
+    expect(dated).toMatch(/\d{4}/);
+    expect(rowFor('Mira').querySelector('.rel-row-last')?.textContent).toBe('−3 Undated note');
+    expect(rowFor('Anna').querySelector('.rel-row-last')?.textContent).toBe(`+5 ${dated}`);
+  });
+
+  it('a relationship reads the same under a single holder and under All holders', async () => {
+    await mount();
+    const snapshot = (row: HTMLElement) => ({
+      value: row.querySelector('.rel-row-value')?.textContent,
+      state: row.querySelector('.rel-row-state')?.textContent,
+      last: row.querySelector('.rel-row-last')?.textContent,
+      count: row.querySelector('.rel-row-count')?.textContent,
+      entries: Array.from(row.parentElement!.querySelectorAll('.rel-entry')).map(
+        (e) => e.textContent,
+      ),
+    });
+    act(() => {
+      fireEvent.click(rowFor('Anna'));
+    });
+    const single = snapshot(rowFor('Anna'));
+    expect(single.entries).toHaveLength(1);
+
+    await pickHolder('All holders');
+    // Expansion is stored per holder list, so the row is still open inside Zara's group.
+    expect(snapshot(rowFor('Anna', $$('.rel-group')[1]))).toEqual(single);
+  });
+
+  it('shows rung labels in changes rather than raw keys', async () => {
+    await mount();
+    await selectTab('Attitude');
+    expect(rowFor('Anna').querySelector('.rel-row-last')?.textContent).toMatch(/^= Friendly /);
   });
 });

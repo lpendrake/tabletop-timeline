@@ -7,7 +7,7 @@ export interface EntityLinkProps {
   className?: string;
 }
 
-/** A holder/observer link: hover peeks the note, Ctrl/Cmd+click opens it. Plain click does nothing (read-only view). */
+/** A holder/observer link: hover peeks the note, a click opens it (as wiki links do). Never toggles the row it sits in. */
 export function EntityLink({ id, label, onOpenById, className }: EntityLinkProps) {
   return (
     <span
@@ -15,10 +15,9 @@ export function EntityLink({ id, label, onOpenById, className }: EntityLinkProps
       onMouseEnter={(e) => openFromWikiLink(id, e.currentTarget)}
       onMouseLeave={(e) => closeFromWikiLink(e.relatedTarget as Element | null)}
       onClick={(e) => {
-        if (e.ctrlKey || e.metaKey) {
-          e.preventDefault();
-          onOpenById(id);
-        }
+        e.preventDefault();
+        e.stopPropagation();
+        onOpenById(id);
       }}
     >
       {label}

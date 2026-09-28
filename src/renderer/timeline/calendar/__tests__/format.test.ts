@@ -10,6 +10,7 @@ import {
   formatFloatingDay,
   formatFloatingMonth,
   formatNowMarker,
+  formatDayMonthYear,
 } from '../format';
 import { CalendarProvider } from '../provider';
 import {
@@ -473,5 +474,53 @@ describe('formatFloatingDay', () => {
       second: 0,
     };
     expect(formatFloatingDay(date)).toBe('Desnus 4th, Wealday, 4726 AR');
+  });
+});
+
+describe('formatDayMonthYear', () => {
+  beforeEach(() => {
+    CalendarProvider._reset();
+  });
+
+  const date: CalendarDate = {
+    kind: 'month',
+    year: 4725,
+    month: 8,
+    day: 12,
+    hour: 9,
+    minute: 30,
+    second: 0,
+  };
+
+  it('always includes the year, in full and short-month forms', () => {
+    const cal = CalendarProvider.get();
+    expect(formatDayMonthYear(date)).toBe(`12 ${cal.monthName(8)} 4725`);
+    expect(formatDayMonthYear(date, { shortMonth: true })).toBe(`12 ${cal.monthAbbrev(8)} 4725`);
+    expect(formatDayMonthYear(date)).toMatch(/4725$/);
+    expect(formatDayMonthYear(date, { shortMonth: true })).toMatch(/4725$/);
+  });
+
+  it('formats Lamashan as "12 Lamashan 4725" / "12 Lam 4725"', () => {
+    const cal = CalendarProvider.get();
+    const month = Array.from({ length: cal.monthCount() }, (_, i) => i + 1).find(
+      (m) => cal.monthName(m) === 'Lamashan',
+    )!;
+    const d = { ...date, month };
+    expect(formatDayMonthYear(d)).toBe('12 Lamashan 4725');
+    expect(formatDayMonthYear(d, { shortMonth: true })).toBe('12 Lam 4725');
+  });
+
+  it('keeps the year on intercalary days', () => {
+    CalendarProvider.init(createCalendar(festivalCalendarSpec));
+    const d: CalendarDate = {
+      kind: 'intercalary',
+      intercalaryIndex: 0,
+      year: 100,
+      hour: 0,
+      minute: 0,
+      second: 0,
+    };
+    expect(formatDayMonthYear(d)).toBe('Starfall 100');
+    expect(formatDayMonthYear(d, { shortMonth: true })).toBe('Sta 100');
   });
 });

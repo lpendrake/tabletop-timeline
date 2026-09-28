@@ -1,97 +1,104 @@
 import { describe, it, expect } from 'vitest';
 import {
   applyOrder,
+  applyRowMove,
   canDrop,
   defaultViewOrder,
   dropPosition,
+  entityCardsKey,
+  groupListKey,
   moveAfter,
   moveBefore,
   moveDown,
   moveToTop,
   moveUp,
   parseViewOrder,
+  rowListKey,
   serialiseViewOrder,
-  type ViewOrder,
+  withListOrder,
+  withToggledCollapsed,
+  withToggledExpanded,
 } from '../view-order';
+
+const byId = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+describe('list keys', () => {
+  it('are built from track + holder', () => {
+    expect(rowListKey('rp01', 'aaaa')).toBe('rp01:aaaa');
+    expect(groupListKey('rp01')).toBe('rp01:*');
+    expect(entityCardsKey('tg01')).toBe('tg01:entity-cards');
+  });
+});
 
 describe('applyOrder', () => {
   it('appends unlisted ids alphabetically after listed ones', () => {
-    const result = applyOrder(['ccc', 'aaa', 'bbb'], ['bbb'], (a, b) =>
-      a < b ? -1 : a > b ? 1 : 0,
-    );
-    expect(result).toEqual(['bbb', 'aaa', 'ccc']);
+    expect(applyOrder(['ccc', 'aaa', 'bbb'], ['bbb'], byId)).toEqual(['bbb', 'aaa', 'ccc']);
   });
 
   it('stale entries (ids no longer present) are ignored, not written back', () => {
     const listed = ['zzz-stale', 'bbb', 'aaa'];
-    const result = applyOrder(['aaa', 'bbb'], listed, (a, b) => (a < b ? -1 : a > b ? 1 : 0));
-    expect(result).toEqual(['bbb', 'aaa']);
-    // the caller's `listed` array itself is untouched
+    expect(applyOrder(['aaa', 'bbb'], listed, byId)).toEqual(['bbb', 'aaa']);
     expect(listed).toEqual(['zzz-stale', 'bbb', 'aaa']);
   });
 });
 
-describe('parse -> apply -> serialise keeps stale entries in the file', () => {
-  it('round-trips a stale id without dropping it', () => {
-    const raw = {
-      version: 1,
-      holder: {
-        order: { '': ['zzzz-gone', 'aaaa'] },
-        expanded: { outer: [], inner: [], track: [] },
-      },
-      observer: { order: {}, expanded: { outer: [], inner: [], track: [] } },
-    };
-    const parsed = parseViewOrder(raw);
+describe('stale ids in view-order are ignored and preserved on save', () => {
+  it('ignores stale ids for display, keeps them on an untouched round trip, and appends them after a move', () => {
+    const parsed = parseViewOrder({
+      version: 2,
+      order: { 'rp01:aaaa': ['gone', 'bbbb', 'cccc'] },
+      expanded: {},
+      collapsed: {},
+    });
+    const visible = applyOrder(['cccc', 'bbbb'], parsed.order['rp01:aaaa'], byId);
+    expect(visible).toEqual(['bbbb', 'cccc']);
 
-    const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
-    const visible = applyOrder(['aaaa', 'bbbb'], parsed.holder.order[''], compare);
-    expect(visible).toEqual(['aaaa', 'bbbb']); // stale 'zzzz-gone' skipped when computing what's visible
+    const untouched = JSON.parse(serialiseViewOrder(parsed));
+    expect(untouched.order['rp01:aaaa']).toEqual(['gone', 'bbbb', 'cccc']);
 
-    // Serialising the parsed (untouched) object keeps the stale id.
-    const serialised = JSON.parse(serialiseViewOrder(parsed));
-    expect(serialised.holder.order['']).toEqual(['zzzz-gone', 'aaaa']);
+    const moved = withListOrder(parsed, 'rp01:aaaa', applyRowMove(visible, 'cccc', 'top'));
+    expect(moved.order['rp01:aaaa']).toEqual(['cccc', 'bbbb', 'gone']);
+    expect(parsed.order['rp01:aaaa']).toEqual(['gone', 'bbbb', 'cccc']); // input not mutated
   });
 });
 
-describe('garbage view-order.json falls back to defaults', () => {
+describe('a version-1 or garbage file parses to an empty order', () => {
   it.each([
     [null],
     [undefined],
     ['not an object'],
     [42],
     [[]],
-    [{ holder: 'nope', observer: 123 }],
-    [{ holder: { order: 'nope', expanded: 'nope' } }],
+    [{ version: 2, order: 'nope', expanded: 7, collapsed: [] }],
+    [{ version: 1, holder: { order: { '': ['aaaa'] } }, observer: {} }],
+    [{ holder: { order: {} } }],
   ])('never throws for %p', (input) => {
     expect(() => parseViewOrder(input)).not.toThrow();
-    const result = parseViewOrder(input);
-    expect(result).toEqual(defaultViewOrder());
+    expect(parseViewOrder(input)).toEqual(defaultViewOrder());
   });
 
-  it('recovers whatever partial shape is well-formed rather than discarding everything', () => {
-    const result = parseViewOrder({ holder: { order: { '': ['aaaa'] } } });
-    expect(result.holder.order['']).toEqual(['aaaa']);
-    expect(result.observer).toEqual(defaultViewOrder().observer);
-  });
-});
-
-describe('order is stored per grouping mode', () => {
-  it('holder and observer sections are independent', () => {
-    const order: ViewOrder = defaultViewOrder();
-    order.holder.order[''] = ['aaaa', 'bbbb'];
-    expect(order.observer.order['']).toBeUndefined();
+  it('keeps well-formed v2 entries and drops non-string ids', () => {
+    const result = parseViewOrder({
+      version: 2,
+      order: { 'rp01:aaaa': ['x', 3, 'y'] },
+      expanded: { 'rp01:aaaa': ['x'] },
+      collapsed: { 'rp01:*': ['aaaa'] },
+    });
+    expect(result.order['rp01:aaaa']).toEqual(['x', 'y']);
+    expect(result.expanded['rp01:aaaa']).toEqual(['x']);
+    expect(result.collapsed['rp01:*']).toEqual(['aaaa']);
   });
 });
 
-describe('collapse state persists per mode in the same file', () => {
-  it('expanded ids round-trip through parse/serialise, per mode', () => {
-    const order: ViewOrder = defaultViewOrder();
-    order.holder.expanded.outer = ['aaaa'];
-    order.observer.expanded.outer = ['bbbb'];
-
-    const roundTripped = parseViewOrder(JSON.parse(serialiseViewOrder(order)));
-    expect(roundTripped.holder.expanded.outer).toEqual(['aaaa']);
-    expect(roundTripped.observer.expanded.outer).toEqual(['bbbb']);
+describe('expand and collapse toggles', () => {
+  it('toggle ids under their list key without touching the input', () => {
+    const base = defaultViewOrder();
+    const expanded = withToggledExpanded(base, 'rp01:aaaa', 'bbbb');
+    expect(expanded.expanded['rp01:aaaa']).toEqual(['bbbb']);
+    expect(withToggledExpanded(expanded, 'rp01:aaaa', 'bbbb').expanded['rp01:aaaa']).toEqual([]);
+    const collapsed = withToggledCollapsed(base, 'rp01:*', 'aaaa');
+    expect(collapsed.collapsed['rp01:*']).toEqual(['aaaa']);
+    expect(base.expanded).toEqual({});
   });
 });
 
@@ -153,44 +160,30 @@ describe("dropPosition splits at the row's vertical middle", () => {
   });
 });
 
-describe('nested rows reorder within their parent only (canDrop)', () => {
-  it('accepts a drop within the same mode/level/parent', () => {
-    expect(
-      canDrop(
-        { mode: 'holder', level: 'inner', parentKey: 'aaaa', id: 'bbbb' },
-        { mode: 'holder', level: 'inner', parentKey: 'aaaa' },
-      ),
-    ).toBe(true);
+describe('applyRowMove', () => {
+  it('dispatches each move kind', () => {
+    const v = ['a', 'b', 'c'];
+    expect(applyRowMove(v, 'c', 'top')).toEqual(['c', 'a', 'b']);
+    expect(applyRowMove(v, 'b', 'up')).toEqual(['b', 'a', 'c']);
+    expect(applyRowMove(v, 'a', 'down')).toEqual(['b', 'a', 'c']);
+    expect(applyRowMove(v, 'c', { before: 'a' })).toEqual(['c', 'a', 'b']);
+    expect(applyRowMove(v, 'a', { after: 'c' })).toEqual(['b', 'c', 'a']);
+  });
+});
+
+describe('drop is refused across different list keys', () => {
+  it('accepts a drop within the same list', () => {
+    expect(canDrop({ listKey: 'rp01:aaaa', id: 'bbbb' }, { listKey: 'rp01:aaaa' })).toBe(true);
   });
 
-  it('rejects a drop onto a different parent at the same level', () => {
-    expect(
-      canDrop(
-        { mode: 'holder', level: 'inner', parentKey: 'aaaa', id: 'bbbb' },
-        { mode: 'holder', level: 'inner', parentKey: 'cccc' },
-      ),
-    ).toBe(false);
+  it('refuses a drop onto another holder, another track, or the group list', () => {
+    const dragged = { listKey: 'rp01:aaaa', id: 'bbbb' };
+    expect(canDrop(dragged, { listKey: 'rp01:cccc' })).toBe(false);
+    expect(canDrop(dragged, { listKey: 'at01:aaaa' })).toBe(false);
+    expect(canDrop(dragged, { listKey: 'rp01:*' })).toBe(false);
   });
 
-  it('rejects a drop across levels (inner dragged onto an outer target)', () => {
-    expect(
-      canDrop(
-        { mode: 'holder', level: 'inner', parentKey: 'aaaa', id: 'bbbb' },
-        { mode: 'holder', level: 'outer', parentKey: '' },
-      ),
-    ).toBe(false);
-  });
-
-  it('rejects a drop across grouping modes', () => {
-    expect(
-      canDrop(
-        { mode: 'holder', level: 'outer', parentKey: '', id: 'aaaa' },
-        { mode: 'observer', level: 'outer', parentKey: '' },
-      ),
-    ).toBe(false);
-  });
-
-  it('rejects with no payload', () => {
-    expect(canDrop(null, { mode: 'holder', level: 'outer', parentKey: '' })).toBe(false);
+  it('refuses with no payload', () => {
+    expect(canDrop(null, { listKey: 'rp01:aaaa' })).toBe(false);
   });
 });
