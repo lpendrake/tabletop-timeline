@@ -25,6 +25,7 @@ import { defaultViewSettingsData } from './views/settings/default-view-settings-
 import { resolveDefaultView } from './views/settings/domain/resolve-default-view';
 import { useRelationshipLibrary } from './relationships/hooks/use-relationship-library';
 import { RelationshipLibraryProvider } from './relationships/library-context';
+import { viewForKey } from './relationships/domain/view-shortcut';
 import '../../src/index.css';
 
 export default function App() {
@@ -170,14 +171,10 @@ export default function App() {
   useEffect(() => {
     function handleViewSwitch(e: KeyboardEvent) {
       if (!activeCampaign) return;
-      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
-      if (e.key === 'F1') {
-        e.preventDefault();
-        setCurrentView('timeline');
-      } else if (e.key === 'F2') {
-        e.preventDefault();
-        setCurrentView('notes');
-      }
+      const view = viewForKey(e);
+      if (!view) return;
+      e.preventDefault();
+      setCurrentView(view);
     }
     window.addEventListener('keydown', handleViewSwitch, true);
     return () => window.removeEventListener('keydown', handleViewSwitch, true);
