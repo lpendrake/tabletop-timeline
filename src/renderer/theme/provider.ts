@@ -92,17 +92,8 @@ function applyCssVars(theme: Theme): void {
   }
 
   const relationshipsMap: Record<string, string> = {
-    'relationships-bar-track': theme.relationships.barTrack,
-    'relationships-bar-fill': theme.relationships.barFill,
-    'relationships-band-tick': theme.relationships.bandTick,
-    'relationships-rung-inactive': theme.relationships.rungInactive,
-    'relationships-rung-active': theme.relationships.rungActive,
-    'relationships-chip-background': theme.relationships.chipBackground,
-    'relationships-chip-text': theme.relationships.chipText,
-    'relationships-chip-mutual-border': theme.relationships.chipMutualBorder,
     'relationships-row-hover': theme.relationships.rowHover,
     'relationships-drop-indicator': theme.relationships.dropIndicator,
-    'relationships-step-set-break': theme.relationships.stepSetBreak,
     'relationships-scale-negative': theme.relationships.scaleNegative,
     'relationships-scale-neutral': theme.relationships.scaleNeutral,
     'relationships-scale-positive': theme.relationships.scalePositive,

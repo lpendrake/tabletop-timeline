@@ -1,82 +1,68 @@
 /**
- * User ordering + collapse state for the Relationships view, persisted to
- * `<campaign>/relationships/view-order.json`. Pure — no IO, no React. The
- * file is sparse and advisory, never authoritative about what rows exist:
- * `applyOrder` appends anything unlisted (alphabetically, via the caller's
- * comparator) after the listed ids, and silently drops ids that are listed
- * but no longer present among the rows being ordered — without ever
- * mutating (or requiring a rewrite of) the stored list itself, so a
- * `parseViewOrder` → `serialiseViewOrder` round trip that touches nothing
- * keeps stale entries intact (see `__tests__/view-order.test.ts`).
+ * User ordering + expand/collapse state for the by-track Relationships view,
+ * persisted to `<campaign>/relationships/view-order.json`. Pure — no IO, no
+ * React. The file is sparse and advisory, never authoritative about what rows
+ * exist: `applyOrder` appends anything unlisted (alphabetically, via the
+ * caller's comparator) after the listed ids and silently drops listed ids that
+ * are no longer present — without mutating the stored list, so stale ids
+ * survive until a move rewrites that key's list (see `withListOrder`).
+ *
+ * Every list is keyed by track + holder (see the key builders below).
  */
 
-import type { GroupingMode } from './group-relationships';
-
-export type RowLevel = 'outer' | 'inner' | 'track';
-
-/** `""` means the top level (outer rows); any other key is an outer row id. */
-export interface ViewOrderModeState {
-  order: Record<string, string[]>;
-  expanded: {
-    outer: string[];
-    inner: string[];
-    track: string[];
-  };
-}
-
 export interface ViewOrder {
-  version: 1;
-  holder: ViewOrderModeState;
-  observer: ViewOrderModeState;
+  version: 2;
+  /** listKey -> ids in the user's order. */
+  order: Record<string, string[]>;
+  /** rowListKey -> observer ids of expanded rows. */
+  expanded: Record<string, string[]>;
+  /** groupListKey -> holder ids of collapsed All-holders groups. */
+  collapsed: Record<string, string[]>;
 }
 
-export const TOP_LEVEL_PARENT_KEY = '';
+/** Key for the observers listed under one holder on a track. */
+export function rowListKey(trackId: string, holderId: string): string {
+  return `${trackId}:${holderId}`;
+}
 
-function emptyModeState(): ViewOrderModeState {
-  return { order: {}, expanded: { outer: [], inner: [], track: [] } };
+/** Key for the order of holder groups under *All holders* on a track (`<track>:*`). */
+export function groupListKey(trackId: string): string {
+  return `${trackId}:*`;
+}
+
+/** Reserved for the categorical entity-cards ticket. */
+export function entityCardsKey(trackId: string): string {
+  return `${trackId}:entity-cards`;
 }
 
 export function defaultViewOrder(): ViewOrder {
-  return { version: 1, holder: emptyModeState(), observer: emptyModeState() };
+  return { version: 2, order: {}, expanded: {}, collapsed: {} };
 }
 
 function asStringArray(x: unknown): string[] {
   return Array.isArray(x) ? x.filter((v): v is string => typeof v === 'string') : [];
 }
 
-function parseModeState(x: unknown): ViewOrderModeState {
-  if (!x || typeof x !== 'object') return emptyModeState();
-  const o = x as Record<string, unknown>;
-
-  const order: Record<string, string[]> = {};
-  if (o.order && typeof o.order === 'object') {
-    for (const [key, value] of Object.entries(o.order as Record<string, unknown>)) {
-      order[key] = asStringArray(value);
-    }
+function parseListMap(x: unknown): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  if (!x || typeof x !== 'object' || Array.isArray(x)) return out;
+  for (const [key, value] of Object.entries(x as Record<string, unknown>)) {
+    out[key] = asStringArray(value);
   }
-
-  const expandedRaw =
-    o.expanded && typeof o.expanded === 'object' ? (o.expanded as Record<string, unknown>) : {};
-
-  return {
-    order,
-    expanded: {
-      outer: asStringArray(expandedRaw.outer),
-      inner: asStringArray(expandedRaw.inner),
-      track: asStringArray(expandedRaw.track),
-    },
-  };
+  return out;
 }
 
-/** Never throws — garbage or unknown JSON falls back to empty defaults. */
+/** Never throws — a version-1 (#262) file, garbage or unknown JSON falls back to an empty v2 order. */
 export function parseViewOrder(json: unknown): ViewOrder {
   try {
-    if (!json || typeof json !== 'object') return defaultViewOrder();
+    if (!json || typeof json !== 'object' || Array.isArray(json)) return defaultViewOrder();
     const o = json as Record<string, unknown>;
+    if (o.version !== 2) return defaultViewOrder();
     return {
-      version: 1,
-      holder: parseModeState(o.holder),
-      observer: parseModeState(o.observer),
+      version: 2,
+      order: parseListMap(o.order),
+      expanded: parseListMap(o.expanded),
+      collapsed: parseListMap(o.collapsed),
     };
   } catch {
     return defaultViewOrder();
@@ -91,8 +77,7 @@ export function serialiseViewOrder(order: ViewOrder): string {
  * Orders `ids` using the (possibly sparse/stale) `listed` sequence: listed
  * ids that are present in `ids` keep their listed relative order first;
  * everything else in `ids` is appended after, sorted by `comparator`.
- * Listed ids no longer present in `ids` are simply skipped — never written
- * back or otherwise mutated here.
+ * Listed ids no longer present in `ids` are simply skipped.
  */
 export function applyOrder(
   ids: readonly string[],
@@ -100,10 +85,66 @@ export function applyOrder(
   comparator: (a: string, b: string) => number,
 ): string[] {
   const idSet = new Set(ids);
-  const listedExisting = (listed ?? []).filter((id) => idSet.has(id));
-  const listedSet = new Set(listedExisting);
-  const rest = ids.filter((id) => !listedSet.has(id)).sort(comparator);
+  const listedExisting: string[] = [];
+  const seen = new Set<string>();
+  for (const id of listed ?? []) {
+    if (idSet.has(id) && !seen.has(id)) {
+      listedExisting.push(id);
+      seen.add(id);
+    }
+  }
+  const rest = ids.filter((id) => !seen.has(id)).sort(comparator);
   return [...listedExisting, ...rest];
+}
+
+/**
+ * Returns a copy of `viewOrder` where `listKey`'s list is the current visible
+ * order followed by any stale ids (listed before but not visible now), so
+ * moving a row never forgets ordering for rows that are temporarily absent.
+ */
+export function withListOrder(
+  viewOrder: ViewOrder,
+  listKey: string,
+  visible: readonly string[],
+): ViewOrder {
+  const visibleSet = new Set(visible);
+  const stale = (viewOrder.order[listKey] ?? []).filter((id) => !visibleSet.has(id));
+  return { ...viewOrder, order: { ...viewOrder.order, [listKey]: [...visible, ...stale] } };
+}
+
+function toggled(list: readonly string[] | undefined, id: string): string[] {
+  const current = list ?? [];
+  return current.includes(id) ? current.filter((x) => x !== id) : [...current, id];
+}
+
+/** Toggles an observer id in `expanded[listKey]`. */
+export function withToggledExpanded(
+  viewOrder: ViewOrder,
+  listKey: string,
+  observerId: string,
+): ViewOrder {
+  return {
+    ...viewOrder,
+    expanded: {
+      ...viewOrder.expanded,
+      [listKey]: toggled(viewOrder.expanded[listKey], observerId),
+    },
+  };
+}
+
+/** Toggles a holder id in `collapsed[listKey]`. */
+export function withToggledCollapsed(
+  viewOrder: ViewOrder,
+  listKey: string,
+  holderId: string,
+): ViewOrder {
+  return {
+    ...viewOrder,
+    collapsed: {
+      ...viewOrder.collapsed,
+      [listKey]: toggled(viewOrder.collapsed[listKey], holderId),
+    },
+  };
 }
 
 /** Moves `id` to the front of `visible`. No-op if `id` is absent or already first. */
@@ -149,6 +190,18 @@ export function moveAfter(visible: readonly string[], id: string, targetId: stri
   return [...without.slice(0, idx + 1), id, ...without.slice(idx + 1)];
 }
 
+/** A move requested by the UI (context menu or drag-and-drop). */
+export type RowMove = 'top' | 'up' | 'down' | { before: string } | { after: string };
+
+/** Applies a `RowMove` to a visible order list. */
+export function applyRowMove(visible: readonly string[], id: string, to: RowMove): string[] {
+  if (to === 'top') return moveToTop(visible, id);
+  if (to === 'up') return moveUp(visible, id);
+  if (to === 'down') return moveDown(visible, id);
+  if ('before' in to) return moveBefore(visible, id, to.before);
+  return moveAfter(visible, id, to.after);
+}
+
 /** Splits a row's rect at its vertical middle: above -> 'before', at/below -> 'after'. */
 export function dropPosition(
   pointerY: number,
@@ -160,28 +213,15 @@ export function dropPosition(
 
 /** The drag payload carried on the custom MIME type for a row drag. */
 export interface RowDragPayload {
-  mode: GroupingMode;
-  level: 'outer' | 'inner';
-  /** '' for an outer row (top level); the outer row's id for an inner row. */
-  parentKey: string;
+  listKey: string;
   id: string;
 }
 
 export interface DropTarget {
-  mode: GroupingMode;
-  level: 'outer' | 'inner';
-  parentKey: string;
+  listKey: string;
 }
 
-/**
- * Nested rows reorder within their parent only: a drop is accepted only when
- * the dragged row and the target share the same mode, level and parent.
- */
+/** Rows reorder within their own list only: a drop is accepted only when the list keys match. */
 export function canDrop(payload: RowDragPayload | null | undefined, target: DropTarget): boolean {
-  if (!payload) return false;
-  return (
-    payload.mode === target.mode &&
-    payload.level === target.level &&
-    payload.parentKey === target.parentKey
-  );
+  return !!payload && payload.listKey === target.listKey;
 }

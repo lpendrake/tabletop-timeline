@@ -1,7 +1,4 @@
-import { FooterPortal } from '../../components/footer-portal';
-import { FooterButton } from '../../components/footer-button';
 import { useRelationships } from '../../relationships/hooks/use-relationships';
-import { RelationshipsList } from '../../relationships/components/relationships-list';
 import { useRelationshipLibraryContext } from '../../relationships/library-context';
 import type { EntityIndexEntry } from '../../../types/global';
 import '../../relationships/components/relationships.css';
@@ -14,25 +11,40 @@ export interface RelationshipsViewProps {
   onOpenEvent: (filename: string) => void;
 }
 
+// Temporary: replaced by the #274 shell components in the next commit.
 export function RelationshipsView({
   campaignPath,
   entityLabelMap,
   getEntityIndex,
-  onOpenById,
-  onOpenEvent,
 }: RelationshipsViewProps) {
   const library = useRelationshipLibraryContext();
   const state = useRelationships({ campaignPath, library, entityLabelMap, getEntityIndex });
 
   return (
     <div className="rel-view">
-      <RelationshipsList state={state} onOpenById={onOpenById} onOpenEvent={onOpenEvent} />
-
-      <FooterPortal slot="right">
-        <FooterButton onClick={state.toggleMode} title="Toggle grouping">
-          Group by {state.mode === 'holder' ? 'observer' : 'holder'}
-        </FooterButton>
-      </FooterPortal>
+      <div role="tablist">
+        {state.tabs.map((tab) => (
+          <button
+            key={tab.trackId}
+            type="button"
+            role="tab"
+            aria-selected={tab.trackId === state.activeTrackId}
+            onClick={() => state.selectTab(tab.trackId)}
+          >
+            {tab.name}
+          </button>
+        ))}
+      </div>
+      {state.groups.map((group) => (
+        <div key={group.listKey}>
+          {state.groups.length > 1 && <div>{group.label}</div>}
+          <ul>
+            {group.rows.map((row) => (
+              <li key={row.key}>{row.label}</li>
+            ))}
+          </ul>
+        </div>
+      ))}
     </div>
   );
 }

@@ -153,17 +153,8 @@ RGB triplet variants (space-separated, suitable for `rgb(var(--theme-x-rgb) / <a
 --theme-directive-hover               editor.directiveHover
 --theme-directive-value-highlight     editor.directiveValueHighlight
 
---theme-relationships-bar-track           relationships.barTrack
---theme-relationships-bar-fill            relationships.barFill
---theme-relationships-band-tick           relationships.bandTick
---theme-relationships-rung-inactive       relationships.rungInactive
---theme-relationships-rung-active         relationships.rungActive
---theme-relationships-chip-background     relationships.chipBackground
---theme-relationships-chip-text           relationships.chipText
---theme-relationships-chip-mutual-border  relationships.chipMutualBorder
 --theme-relationships-row-hover           relationships.rowHover
 --theme-relationships-drop-indicator      relationships.dropIndicator
---theme-relationships-step-set-break      relationships.stepSetBreak
 --theme-relationships-scale-negative      relationships.scaleNegative   (copy of the theme's chrome.danger value)
 --theme-relationships-scale-neutral       relationships.scaleNeutral    (copy of the theme's chrome.textMuted value)
 --theme-relationships-scale-positive      relationships.scalePositive   (copy of the theme's bootstrap.success value; bootstrap tokens can't be used in campaign views)
