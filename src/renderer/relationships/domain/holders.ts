@@ -3,6 +3,7 @@
  */
 import type { Ledger } from '../../../shared/relationships/model';
 import type { TrackKind } from '../../../shared/relationships/spec';
+import type { PickerOption } from '../../shared/searchable-picker/picker-model';
 
 /** Sentinel holder id meaning "all holders" / "anyone". */
 export const ALL_HOLDERS = '*';
@@ -89,4 +90,32 @@ export function ledgersForHolder(
   return ledgers.filter(
     (l) => l.track === trackId && (holderId === ALL_HOLDERS || l.holder === holderId),
   );
+}
+
+export interface HolderPickerOptions {
+  options: PickerOption[];
+  pinned: PickerOption[];
+}
+
+/** Display name of a holder id: the all-label for the sentinel, else the entity label. */
+export function holderDisplayName(
+  id: string,
+  allHoldersLabel: string,
+  labelFor: (id: string) => string,
+): string {
+  return id === ALL_HOLDERS ? allHoldersLabel : labelFor(id);
+}
+
+/** Picker options for the holder dropdown: every holder (caller's order) plus the pinned entries (the All sentinel carries `allHoldersLabel`). */
+export function holderPickerOptions(input: {
+  holders: readonly HolderEntry[];
+  pinned: readonly HolderEntry[];
+  allHoldersLabel: string;
+  labelFor: (id: string) => string;
+}): HolderPickerOptions {
+  const toOption = (h: HolderEntry): PickerOption => {
+    const label = holderDisplayName(h.id, input.allHoldersLabel, input.labelFor);
+    return { id: h.id, path: label, label, count: h.count };
+  };
+  return { options: input.holders.map(toOption), pinned: input.pinned.map(toOption) };
 }
