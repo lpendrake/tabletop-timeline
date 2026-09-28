@@ -7,7 +7,15 @@ import { act } from 'react';
 import { fireEvent } from '@testing-library/react';
 import { PlaceholderTabBody, type PlaceholderTabBodyProps } from '../placeholder-tab-body';
 import type { HistoryEntry, ViewGroup, ViewRow } from '../../domain/view-rows';
-import type { RelationshipDelta } from '../../../../shared/relationships';
+import {
+  EMPTY_TRACK_LIBRARY,
+  PF2E_REPUTATION_ID,
+  resolveTrack,
+  type RelationshipDelta,
+  type ResolvedTrack,
+} from '../../../../shared/relationships';
+
+const track = resolveTrack(PF2E_REPUTATION_ID, EMPTY_TRACK_LIBRARY) as ResolvedTrack;
 
 let container: HTMLDivElement;
 let root: Root;
@@ -79,6 +87,7 @@ function props(over: Partial<PlaceholderTabBodyProps> = {}): PlaceholderTabBodyP
     query: '',
     emptyMessage: null,
     emptyStateTrackName: 'Reputation',
+    track,
     trackProblems: [],
     toggleRow: vi.fn(),
     toggleGroup: vi.fn(),

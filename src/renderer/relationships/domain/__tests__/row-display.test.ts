@@ -1,5 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { dropToMove, formatLastChange, historyEntryClasses } from '../row-display';
+import {
+  ATTITUDE_ID,
+  EMPTY_TRACK_LIBRARY,
+  RELATIONSHIP_TAGS_ID,
+  resolveTrack,
+} from '../../../../shared/relationships';
+import {
+  dropToMove,
+  formatDeltaChange,
+  formatLastChange,
+  historyEntryClasses,
+  trackValueLabeller,
+} from '../row-display';
 
 describe('row display', () => {
   it('last-change formatter signs adjust amounts and describes set/add/remove', () => {
@@ -15,6 +27,23 @@ describe('row display', () => {
     );
     expect(formatLastChange({ delta: { op: 'remove', key: 'ally' }, dateLabel: at })).toBe(
       `− ally ${at}`,
+    );
+  });
+
+  it('resolves rung and option keys through a label resolver', () => {
+    const attitude = resolveTrack(ATTITUDE_ID, EMPTY_TRACK_LIBRARY)!;
+    const tags = resolveTrack(RELATIONSHIP_TAGS_ID, EMPTY_TRACK_LIBRARY)!;
+    expect(formatDeltaChange({ op: 'set', value: 'friendly' })).toBe('= friendly');
+    expect(formatDeltaChange({ op: 'set', value: 'friendly' }, trackValueLabeller(attitude))).toBe(
+      '= Friendly',
+    );
+    const label = trackValueLabeller(tags);
+    expect(formatDeltaChange({ op: 'add', key: 'business-partner' }, label)).toBe(
+      '+ business partner',
+    );
+    expect(formatDeltaChange({ op: 'remove', key: 'married' }, label)).toBe('− married');
+    expect(formatDeltaChange({ op: 'set', value: ['married', 'hates'] }, label)).toBe(
+      '= married, hates',
     );
   });
 

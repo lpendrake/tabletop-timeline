@@ -151,9 +151,3 @@
   background: var(--theme-accent);
   color: var(--theme-background);
 }
-
-.rel-match {
-  background: color-mix(in srgb, var(--theme-accent-gold) 35%, transparent);
-  color: inherit;
-  border-radius: 2px;
-}

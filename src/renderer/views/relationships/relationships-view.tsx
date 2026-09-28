@@ -1,7 +1,13 @@
+import { PlaceholderTabBody } from '../../relationships/components/placeholder-tab-body';
+import { Toolbar } from '../../relationships/components/toolbar';
+import { TopBar } from '../../relationships/components/top-bar';
 import { useRelationships } from '../../relationships/hooks/use-relationships';
 import { useRelationshipLibraryContext } from '../../relationships/library-context';
 import type { EntityIndexEntry } from '../../../types/global';
 import '../../relationships/components/relationships.css';
+import '../../relationships/components/top-bar.css';
+import '../../relationships/components/toolbar.css';
+import '../../relationships/components/placeholder-tab-body.css';
 
 export interface RelationshipsViewProps {
   campaignPath: string;
@@ -11,40 +17,43 @@ export interface RelationshipsViewProps {
   onOpenEvent: (filename: string) => void;
 }
 
-// Temporary: replaced by the #274 shell components in the next commit.
 export function RelationshipsView({
   campaignPath,
   entityLabelMap,
   getEntityIndex,
+  onOpenById,
+  onOpenEvent,
 }: RelationshipsViewProps) {
   const library = useRelationshipLibraryContext();
   const state = useRelationships({ campaignPath, library, entityLabelMap, getEntityIndex });
+  const { activeTrack } = state;
 
   return (
     <div className="rel-view">
-      <div role="tablist">
-        {state.tabs.map((tab) => (
-          <button
-            key={tab.trackId}
-            type="button"
-            role="tab"
-            aria-selected={tab.trackId === state.activeTrackId}
-            onClick={() => state.selectTab(tab.trackId)}
-          >
-            {tab.name}
-          </button>
-        ))}
-      </div>
-      {state.groups.map((group) => (
-        <div key={group.listKey}>
-          {state.groups.length > 1 && <div>{group.label}</div>}
-          <ul>
-            {group.rows.map((row) => (
-              <li key={row.key}>{row.label}</li>
-            ))}
-          </ul>
-        </div>
-      ))}
+      <TopBar
+        tabs={state.tabs}
+        activeTrackId={state.activeTrackId}
+        onSelectTab={state.selectTab}
+        asOfLabel={state.asOfLabel}
+        problems={state.problems}
+        entityIndex={state.entityIndex ?? []}
+        onOpenById={onOpenById}
+        onOpenEvent={onOpenEvent}
+      />
+      {activeTrack ? (
+        <>
+          <Toolbar {...state} />
+          <PlaceholderTabBody
+            {...state}
+            track={activeTrack}
+            emptyStateTrackName={activeTrack.name}
+            onOpenById={onOpenById}
+            onOpenEvent={onOpenEvent}
+          />
+        </>
+      ) : (
+        <div className="rel-empty">No relationship tracks are available.</div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 // TEMPORARY placeholder layout for #274. It will be fully removed and replaced by the per-kind layouts in #275–#278; do not build on it.
 import type { KeyboardEvent, MouseEvent } from 'react';
-import type { InvalidDirectiveEntry } from '../../../shared/relationships';
+import type { InvalidDirectiveEntry, ResolvedTrack } from '../../../shared/relationships';
 import type { EntityIndexEntry } from '../../../types/global';
 import { showContextMenu } from '../../shared/context-menu';
 import {
@@ -8,6 +8,8 @@ import {
   formatDeltaChange,
   formatLastChange,
   historyEntryClasses,
+  trackValueLabeller,
+  type ValueLabeller,
 } from '../domain/row-display';
 import { resolveStepOpenTarget } from '../domain/step-open-target';
 import { emptyStateParts } from '../domain/tabs';
@@ -26,6 +28,7 @@ export interface PlaceholderTabBodyProps {
   query: string;
   emptyMessage: string | null;
   emptyStateTrackName: string;
+  track: ResolvedTrack;
   trackProblems: InvalidDirectiveEntry[];
   toggleRow: (listKey: string, observerId: string) => void;
   toggleGroup: (holderId: string) => void;
@@ -74,12 +77,13 @@ function openMoveMenu(
 
 function EntryItem(props: {
   entry: HistoryEntry;
+  label: ValueLabeller;
   query: string;
   entityIndex: EntityIndexEntry[] | null;
   onOpenById: (id: string) => void;
   onOpenEvent: (filename: string) => void;
 }) {
-  const { entry, query, entityIndex, onOpenById, onOpenEvent } = props;
+  const { entry, label, query, entityIndex, onOpenById, onOpenEvent } = props;
   const openTitle = (e: MouseEvent) => {
     e.stopPropagation();
     const target = resolveStepOpenTarget(entry.delta.declaredIn.path, entityIndex ?? []);
@@ -90,7 +94,7 @@ function EntryItem(props: {
     <li className={historyEntryClasses(entry)}>
       <span className="rel-entry-date">{entry.dateLabel}</span>
       <span className="rel-entry-change">
-        {formatDeltaChange(entry.delta)} → {entry.runningFormatted}
+        {formatDeltaChange(entry.delta, label)} → {entry.runningFormatted}
       </span>
       {entry.eventTitle && (
         <span className="rel-entry-event" onClick={openTitle}>
@@ -110,6 +114,7 @@ function EntryItem(props: {
 function Row(
   props: DragProps & {
     row: ViewRow;
+    label: ValueLabeller;
     isFirst: boolean;
     isLast: boolean;
     query: string;
@@ -167,7 +172,7 @@ function Row(
           {row.stateLabel}
         </span>
         <span className="rel-row-last">
-          {row.lastChange ? formatLastChange(row.lastChange) : ''}
+          {row.lastChange ? formatLastChange(row.lastChange, props.label) : ''}
         </span>
         <span className="rel-row-count">{row.entryCount}</span>
         <span className="rel-chevron" aria-hidden="true">
@@ -180,6 +185,7 @@ function Row(
             <EntryItem
               key={entry.key}
               entry={entry}
+              label={props.label}
               query={query}
               entityIndex={props.entityIndex}
               onOpenById={props.onOpenById}
@@ -257,6 +263,7 @@ export function PlaceholderTabBody(props: PlaceholderTabBodyProps) {
   const { groups, groupsListKey, canDrag, query, trackProblems } = props;
   const hasRows = groups.some((g) => g.rows.length > 0);
   const multiple = groups.length > 1;
+  const label = trackValueLabeller(props.track);
 
   return (
     <div className="rel-placeholder-body">
@@ -282,6 +289,7 @@ export function PlaceholderTabBody(props: PlaceholderTabBodyProps) {
               <Row
                 key={row.key}
                 row={row}
+                label={label}
                 canDrag={canDrag}
                 moveRow={props.moveRow}
                 isFirst={ri === 0}

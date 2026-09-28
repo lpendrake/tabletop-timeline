@@ -42,3 +42,9 @@
   cursor: pointer;
   color: var(--theme-link);
 }
+
+.rel-match {
+  background: color-mix(in srgb, var(--theme-accent-gold) 35%, transparent);
+  color: inherit;
+  border-radius: 2px;
+}
