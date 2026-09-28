@@ -124,10 +124,15 @@ export function useRelationshipEditorConfig(
   };
 
   const activePath = currentPath();
-  const externalSetConflicts =
-    opts.place === 'note'
-      ? externalSetConflictEntries(undatedSets, activePath, opts.entityIndex)
-      : undefined;
+  // Memoised so the directive config (and the effect it pushes into the
+  // editor) only changes when the sets, the open note or the index do.
+  const externalSetConflicts = useMemo(
+    () =>
+      opts.place === 'note'
+        ? externalSetConflictEntries(undatedSets, activePath, opts.entityIndex)
+        : undefined,
+    [opts.place, undatedSets, activePath, opts.entityIndex],
+  );
 
   const relationshipDirectives = useMemo(() => {
     const heldTags = makeHeldTagsResolver({

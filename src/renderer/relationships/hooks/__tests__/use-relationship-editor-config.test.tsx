@@ -91,9 +91,13 @@ let lastExternalSetConflicts:
   | Array<{ trackId: string; holder: string; observer: string; path: string; title?: string }>
   | undefined;
 
+const NOTE_INDEX = [
+  { id: 'n1', path: 'notes/other.md', title: 'The Party', type: 'note' as const },
+];
+
 function NoteHost({ currentPath }: { currentPath: string }) {
   const { relationshipDirectives } = useRelationshipEditorConfig({
-    entityIndex: [{ id: 'n1', path: 'notes/other.md', title: 'The Party', type: 'note' }],
+    entityIndex: NOTE_INDEX,
     defaultReason: 'Unspecified',
     place: 'note',
     currentPath: () => currentPath,
@@ -122,6 +126,17 @@ describe('useRelationshipEditorConfig undated-Set conflicts (note editors only)'
         title: 'The Party',
       },
     ]);
+  });
+
+  it('keeps the same conflicts array across re-renders when nothing changed', async () => {
+    state.undatedSets = [
+      { trackId: 'rp01', holder: 'a1b2', observer: 'c3d4', path: 'notes/other.md' },
+    ];
+    act(() => root.render(<NoteHost currentPath="notes/this.md" />));
+    await flush();
+    const first = lastExternalSetConflicts;
+    act(() => root.render(<NoteHost currentPath="notes/this.md" />));
+    expect(lastExternalSetConflicts).toBe(first);
   });
 
   it('refreshes when relationships change elsewhere (relationshipsData.onChanged)', async () => {
