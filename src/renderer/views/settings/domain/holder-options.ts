@@ -1,5 +1,5 @@
 import type { EntityIndexEntry } from '../../../../types/global';
-import { resolveEntityLabel } from '../../../relationships/domain/label-for';
+import { resolveEntityLabel } from '../../../relationships/domain/entity-picker-options';
 
 /** The current holder's display label, or null when unset. */
 export function holderLabel(

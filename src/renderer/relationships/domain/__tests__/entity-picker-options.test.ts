@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { resolveEntityLabel, UNKNOWN_ENTITY_LABEL } from '../label-for';
+import {
+  notesToPickerOptions,
+  resolveEntityLabel,
+  UNKNOWN_ENTITY_LABEL,
+} from '../entity-picker-options';
 import type { EntityIndexEntry } from '../../../../types/global';
 
 function entry(
@@ -8,7 +12,26 @@ function entry(
   return { path: `notes/${partial.id}.md`, title: partial.id, type: 'note', ...partial };
 }
 
-describe('labels never show raw ids', () => {
+describe('notesToPickerOptions', () => {
+  it('keeps only notes, mapping to picker options with the effective label', () => {
+    const entityIndex: EntityIndexEntry[] = [
+      { id: 'n1', path: 'notes/a.md', title: 'Alpha', type: 'note' },
+      { id: 'e1', path: 'timeline/e.md', title: 'Event', type: 'event' },
+      { id: 'n2', path: 'notes/b.md', title: 'Beta', type: 'note', linkLabelOverride: 'B' },
+    ];
+
+    expect(notesToPickerOptions(entityIndex)).toEqual([
+      { id: 'n1', path: 'notes/a.md', label: 'Alpha' },
+      { id: 'n2', path: 'notes/b.md', label: 'B' },
+    ]);
+  });
+
+  it('returns an empty array when there are no notes', () => {
+    expect(notesToPickerOptions([])).toEqual([]);
+  });
+});
+
+describe('resolveEntityLabel — labels never show raw ids', () => {
   it('prefers the entity label map', () => {
     const map = new Map([['aaaa', 'Zara']]);
     expect(resolveEntityLabel('aaaa', map, [])).toBe('Zara');

@@ -62,6 +62,8 @@ Functions defined this way close over state and become untestable without mounti
 - Non-React IO logic belongs as a named `.ts` file alongside `data.ts`
 - The hook body wires those up to React state — it does not contain the logic itself
 
+Group pure helpers by feature, not one function per file. A `domain/` module should hold everything about one concept (e.g. `domain/row-state.ts` with keys, toggles and expand state together). A new file is justified by a distinct concept, not by a new function. Small helpers used by one module stay in that module.
+
 ## Theme system
 
 Never hardcode colours. Every colour comes from the theme system — see `src/renderer/theme/AGENTS.md`. A new token needs a value in every core theme.

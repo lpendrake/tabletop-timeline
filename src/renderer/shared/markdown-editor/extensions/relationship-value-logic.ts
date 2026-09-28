@@ -91,9 +91,25 @@ export function filterHeldOptions(
   return options.filter((o) => held.has(o.id));
 }
 
-/** Whether picking a note for `role` should notify the host it chose a holder before any default holder was set. */
-export function shouldNotifyHolderChosen(role: Role, defaultHolderId: string | null): boolean {
-  return role === 'holder' && !defaultHolderId;
+/** Union of held tag keys across every observer in a Remove's `heldTags` lookup — the tag-first step's query. */
+export function unionHeldTags(byObserver: ReadonlyMap<string, string[]>): string[] {
+  const keys = new Set<string>();
+  for (const held of byObserver.values()) {
+    for (const key of held) keys.add(key);
+  }
+  return [...keys];
+}
+
+/** Observer ids (from a Remove's `heldTags` lookup) whose held tags include `tag` — the observer step's query. */
+export function observersHoldingTag(
+  byObserver: ReadonlyMap<string, string[]>,
+  tag: string,
+): string[] {
+  const ids: string[] = [];
+  for (const [observer, held] of byObserver) {
+    if (held.includes(tag)) ids.push(observer);
+  }
+  return ids;
 }
 
 /** Recent note ids for a holder/observer picker: `currentNoteId` pinned to the front if not already present. */

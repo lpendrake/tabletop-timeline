@@ -65,4 +65,8 @@ export { buildViewOrder, hydrateViewOrder } from './build-view-order';
 
 export { withoutPaths } from './directives-cache';
 
-export { resolveEntityLabel, UNKNOWN_ENTITY_LABEL } from './label-for';
+export {
+  resolveEntityLabel,
+  UNKNOWN_ENTITY_LABEL,
+  notesToPickerOptions,
+} from './entity-picker-options';

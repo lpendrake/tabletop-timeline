@@ -6,7 +6,8 @@ import {
   shouldOfferCreateOption,
   allowsCreateOption,
   filterHeldOptions,
-  shouldNotifyHolderChosen,
+  unionHeldTags,
+  observersHoldingTag,
   buildNotePickerRecents,
   rankNoteOptions,
   noteChoices,
@@ -65,11 +66,24 @@ describe('option create-row + held-options filtering (pure)', () => {
   });
 });
 
-describe('shouldNotifyHolderChosen (pure)', () => {
-  it('only notifies for the holder role, and only when no default holder is set', () => {
-    expect(shouldNotifyHolderChosen('holder', null)).toBe(true);
-    expect(shouldNotifyHolderChosen('holder', 'c3d4')).toBe(false);
-    expect(shouldNotifyHolderChosen('observer', null)).toBe(false);
+describe('unionHeldTags / observersHoldingTag (pure)', () => {
+  const byObserver = new Map([
+    ['oaaa', ['member', 'married']],
+    ['obbb', ['hates']],
+  ]);
+
+  it('unions held tags across every observer', () => {
+    expect(unionHeldTags(byObserver).sort()).toEqual(['hates', 'married', 'member']);
+  });
+
+  it('an empty map unions to nothing', () => {
+    expect(unionHeldTags(new Map())).toEqual([]);
+  });
+
+  it('returns only the observers holding the given tag', () => {
+    expect(observersHoldingTag(byObserver, 'member')).toEqual(['oaaa']);
+    expect(observersHoldingTag(byObserver, 'hates')).toEqual(['obbb']);
+    expect(observersHoldingTag(byObserver, 'nope')).toEqual([]);
   });
 });
 
