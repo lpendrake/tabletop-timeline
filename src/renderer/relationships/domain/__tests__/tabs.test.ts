@@ -1,7 +1,34 @@
 import { describe, it, expect } from 'vitest';
 import type { Ledger } from '../../../../shared/relationships/model';
 import { EMPTY_TRACK_LIBRARY } from '../../../../shared/relationships/registry';
-import { buildTabs, emptyStateText, resolveActiveTab, tabMeta } from '../tabs';
+import {
+  buildTabs,
+  emptyStateText,
+  nextTabIndex,
+  problemsLabel,
+  resolveActiveTab,
+  tabMeta,
+} from '../tabs';
+
+describe('nextTabIndex', () => {
+  it('nextTabIndex wraps', () => {
+    expect(nextTabIndex(0, 3, 'ArrowRight')).toBe(1);
+    expect(nextTabIndex(2, 3, 'ArrowRight')).toBe(0);
+    expect(nextTabIndex(0, 3, 'ArrowLeft')).toBe(2);
+    expect(nextTabIndex(1, 3, 'ArrowLeft')).toBe(0);
+    expect(nextTabIndex(1, 3, 'Home')).toBe(0);
+    expect(nextTabIndex(0, 3, 'End')).toBe(2);
+    expect(nextTabIndex(0, 3, 'x')).toBeNull();
+    expect(nextTabIndex(0, 0, 'ArrowRight')).toBeNull();
+  });
+});
+
+describe('problemsLabel', () => {
+  it('pluralises', () => {
+    expect(problemsLabel(1)).toBe('1 problem');
+    expect(problemsLabel(3)).toBe('3 problems');
+  });
+});
 
 const ledger = (track: string, holder = 'h', observer = 'o'): Ledger => ({
   holder,

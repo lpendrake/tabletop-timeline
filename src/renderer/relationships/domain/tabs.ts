@@ -82,3 +82,28 @@ export function resolveActiveTab(
 export function problemCount(invalid: readonly unknown[]): number {
   return invalid.length;
 }
+
+/**
+ * Index of the tab to move to for a tablist key: Left/Right wrap around,
+ * Home/End jump to the ends. Returns null for any other key or an empty list.
+ */
+export function nextTabIndex(current: number, count: number, key: string): number | null {
+  if (count <= 0) return null;
+  switch (key) {
+    case 'ArrowRight':
+      return (current + 1) % count;
+    case 'ArrowLeft':
+      return (current - 1 + count) % count;
+    case 'Home':
+      return 0;
+    case 'End':
+      return count - 1;
+    default:
+      return null;
+  }
+}
+
+/** Problems-badge text: `"1 problem"` / `"3 problems"`. */
+export function problemsLabel(count: number): string {
+  return `${count} ${count === 1 ? 'problem' : 'problems'}`;
+}
