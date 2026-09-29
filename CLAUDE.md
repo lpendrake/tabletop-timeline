@@ -64,6 +64,22 @@ Functions defined this way close over state and become untestable without mounti
 
 Group pure helpers by feature, not one function per file. A `domain/` module should hold everything about one concept (e.g. `domain/row-state.ts` with keys, toggles and expand state together). A new file is justified by a distinct concept, not by a new function. Small helpers used by one module stay in that module.
 
+## Writing code
+
+- **Work with the frameworks.** If a requirement forces you to fight CodeMirror, React, the DOM, Electron or markdown (manual focus or positioning, reimplementing a built-in, workarounds for browser limits), stop and tell the user before building it, with the cheaper alternative. Don't silently absorb the cost.
+- **Reuse before writing.** Search for an existing helper (ranking, parsing, validation, positioning, label resolution) and export it rather than copy it. Logic needed by both main and renderer lives once in `src/shared/`.
+- **One source of truth.** Shared constants and types instead of repeated literals.
+- **Safeguards apply by default.** A guard or check applies to everything unless explicitly exempted, not only to code that remembers to opt in.
+- **No speculative code.** No unused props, options or escape hatches, and no "backwards compatibility" for unreleased code. When replacing an approach, delete what it leaves behind.
+- **Comments describe current behaviour**, not history. History belongs in commit messages and PR descriptions.
+- **Verify, don't assume.** Reproduce a bug with a test before fixing it. Measure before quoting numbers.
+
+## Product principles
+
+- Note and event files must stay readable without the app.
+- Flexibility for any RPG is the goal. Generic, user-configurable engines are intended.
+- Entity IDs never change once set.
+
 ## Theme system
 
 Never hardcode colours. Every colour comes from the theme system — see `src/renderer/theme/AGENTS.md`. A new token needs a value in every core theme.
