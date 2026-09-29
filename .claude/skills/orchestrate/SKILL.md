@@ -35,7 +35,11 @@ Before planning anything, build a complete picture.
    agents for their own sake.
 3. **Identify the AGENTS.md and CLAUDE.md rules** that apply. Your
    sub-agents won't read these unless you tell them to.
-4. **Ask the user** if anything is ambiguous. Do this now, not after
+4. **Check the design against the frameworks.** If a requirement will
+   force agents to fight CodeMirror, React, the DOM or markdown, raise
+   it with the user now, with a cheaper alternative (see CLAUDE.md
+   *Writing code*).
+5. **Ask the user** if anything is ambiguous. Do this now, not after
    you've spun up six agents.
 
 ## Phase 2: Plan
@@ -131,6 +135,10 @@ Agent({
   user-facing change (see CLAUDE.md Git etiquette). Instruct the
   agent to squash its work into a single commit before finishing.
 - Any patterns to follow (point at existing code as examples)
+- Existing helpers to reuse, and an instruction to search for one
+  before writing any new helper
+- An instruction to stop and report, not work around it, if the task
+  turns out to fight the framework
 
 **For tasks that produce testable code**, include a test scenario
 table. The orchestrator has cross-cutting context that the agent
@@ -184,6 +192,9 @@ Read the key files the agent created/modified. Check for:
 - **Quality** — is it clear, concise, well-structured?
 - **De-duplication** — repeated logic that should be a shared helper, hook, or component.
 - **Meaningful tests** — tests exercise behaviour and edge cases, not just mirror the implementation.
+- **Reimplemented logic** — a new helper that duplicates one elsewhere in the repo.
+- **Dead or speculative code** — unused props or options, leftovers from a replaced approach, comments narrating history.
+- **Size vs. job** — a diff far larger than the task suggests the design is fighting a framework; find out why before approving.
 
 ### Decide
 
