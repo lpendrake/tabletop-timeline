@@ -6,6 +6,7 @@ import {
   resolveTrack,
 } from '../../../../shared/relationships';
 import {
+  dropIndicatorClass,
   dropToMove,
   formatDeltaChange,
   formatLastChange,
@@ -56,5 +57,11 @@ describe('row display', () => {
   it('turns a drop position into a row move', () => {
     expect(dropToMove('before', 'x')).toEqual({ before: 'x' });
     expect(dropToMove('after', 'x')).toEqual({ after: 'x' });
+  });
+
+  it('maps a drag indicator to its class suffix', () => {
+    expect(dropIndicatorClass(null)).toBe('');
+    expect(dropIndicatorClass('before')).toBe(' drop-before');
+    expect(dropIndicatorClass('after')).toBe(' drop-after');
   });
 });

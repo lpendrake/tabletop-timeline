@@ -1,6 +1,13 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { DragEvent } from 'react';
-import { canDrop, dropPosition, type DropTarget, type RowDragPayload } from '../domain';
+import {
+  canDrop,
+  dropPosition,
+  type DropTarget,
+  type MoveRow,
+  type RowDragPayload,
+} from '../domain';
+import { dropToMove } from '../domain/row-display';
 
 /**
  * Native HTML5 drag-and-drop for reordering a row within its list (a holder's
@@ -107,4 +114,11 @@ export function useRowDrag(
     onDragLeave: handleDragLeave,
     onDrop: handleDrop,
   };
+}
+
+/** `useRowDrag` for a row in `listKey`: a drop on it moves the dragged row before/after it. */
+export function useRowReorder(listKey: string, id: string, moveRow: MoveRow): UseRowDragResult {
+  return useRowDrag({ listKey, id }, (dragged, position, targetId) =>
+    moveRow(listKey, dragged.id, dropToMove(position, targetId)),
+  );
 }

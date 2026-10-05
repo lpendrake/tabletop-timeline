@@ -1,7 +1,7 @@
 export type { StepOpenTarget } from './step-open-target';
 export { resolveStepOpenTarget } from './step-open-target';
 
-export type { ViewOrder, RowMove, RowDragPayload, DropTarget } from './view-order';
+export type { ViewOrder, RowMove, MoveRow, RowDragPayload, DropTarget } from './view-order';
 export {
   rowListKey,
   groupListKey,

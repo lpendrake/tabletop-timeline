@@ -193,6 +193,9 @@ export function moveAfter(visible: readonly string[], id: string, targetId: stri
 /** A move requested by the UI (context menu or drag-and-drop). */
 export type RowMove = 'top' | 'up' | 'down' | { before: string } | { after: string };
 
+/** Requests moving row `id` within the list identified by `listKey`. */
+export type MoveRow = (listKey: string, id: string, to: RowMove) => void;
+
 /** Applies a `RowMove` to a visible order list. */
 export function applyRowMove(visible: readonly string[], id: string, to: RowMove): string[] {
   if (to === 'top') return moveToTop(visible, id);

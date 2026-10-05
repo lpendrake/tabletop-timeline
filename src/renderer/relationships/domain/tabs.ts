@@ -4,6 +4,8 @@
 import type { Ledger } from '../../../shared/relationships/model';
 import type { TrackKind } from '../../../shared/relationships/spec';
 import { listTracks, type TrackLibrary } from '../../../shared/relationships/registry';
+import { tokenise } from './search';
+import type { ViewGroup } from './view-rows';
 
 export interface TrackTab {
   trackId: string;
@@ -64,6 +66,23 @@ export function emptyStateParts(trackName: string): [string, string, string] {
 /** The empty-state sentence as plain text. */
 export function emptyStateText(trackName: string): string {
   return emptyStateParts(trackName).join('');
+}
+
+export type TabBodyNotice = { kind: 'empty-track' } | { kind: 'no-match'; message: string } | null;
+
+/**
+ * What a tab body shows in place of rows: the empty-track hint when no row exists
+ * and nothing is searched, the no-match message when a search matches nothing, or
+ * nothing when any group has rows.
+ */
+export function tabBodyNotice(
+  groups: readonly ViewGroup[],
+  query: string,
+  emptyMessage: string | null,
+): TabBodyNotice {
+  if (groups.some((g) => g.rows.length > 0)) return null;
+  if (tokenise(query).length === 0) return { kind: 'empty-track' };
+  return { kind: 'no-match', message: emptyMessage ?? '' };
 }
 
 /** The saved tab if still present, else the first tab, else null. */

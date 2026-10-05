@@ -3,7 +3,6 @@ import {
   computeSessionBandsFromSessions,
   computeSessionLabel,
   computeSessionPills,
-  computeTooltipPosition,
   formatRealRange,
   formatGameRange,
   RAIL_H,
@@ -400,30 +399,6 @@ describe('computeSessionPills', () => {
     bands[0].color = '#000000'; // mutate band color — should not win
     const [pill] = computeSessionPills(bands, [s], makeView(), SIZE);
     expect(pill.color).toBe('#deadbe');
-  });
-});
-
-// ---- computeTooltipPosition ----
-
-describe('computeTooltipPosition', () => {
-  it('returns pill.left as-is when it fits in the viewport', () => {
-    const pos = computeTooltipPosition({ left: 100, top: 400 }, 1200, 600);
-    expect(pos.left).toBe(100);
-  });
-
-  it('clamps left so tooltip does not overflow viewport right edge', () => {
-    const pos = computeTooltipPosition({ left: 1150, top: 400 }, 1200, 600);
-    expect(pos.left).toBe(1200 - 360 - 8);
-  });
-
-  it('clamps left to 8 when pill is near the left edge', () => {
-    const pos = computeTooltipPosition({ left: 4, top: 400 }, 1200, 600);
-    expect(pos.left).toBe(8);
-  });
-
-  it('places tooltip bottom edge 6px above pill top', () => {
-    const pos = computeTooltipPosition({ left: 100, top: 400 }, 1200, 600);
-    expect(pos.bottom).toBe(600 - 400 + 6);
   });
 });
 

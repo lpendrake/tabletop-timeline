@@ -24,14 +24,8 @@ export interface SessionPillLayout {
   rightFlat: boolean;
 }
 
-export interface TooltipPosition {
-  left: number;
-  bottom: number;
-}
-
 export const RAIL_H = 24;
 export const RAIL_OFFSET = 34;
-export const TOOLTIP_MAX_W = 360;
 const MIN_PILL_W = 12;
 const LABEL_MIN_W = 60;
 import { ThemeProvider } from '../../theme';
@@ -164,18 +158,6 @@ export function formatGameRange(inGameStart: string, inGameEnd: string): string 
   } catch {
     return inGameStart;
   }
-}
-
-/** Computes tooltip (left, bottom) from a pill's bounding rect + viewport dims. Pure. */
-export function computeTooltipPosition(
-  pillRect: { left: number; top: number },
-  viewportWidth: number,
-  viewportHeight: number,
-): TooltipPosition {
-  let left = pillRect.left;
-  if (left + TOOLTIP_MAX_W > viewportWidth - 8) left = viewportWidth - TOOLTIP_MAX_W - 8;
-  if (left < 8) left = 8;
-  return { left, bottom: viewportHeight - pillRect.top + 6 };
 }
 
 export function computeSessionPills(

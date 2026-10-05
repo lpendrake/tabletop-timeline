@@ -54,6 +54,11 @@ export function dropToMove(
   return position === 'before' ? { before: targetId } : { after: targetId };
 }
 
+/** Class suffix marking the insertion edge of a row being dragged over: `''`, `' drop-before'` or `' drop-after'`. */
+export function dropIndicatorClass(indicator: 'before' | 'after' | null): string {
+  return indicator ? ` drop-${indicator}` : '';
+}
+
 /** CSS classes for a history entry (search tint/dim, future fade). */
 export function historyEntryClasses(entry: Pick<HistoryEntry, 'hit' | 'applied'>): string {
   const classes = ['rel-entry'];
