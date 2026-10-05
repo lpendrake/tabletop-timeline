@@ -1,3 +1,4 @@
+import { NumericTab } from '../../relationships/components/numeric-tab/numeric-tab';
 import { PlaceholderTabBody } from '../../relationships/components/placeholder-tab-body';
 import { Toolbar } from '../../relationships/components/toolbar';
 import { TopBar } from '../../relationships/components/top-bar';
@@ -40,7 +41,14 @@ export function RelationshipsView({
         onOpenById={onOpenById}
         onOpenEvent={onOpenEvent}
       />
-      {activeTrack ? (
+      {activeTrack?.kind === 'numeric' ? (
+        <NumericTab
+          {...state}
+          track={activeTrack}
+          toolbar={<Toolbar {...state} />}
+          onOpenById={onOpenById}
+        />
+      ) : activeTrack ? (
         <>
           <Toolbar {...state} />
           <PlaceholderTabBody

@@ -4,16 +4,26 @@ The Relationships view shows relationship values derived from directives, one ta
 
 ## Tab architecture
 
-`views/relationships/relationships-view.tsx` composes:
+`views/relationships/relationships-view.tsx` builds the toolbar and passes it to the active tab's layout, which places it. The view also composes:
 - `components/top-bar.tsx` — tabs, as-of date, problems badge
-- `components/toolbar.tsx` — Holder/Toward picker built on `shared/searchable-picker`, scoped search, sort
-- active tab's body
+
+The toolbar (`components/toolbar.tsx`) holds the Holder/Toward picker built on `shared/searchable-picker`, scoped search, and sort. The numeric tab places the toolbar in its sticky header; the placeholder layout renders it above the body.
 
 State comes from `hooks/use-relationships.ts`, which only wires pure `domain/` functions to React.
 
 ## Layout by kind
 
-Numeric, ordinal and categorical tab bodies arrive in #275–#278 as `components/<kind>-tab/`; until then `components/placeholder-tab-body.tsx` is temporary and will be removed.
+- Numeric tabs: `components/numeric-tab/` — a sticky header (the toolbar slot plus column and axis labels), one row per relationship, and a plot on an axis shared by every row of the tab; expanded rows show a placeholder line until history arrives
+- Ordinal and categorical tabs: `components/placeholder-tab-body.tsx` is temporary and serves only these until #276–#278 add `components/<kind>-tab/`; it will then be removed
+- `relationships-view.tsx` picks the layout from the active track's `kind`
+
+Shared building blocks every tab layout reuses, instead of re-implementing:
+- `components/row-controls.tsx` — drag handle, drop-target props, row move menu, Enter/Space activation
+- `components/group-header.tsx` — collapsible holder header with its own reorder
+- `components/tab-notices.tsx` — empty-state and nothing-matches notice, track problems list
+- `hooks/use-row-drag.ts` (`useRowReorder`) — drag-and-drop reorder for a row or group
+- `hooks/use-plot-tooltip.ts` — tooltip positioning for plot mouseovers
+- `src/renderer/shared/tooltip-position.ts` — tooltip placement
 
 ## Files to read first, in order
 
@@ -22,6 +32,8 @@ Numeric, ordinal and categorical tab bodies arrive in #275–#278 as `components
 3. `domain/view-order.ts`
 4. `hooks/use-relationships.ts`
 5. `domain/scale-colour.ts`
+6. `domain/plot-scale.ts`
+7. `domain/numeric-rows.ts`
 
 ## Rules
 
