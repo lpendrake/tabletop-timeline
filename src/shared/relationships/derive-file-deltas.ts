@@ -102,17 +102,6 @@ export function deltasForFile(file: FileToInterpret, ctx: DeriveFileDeltasContex
       if (noteId !== null) referencedNoteIds.add(noteId);
     }
 
-    if (noDate) {
-      invalid.push({
-        path,
-        ordinal: d.ordinal,
-        from: d.from,
-        to: d.to,
-        messages: ['Event has no date'],
-      });
-      continue;
-    }
-
     const at = isEvent ? (epochSeconds as number) : null;
     const interpreted = interpretDirective(d, {
       resolveTrack: (id) => resolveTrack(id, library),
@@ -122,12 +111,26 @@ export function deltasForFile(file: FileToInterpret, ctx: DeriveFileDeltasContex
       undated: !isEvent,
     });
 
+    // An unfinished draft is never reported outside the editor — not even in an undated event.
     if (interpreted.status === 'unfinished') continue;
+
+    if (noDate) {
+      invalid.push({
+        path,
+        ordinal: d.ordinal,
+        trackId: d.trackId,
+        from: d.from,
+        to: d.to,
+        messages: ['Event has no date'],
+      });
+      continue;
+    }
 
     if (interpreted.status === 'invalid') {
       invalid.push({
         path,
         ordinal: d.ordinal,
+        trackId: d.trackId,
         from: d.from,
         to: d.to,
         messages: interpreted.problems.map((p) => p.message),

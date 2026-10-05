@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { rankMatch, compareRanked } from '../rank';
+import { rankMatch, compareRanked, matchRanges } from '../rank';
 
 describe('rankMatch', () => {
   it('prefix beats word-prefix beats substring', () => {
@@ -45,5 +45,19 @@ describe('compareRanked', () => {
     ];
     const sorted = [...items].sort(compareRanked);
     expect(sorted.map((i) => i.index)).toEqual([1, 3, 0, 2]);
+  });
+});
+
+describe('matchRanges', () => {
+  it('matchRanges finds case-insensitive substrings', () => {
+    expect(matchRanges('Vanguard', 'gua')).toEqual([[3, 6]]);
+    expect(matchRanges('Vanguard', '  VAN ')).toEqual([[0, 3]]);
+    expect(matchRanges('banana', 'an')).toEqual([
+      [1, 3],
+      [3, 5],
+    ]);
+    expect(matchRanges('Vanguard', 'zzz')).toEqual([]);
+    expect(matchRanges('Vanguard', '')).toEqual([]);
+    expect(matchRanges('Vanguard', '   ')).toEqual([]);
   });
 });

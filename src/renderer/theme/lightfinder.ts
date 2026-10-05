@@ -104,16 +104,10 @@ export const lightfinder: Theme = {
   },
 
   relationships: {
-    barTrack: '#d8c894',
-    barFill: '#8a5e10',
-    bandTick: '#8c7848',
-    rungInactive: '#7c6c48',
-    rungActive: '#3a6018',
-    chipBackground: '#f4e8c2',
-    chipText: '#1c160a',
-    chipMutualBorder: '#8c7848',
     rowHover: '#e8dcb4',
     dropIndicator: '#8a5e10',
-    stepSetBreak: '#8c7848',
+    scaleNegative: '#80281a',
+    scaleNeutral: '#7c6c48',
+    scalePositive: '#2f6a2a',
   },
 };

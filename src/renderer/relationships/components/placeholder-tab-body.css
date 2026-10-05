@@ -1,0 +1,150 @@
+.rel-placeholder-body {
+  display: flex;
+  flex-direction: column;
+  color: var(--theme-text-primary);
+}
+
+.rel-placeholder-body code {
+  color: var(--theme-accent-gold);
+}
+
+.rel-group-header,
+.rel-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 30px;
+  padding: 0 8px;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.rel-group-header {
+  font-weight: 700;
+  border-bottom: 1px solid var(--theme-border);
+}
+
+.rel-group-count {
+  font-weight: 400;
+  color: var(--theme-text-muted);
+}
+
+.rel-row:hover,
+.rel-group-header:hover {
+  background: var(--theme-relationships-row-hover);
+}
+
+.rel-row-wrap,
+.rel-group-header {
+  position: relative;
+}
+
+.rel-row-wrap.drop-before::before,
+.rel-row-wrap.drop-after::after,
+.rel-group-header.drop-before::before,
+.rel-group-header.drop-after::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--theme-relationships-drop-indicator);
+  pointer-events: none;
+}
+
+.drop-before::before {
+  top: 0;
+}
+
+.drop-after::after {
+  bottom: 0;
+}
+
+.rel-row.is-future {
+  opacity: 0.5;
+}
+
+.rel-row-name {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.rel-row-value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  min-width: 48px;
+  text-align: right;
+}
+
+.rel-row-state {
+  min-width: 90px;
+}
+
+.rel-row-last,
+.rel-row-count,
+.rel-chevron {
+  color: var(--theme-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.rel-row-last {
+  min-width: 140px;
+}
+
+.rel-entries {
+  list-style: none;
+  margin: 0;
+  padding: 2px 0 6px 40px;
+}
+
+.rel-entry {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.rel-entry.is-hit {
+  background: color-mix(in srgb, var(--theme-accent-gold) 18%, transparent);
+}
+
+.rel-entry.is-dim {
+  opacity: 0.45;
+}
+
+.rel-entry.is-future {
+  opacity: 0.55;
+}
+
+.rel-entry-date,
+.rel-entry-reason,
+.rel-entry-mirrored {
+  color: var(--theme-text-muted);
+}
+
+.rel-entry-change {
+  font-variant-numeric: tabular-nums;
+}
+
+.rel-entry-event {
+  color: var(--theme-link);
+  cursor: pointer;
+}
+
+.rel-problems {
+  margin-top: 16px;
+  padding-top: 8px;
+  border-top: 1px solid var(--theme-border);
+  color: var(--theme-warning);
+}
+
+.rel-problems-title {
+  margin: 0 0 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.rel-problem-file {
+  color: var(--theme-text-muted);
+}

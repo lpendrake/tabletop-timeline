@@ -58,6 +58,27 @@ function rankOne(lowerText: string, lowerQuery: string): MatchRank | null {
 }
 
 /**
+ * Ranges `[start, end)` (indices into `text`) of every non-overlapping,
+ * case-insensitive occurrence of the trimmed `query` in `text`, in order.
+ * An empty (or whitespace-only) query returns `[]`.
+ */
+export function matchRanges(text: string, query: string): Array<[number, number]> {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const lowerText = text.toLowerCase();
+  // toLowerCase can change length for a few characters; ranges would then be
+  // misaligned, so highlight nothing rather than the wrong text.
+  if (lowerText.length !== text.length) return [];
+  const ranges: Array<[number, number]> = [];
+  let index = lowerText.indexOf(q);
+  while (index !== -1) {
+    ranges.push([index, index + q.length]);
+    index = lowerText.indexOf(q, index + q.length);
+  }
+  return ranges;
+}
+
+/**
  * Sorts ranked candidates by rank (lower is better), keeping the original
  * input order for ties.
  */

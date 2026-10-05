@@ -86,17 +86,11 @@ export interface Theme {
   };
 
   relationships: {
-    barTrack: string;
-    barFill: string;
-    bandTick: string;
-    rungInactive: string;
-    rungActive: string;
-    chipBackground: string;
-    chipText: string;
-    chipMutualBorder: string;
     rowHover: string;
     dropIndicator: string;
-    stepSetBreak: string;
+    scaleNegative: string;
+    scaleNeutral: string;
+    scalePositive: string;
   };
 }
 

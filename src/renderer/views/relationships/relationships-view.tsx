@@ -1,10 +1,13 @@
-import { FooterPortal } from '../../components/footer-portal';
-import { FooterButton } from '../../components/footer-button';
+import { PlaceholderTabBody } from '../../relationships/components/placeholder-tab-body';
+import { Toolbar } from '../../relationships/components/toolbar';
+import { TopBar } from '../../relationships/components/top-bar';
 import { useRelationships } from '../../relationships/hooks/use-relationships';
-import { RelationshipsList } from '../../relationships/components/relationships-list';
 import { useRelationshipLibraryContext } from '../../relationships/library-context';
 import type { EntityIndexEntry } from '../../../types/global';
 import '../../relationships/components/relationships.css';
+import '../../relationships/components/top-bar.css';
+import '../../relationships/components/toolbar.css';
+import '../../relationships/components/placeholder-tab-body.css';
 
 export interface RelationshipsViewProps {
   campaignPath: string;
@@ -23,16 +26,34 @@ export function RelationshipsView({
 }: RelationshipsViewProps) {
   const library = useRelationshipLibraryContext();
   const state = useRelationships({ campaignPath, library, entityLabelMap, getEntityIndex });
+  const { activeTrack } = state;
 
   return (
     <div className="rel-view">
-      <RelationshipsList state={state} onOpenById={onOpenById} onOpenEvent={onOpenEvent} />
-
-      <FooterPortal slot="right">
-        <FooterButton onClick={state.toggleMode} title="Toggle grouping">
-          Group by {state.mode === 'holder' ? 'observer' : 'holder'}
-        </FooterButton>
-      </FooterPortal>
+      <TopBar
+        tabs={state.tabs}
+        activeTrackId={state.activeTrackId}
+        onSelectTab={state.selectTab}
+        asOfLabel={state.asOfLabel}
+        problems={state.problems}
+        entityIndex={state.entityIndex ?? []}
+        onOpenById={onOpenById}
+        onOpenEvent={onOpenEvent}
+      />
+      {activeTrack ? (
+        <>
+          <Toolbar {...state} />
+          <PlaceholderTabBody
+            {...state}
+            track={activeTrack}
+            emptyStateTrackName={activeTrack.name}
+            onOpenById={onOpenById}
+            onOpenEvent={onOpenEvent}
+          />
+        </>
+      ) : (
+        <div className="rel-empty">No relationship tracks are available.</div>
+      )}
     </div>
   );
 }

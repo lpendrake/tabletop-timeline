@@ -412,3 +412,127 @@ describe('undatedSets', () => {
     expect(store.undatedSets()).toHaveLength(0);
   });
 });
+
+describe('titles', () => {
+  it('titles() maps every indexed file to its title after rebuild', () => {
+    const store = newStore();
+    store.rebuild([
+      {
+        ...eventFile('timeline/e1.md', repChangeDirective(A, C, -2, 'x'), 1000),
+        title: 'H1 Title',
+      },
+      { ...eventFile('timeline/e2.md', 'no directives', 2000), title: 'Frontmatter Fallback' },
+      { ...noteFile('notes/n1.md', repSetDirective(A, C, 3, 'x')), title: 'Note One' },
+      { ...noteFile('notes/n2.md', 'plain prose'), title: 'Bare Note' },
+    ]);
+    expect(store.titles()).toEqual({
+      'timeline/e1.md': 'H1 Title',
+      'timeline/e2.md': 'Frontmatter Fallback',
+      'notes/n1.md': 'Note One',
+      'notes/n2.md': 'Bare Note',
+    });
+  });
+
+  it('a title-only edit updates titles() and reports titleChanged', () => {
+    const store = newStore();
+    const source = repSetDirective(A, C, 3, 'x');
+    store.rebuild([{ ...noteFile('notes/n1.md', source), title: 'Old' }]);
+    const result = store.updateFile({ ...noteFile('notes/n1.md', source), title: 'New' });
+    expect(result.titleChanged).toBe(true);
+    expect(store.titles()['notes/n1.md']).toBe('New');
+  });
+
+  it('saving without a title change reports titleChanged false', () => {
+    const store = newStore();
+    const source = repSetDirective(A, C, 3, 'x');
+    store.rebuild([noteFile('notes/n1.md', source)]);
+    expect(store.updateFile(noteFile('notes/n1.md', source)).titleChanged).toBe(false);
+  });
+
+  it('deleting a file removes its title', () => {
+    const store = newStore();
+    store.rebuild([noteFile('notes/n1.md', 'prose')]);
+    const result = store.removeFile('notes/n1.md');
+    expect(result.titleChanged).toBe(true);
+    expect(store.titles()).not.toHaveProperty('notes/n1.md');
+  });
+
+  it('renaming (remove old path + add new path) moves the title', () => {
+    const store = newStore();
+    store.rebuild([{ ...eventFile('timeline/old.md', 'prose', 1000), title: 'Battle' }]);
+    store.removeFile('timeline/old.md');
+    const added = store.updateFile({
+      ...eventFile('timeline/new.md', 'prose', 1000),
+      title: 'Battle',
+    });
+    expect(added.titleChanged).toBe(true);
+    expect(store.titles()).toEqual({ 'timeline/new.md': 'Battle' });
+  });
+
+  it('titles are cleared on close and rebuilt on reopen', () => {
+    const store = newStore();
+    store.rebuild([noteFile('notes/n1.md', 'prose')]);
+    store.clear();
+    expect(store.titles()).toEqual({});
+    store.rebuild([noteFile('notes/n2.md', 'prose')]);
+    expect(Object.keys(store.titles())).toEqual(['notes/n2.md']);
+  });
+});
+
+describe('invalid entries: unfinished drafts and trackId', () => {
+  const DRAFT =
+    '{{rp01.change Rep change: {amount:} {observer:[[a1b2]]} rep for {holder:} — {reason:}}}';
+
+  it('an unfinished draft in an undated event is not reported', () => {
+    const store = newStore();
+    store.rebuild([eventFile('timeline/e1.md', 'prose', null)]);
+    const before = store.invalid();
+    store.rebuild([eventFile('timeline/e1.md', `prose\n${DRAFT}`, null)]);
+    expect(store.invalid()).toEqual(before);
+  });
+
+  it("a finished directive in an undated event is still 'Event has no date'", () => {
+    const store = newStore();
+    store.rebuild([eventFile('timeline/e1.md', repChangeDirective(A, C, -2, 'x'), null)]);
+    expect(store.invalid()).toHaveLength(1);
+    expect(store.invalid()[0].messages).toEqual(['Event has no date']);
+  });
+
+  it('an unfinished draft in a dated event does not change the invalid count', () => {
+    const store = newStore();
+    store.rebuild([eventFile('timeline/e1.md', 'prose', 1000)]);
+    const before = store.invalid().length;
+    store.rebuild([eventFile('timeline/e1.md', `prose\n${DRAFT}`, 1000)]);
+    expect(store.invalid()).toHaveLength(before);
+  });
+
+  it('invalid entries carry trackId when the envelope parsed', () => {
+    const store = newStore();
+    const unknownAction = '{{rp01.bogus Something {holder:[[c3d4]]}}}';
+    const unknownNote = repChangeDirective(A, 'zzzz', -1, 'x');
+    store.rebuild([
+      eventFile('timeline/e1.md', `${unknownAction}\n${unknownNote}`, 1000),
+      noteFile('notes/n1.md', repSetDirective(A, C, 3, 'one')),
+      noteFile('notes/n2.md', repSetDirective(A, C, 4, 'two')),
+      eventFile('timeline/undated.md', repChangeDirective(A, C, -2, 'x'), null),
+    ]);
+    const entries = store.invalid();
+    const forPath = (p: string) => entries.filter((e) => e.path === p);
+    expect(forPath('timeline/e1.md').length).toBeGreaterThanOrEqual(2);
+    for (const e of forPath('timeline/e1.md')) expect(e.trackId).toBe('rp01');
+    expect(forPath('timeline/undated.md')[0].trackId).toBe('rp01');
+    expect(forPath('notes/n1.md')[0].trackId).toBe('rp01');
+    expect(forPath('notes/n2.md')[0].trackId).toBe('rp01');
+  });
+
+  it('parse errors without an envelope have no trackId', () => {
+    const store = newStore();
+    store.rebuild([eventFile('timeline/e1.md', '{{rp01.change never closed', 1000)]);
+    const entries = store.invalid();
+    expect(entries.length).toBeGreaterThan(0);
+    for (const e of entries) {
+      expect(e.trackId).toBeUndefined();
+      expect(e.ordinal).toBeUndefined();
+    }
+  });
+});

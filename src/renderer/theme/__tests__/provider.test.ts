@@ -74,11 +74,11 @@ describe('ThemeProvider — CSS vars', () => {
     expect(value).toBe(lightfinder.editor.directiveBackground);
   });
 
-  it('sets --theme-relationships-bar-track CSS variable', () => {
+  it('sets --theme-relationships-row-hover CSS variable', () => {
     ThemeProvider.setByName('lightfinder');
     const value = document.documentElement.style.getPropertyValue(
-      '--theme-relationships-bar-track',
+      '--theme-relationships-row-hover',
     );
-    expect(value).toBe(lightfinder.relationships.barTrack);
+    expect(value).toBe(lightfinder.relationships.rowHover);
   });
 });

@@ -11,6 +11,8 @@ export interface InvalidDirectiveEntry {
   path: string;
   /** Absent for a raw parse error, which isn't associated with a well-formed directive. */
   ordinal?: number;
+  /** The directive's envelope track id; absent when there is no parsed envelope (raw parse error). */
+  trackId?: string;
   from: number;
   to: number;
   messages: string[];

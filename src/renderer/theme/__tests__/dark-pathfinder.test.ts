@@ -47,4 +47,10 @@ describe('darkPathfinder', () => {
       value: '',
     });
   });
+
+  it('defines the relationship scale tokens from danger, muted text and success', () => {
+    expect(darkPathfinder.relationships.scaleNegative).toBe(darkPathfinder.chrome.danger);
+    expect(darkPathfinder.relationships.scaleNeutral).toBe(darkPathfinder.chrome.textMuted);
+    expect(darkPathfinder.relationships.scalePositive).toBe(darkPathfinder.bootstrap.success);
+  });
 });
