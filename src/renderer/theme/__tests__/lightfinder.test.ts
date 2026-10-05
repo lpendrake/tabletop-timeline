@@ -43,4 +43,10 @@ describe('lightfinder', () => {
       value: '',
     });
   });
+
+  it('defines the relationship scale tokens from danger, muted text and success', () => {
+    expect(lightfinder.relationships.scaleNegative).toBe(lightfinder.chrome.danger);
+    expect(lightfinder.relationships.scaleNeutral).toBe(lightfinder.chrome.textMuted);
+    expect(lightfinder.relationships.scalePositive).toBe(lightfinder.bootstrap.success);
+  });
 });

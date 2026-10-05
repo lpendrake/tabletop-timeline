@@ -2,10 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   InvalidDirectiveEntry,
   Ledger,
-  ParsedDirective,
+  ResolvedTrack,
   TrackLibrary,
 } from '../../../shared/relationships';
-import { listTracks, resolveTrack } from '../../../shared/relationships';
+import { resolveTrack } from '../../../shared/relationships';
 import type { EntityIndexEntry } from '../../../types/global';
 import { timelinePort } from '../../timeline/data/ports';
 import { CalendarProvider } from '../../timeline/calendar/provider';
@@ -14,34 +14,43 @@ import { relationshipsData } from '../data';
 import { viewOrderData } from '../view-order-data';
 import { createSaveQueue } from '../view-order-save-queue';
 import {
-  applyViewOrderToRows,
-  buildViewOrder,
-  groupRelationships,
-  hydrateViewOrder,
-  innerRowStateKey,
-  moveAfter,
-  moveBefore,
-  moveDown,
-  moveToTop,
-  moveUp,
-  outerRowStateKey,
-  pathsNeededForExpandedTracks,
+  loadSelectedHolder,
+  loadSelectedTab,
+  saveSelectedHolder,
+  saveSelectedTab,
+} from '../view-state-persistence';
+import {
+  asOfLabelFor,
+  buildBaseRows,
+  buildHolderPicker,
+  buildTabs,
+  countLabel,
+  defaultViewOrder,
+  deriveView,
+  EMPTY_HOLDER_PICKER,
+  emptyMessage,
+  enabledScopesFor,
+  moveInViewOrder,
+  problemsForTrack,
+  resolveActiveTab,
   resolveEntityLabel,
-  toggleInSet,
-  withoutPaths,
-  type DropTarget,
-  type GroupingMode,
-  type InnerRow,
-  type OuterRow,
-  type RowDragPayload,
-  type TrackRow,
-  type ViewOrderState,
+  resolveSortMode,
+  scopeToggles,
+  sortModeOptions,
+  toggleDisabledScope,
+  withToggledCollapsed,
+  withToggledExpanded,
+  groupListKey,
+  type HolderPickerModel,
+  type RowMove,
+  type SearchScope,
+  type SortMode,
+  type TrackTab,
+  type ViewGroup,
+  type ViewOrder,
 } from '../domain';
 
-export interface ParsedFileEntry {
-  title?: string;
-  directives: ParsedDirective[];
-}
+export type { HistoryEntry, ViewGroup, ViewRow } from '../domain';
 
 export interface UseRelationshipsOptions {
   campaignPath: string;
@@ -50,75 +59,102 @@ export interface UseRelationshipsOptions {
   getEntityIndex: () => EntityIndexEntry[];
 }
 
-export interface UseRelationshipsResult {
-  mode: GroupingMode;
-  toggleMode: () => void;
-  rows: OuterRow[];
-  problems: InvalidDirectiveEntry[];
+export interface RelationshipsViewState {
+  loaded: boolean;
+  /** In-game now in epoch seconds; Infinity when unset. */
   now: number;
-  labelFor: (id: string) => string;
-  entityIndex: EntityIndexEntry[];
-  isOuterExpanded: (row: OuterRow) => boolean;
-  toggleOuter: (row: OuterRow) => void;
-  isInnerExpanded: (outer: OuterRow, inner: InnerRow) => boolean;
-  toggleInner: (outer: OuterRow, inner: InnerRow) => void;
-  isTrackExpanded: (row: TrackRow) => boolean;
-  toggleTrack: (row: TrackRow) => void;
-  directivesFor: (path: string) => ParsedFileEntry | undefined;
-  // User ordering (drag-and-drop + context menu), persisted with collapse state.
-  moveRowToTop: (payload: RowDragPayload) => void;
-  moveRowUp: (payload: RowDragPayload) => void;
-  moveRowDown: (payload: RowDragPayload) => void;
-  moveRowBefore: (payload: RowDragPayload, targetId: string) => void;
-  moveRowAfter: (payload: RowDragPayload, targetId: string) => void;
+  asOfLabel: string | null;
+  tabs: TrackTab[];
+  activeTrackId: string | null;
+  activeTrack: ResolvedTrack | null;
+  selectTab(trackId: string): void;
+  /** Every invalid entry (drafts are never reported by the index). */
+  problems: InvalidDirectiveEntry[];
+  /** Entries whose trackId is the active track. */
+  trackProblems: InvalidDirectiveEntry[];
+  holderPicker: HolderPickerModel;
+  selectHolder(holderId: string): void;
+  scopes: Array<{ scope: SearchScope; label: string; enabled: boolean }>;
+  toggleScope(scope: SearchScope): void;
+  query: string;
+  setQuery(q: string): void;
+  /** "3 of 15", only while a query is present. */
+  countLabel: string | null;
+  /** Set when a query matches nothing. */
+  emptyMessage: string | null;
+  sortModes: Array<{ mode: SortMode; label: string }>;
+  sortMode: SortMode;
+  setSortMode(m: SortMode): void;
+  /** One group (holderId = selected holder) for a single holder; several for All holders. */
+  groups: ViewGroup[];
+  /** The list key ordering the All-holders groups (`<track>:*`); null without an active track. */
+  groupsListKey: string | null;
+  canDrag: boolean;
+  toggleRow(listKey: string, observerId: string): void;
+  toggleGroup(holderId: string): void;
+  moveRow(listKey: string, id: string, to: RowMove): void;
+  labelFor(id: string): string;
+  entityIndex: EntityIndexEntry[] | null;
 }
 
 const SAVE_DEBOUNCE_MS = 300;
+const NO_SCOPES: ReadonlySet<SearchScope> = new Set();
 
-const EMPTY_MODE_SET: Record<GroupingMode, ReadonlySet<string>> = {
-  holder: new Set(),
-  observer: new Set(),
-};
-
-function emptyViewOrderState(): ViewOrderState {
-  return {
-    order: { holder: {}, observer: {} },
-    expandedOuter: EMPTY_MODE_SET,
-    expandedInner: EMPTY_MODE_SET,
-    expandedTrack: new Set(),
-  };
+function createViewOrderQueue(campaignPath: string) {
+  return createSaveQueue<ViewOrder>((state) => {
+    void viewOrderData.save(campaignPath, state);
+  }, SAVE_DEBOUNCE_MS);
 }
 
-export function useRelationships(options: UseRelationshipsOptions): UseRelationshipsResult {
+export function useRelationships(options: UseRelationshipsOptions): RelationshipsViewState {
   const { campaignPath, library, entityLabelMap, getEntityIndex } = options;
 
   const [ledgers, setLedgers] = useState<Ledger[]>([]);
   const [problems, setProblems] = useState<InvalidDirectiveEntry[]>([]);
-  const [mode, setMode] = useState<GroupingMode>('holder');
+  const [titles, setTitles] = useState<Record<string, string>>({});
+  const [defaultHolder, setDefaultHolder] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const [now, setNow] = useState<number>(Infinity);
-  const [directivesCache, setDirectivesCache] = useState<Record<string, ParsedFileEntry>>({});
+  const [viewOrder, setViewOrder] = useState<ViewOrder>(defaultViewOrder());
 
-  const [viewOrderState, setViewOrderState] = useState<ViewOrderState>(emptyViewOrderState());
+  const [tabChoice, setTabChoice] = useState<{ campaignPath: string; id: string | null } | null>(
+    null,
+  );
+  const [holderChoices, setHolderChoices] = useState<Record<string, string>>({});
+  const [query, setQuery] = useState('');
+  const [disabledScopes, setDisabledScopes] = useState<ReadonlySet<SearchScope>>(NO_SCOPES);
+  const [sortChoice, setSortChoice] = useState<SortMode | null>(null);
+
+  // ---- Data loading ----
 
   const reload = useCallback(async () => {
-    const [nextLedgers, nextProblems] = await Promise.all([
+    const [nextLedgers, nextProblems, nextTitles] = await Promise.all([
       relationshipsData.getAllLedgers(),
       relationshipsData.getInvalid(),
+      relationshipsData.getTitles(),
     ]);
     setLedgers(nextLedgers);
     setProblems(nextProblems);
+    setTitles(nextTitles);
+    setLoaded(true);
   }, []);
 
   useEffect(() => {
     void reload();
-    const unsubscribe = relationshipsData.onChanged(({ paths }) => {
-      if (paths.length > 0) {
-        setDirectivesCache((prev) => withoutPaths(prev, paths));
-      }
-      void reload();
-    });
-    return unsubscribe;
+    return relationshipsData.onChanged(() => void reload());
   }, [reload]);
+
+  useEffect(() => {
+    let active = true;
+    void relationshipsData.getDefaultHolder().then((id) => {
+      if (active) setDefaultHolder(id);
+    });
+    const unsubscribe = relationshipsData.onDefaultHolderChanged(setDefaultHolder);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -131,175 +167,176 @@ export function useRelationships(options: UseRelationshipsOptions): UseRelations
     };
   }, [campaignPath]);
 
-  // ---- View order + collapse-state persistence (relationships/view-order.json) ----
+  // ---- View order + expand/collapse persistence (relationships/view-order.json) ----
 
-  const loadedRef = useRef(false);
-  const saveQueueRef = useRef(
-    createSaveQueue<ViewOrderState>((state) => {
-      void viewOrderData.save(campaignPath, buildViewOrder(state));
-    }, SAVE_DEBOUNCE_MS),
-  );
+  const viewOrderLoadedRef = useRef(false);
+  const saveQueueRef = useRef(createViewOrderQueue(campaignPath));
 
   useEffect(() => {
-    loadedRef.current = false;
+    viewOrderLoadedRef.current = false;
     let active = true;
-    // A fresh queue per campaign: any pending write from the previous
-    // campaign's queue would otherwise fire against the new campaignPath.
-    saveQueueRef.current = createSaveQueue<ViewOrderState>((state) => {
-      void viewOrderData.save(campaignPath, buildViewOrder(state));
-    }, SAVE_DEBOUNCE_MS);
-    viewOrderData.load(campaignPath).then((loaded) => {
+    // A fresh queue per campaign: a pending write from the previous campaign's
+    // queue would otherwise fire against the new campaignPath.
+    saveQueueRef.current = createViewOrderQueue(campaignPath);
+    void viewOrderData.load(campaignPath).then((loadedOrder) => {
       if (!active) return;
-      setViewOrderState(hydrateViewOrder(loaded));
-      loadedRef.current = true;
+      setViewOrder(loadedOrder);
+      viewOrderLoadedRef.current = true;
     });
     return () => {
       active = false;
-      // Flush any pending debounced write for the campaign we're leaving.
       saveQueueRef.current.flush();
     };
   }, [campaignPath]);
 
   useEffect(() => {
-    if (!loadedRef.current) return;
-    saveQueueRef.current.schedule(viewOrderState);
-    // No cleanup here: the queue re-arms on the next relevant change and is
-    // flushed explicitly on unmount / campaign change (see the effect above).
-  }, [viewOrderState]);
+    if (!viewOrderLoadedRef.current) return;
+    saveQueueRef.current.schedule(viewOrder);
+  }, [viewOrder]);
+
+  // ---- Derivations (pure logic lives in domain/) ----
 
   const labelFor = useCallback(
     (id: string) => resolveEntityLabel(id, entityLabelMap, getEntityIndex()),
     [entityLabelMap, getEntityIndex],
   );
+  const titleByPath = useMemo(() => new Map(Object.entries(titles)), [titles]);
 
-  const resolveTrackFn = useCallback((id: string) => resolveTrack(id, library), [library]);
-  const trackOrder = useMemo(() => listTracks(library).map((t) => t.id), [library]);
+  const tabs = useMemo(
+    () => buildTabs({ library, ledgers, invalid: problems }),
+    [library, ledgers, problems],
+  );
+  const savedTab =
+    tabChoice && tabChoice.campaignPath === campaignPath
+      ? tabChoice.id
+      : loadSelectedTab(campaignPath);
+  const activeTrackId = resolveActiveTab(tabs, savedTab);
+  const activeTrack = useMemo(
+    () => (activeTrackId ? resolveTrack(activeTrackId, library) : null),
+    [activeTrackId, library],
+  );
+  const kind = activeTrack?.kind ?? null;
 
-  const groupedRows = useMemo(
-    () => groupRelationships(ledgers, mode, { resolveTrack: resolveTrackFn, trackOrder, labelFor }),
-    [ledgers, mode, resolveTrackFn, trackOrder, labelFor],
+  const holderPicker = useMemo(
+    () =>
+      activeTrackId && kind
+        ? buildHolderPicker({
+            kind,
+            trackId: activeTrackId,
+            ledgers,
+            defaultHolderId: defaultHolder,
+            savedHolderId:
+              holderChoices[activeTrackId] ?? loadSelectedHolder(campaignPath, activeTrackId),
+            labelFor,
+          })
+        : EMPTY_HOLDER_PICKER,
+    [activeTrackId, kind, ledgers, defaultHolder, holderChoices, campaignPath, labelFor],
   );
 
-  const rows = useMemo(
-    () => applyViewOrderToRows(groupedRows, viewOrderState.order[mode], labelFor),
-    [groupedRows, viewOrderState.order, mode, labelFor],
+  const sortMode = resolveSortMode(kind ?? 'numeric', sortChoice);
+
+  const baseRows = useMemo(
+    () =>
+      activeTrack && activeTrackId
+        ? buildBaseRows({
+            ledgers: ledgers.filter((l) => l.track === activeTrackId),
+            track: activeTrack,
+            trackId: activeTrackId,
+            now,
+            titleByPath,
+            labelFor,
+          })
+        : [],
+    [ledgers, activeTrack, activeTrackId, now, titleByPath, labelFor],
   );
 
-  const rowsRef = useRef(rows);
-  rowsRef.current = rows;
-
-  // Fetch directives only for the paths behind currently expanded track rows.
-  useEffect(() => {
-    const isExpanded = (row: TrackRow) => viewOrderState.expandedTrack.has(row.key);
-    const needed = pathsNeededForExpandedTracks(rows, isExpanded, now);
-    const missing = needed.filter((path) => !(path in directivesCache));
-    if (missing.length === 0) return;
-
-    let active = true;
-    relationshipsData.getDirectives(missing).then((results) => {
-      if (!active) return;
-      setDirectivesCache((prev) => {
-        const next = { ...prev };
-        for (const entry of results) {
-          next[entry.path] = { title: entry.title, directives: entry.directives };
-        }
-        return next;
-      });
-    });
-    return () => {
-      active = false;
-    };
-  }, [rows, viewOrderState.expandedTrack, now, directivesCache]);
-
-  const directivesFor = useCallback((path: string) => directivesCache[path], [directivesCache]);
-
-  const visibleSiblings = useCallback((payload: RowDragPayload | DropTarget): string[] => {
-    if (payload.level === 'outer') return rowsRef.current.map((r) => r.key);
-    const outer = rowsRef.current.find((r) => r.key === payload.parentKey);
-    return outer ? outer.children.map((c) => c.key) : [];
-  }, []);
-
-  /** Applies one of the pure `view-order` move functions to the payload's
-   * visible siblings and writes the result back for its (mode, parentKey). */
-  const applyMove = useCallback(
-    (payload: RowDragPayload, fn: (visible: string[], id: string) => string[]) => {
-      const visible = visibleSiblings(payload);
-      const nextIds = fn(visible, payload.id);
-      setViewOrderState((prev) => ({
-        ...prev,
-        order: {
-          ...prev.order,
-          [payload.mode]: { ...prev.order[payload.mode], [payload.parentKey]: nextIds },
-        },
-      }));
-    },
-    [visibleSiblings],
+  const view = useMemo(
+    () =>
+      activeTrack && activeTrackId
+        ? deriveView(baseRows, {
+            track: activeTrack,
+            trackId: activeTrackId,
+            holderId: holderPicker.selectedId,
+            now,
+            titleByPath,
+            labelFor,
+            query,
+            enabledScopes: enabledScopesFor(activeTrack.kind, disabledScopes),
+            sortMode,
+            viewOrder,
+          })
+        : { groups: [], total: 0, matched: 0, canDrag: false },
+    [
+      baseRows,
+      activeTrack,
+      activeTrackId,
+      holderPicker.selectedId,
+      now,
+      titleByPath,
+      labelFor,
+      query,
+      disabledScopes,
+      sortMode,
+      viewOrder,
+    ],
   );
 
-  const applyMoveWithTarget = useCallback(
-    (
-      payload: RowDragPayload,
-      targetId: string,
-      fn: (visible: string[], id: string, targetId: string) => string[],
-    ) => {
-      applyMove(payload, (visible, id) => fn(visible, id, targetId));
-    },
-    [applyMove],
-  );
+  const groupsRef = useRef<ViewGroup[]>(view.groups);
+  groupsRef.current = view.groups;
 
-  const toggleOuterExpanded = useCallback(
-    (row: OuterRow) => {
-      setViewOrderState((prev) => ({
-        ...prev,
-        expandedOuter: {
-          ...prev.expandedOuter,
-          [mode]: toggleInSet(prev.expandedOuter[mode], outerRowStateKey(row)),
-        },
-      }));
-    },
-    [mode],
-  );
-
-  const toggleInnerExpanded = useCallback(
-    (outer: OuterRow, inner: InnerRow) => {
-      setViewOrderState((prev) => ({
-        ...prev,
-        expandedInner: {
-          ...prev.expandedInner,
-          [mode]: toggleInSet(prev.expandedInner[mode], innerRowStateKey(outer, inner)),
-        },
-      }));
-    },
-    [mode],
-  );
-
-  const toggleTrackExpanded = useCallback((row: TrackRow) => {
-    setViewOrderState((prev) => ({
-      ...prev,
-      expandedTrack: toggleInSet(prev.expandedTrack, row.key),
-    }));
-  }, []);
+  const hasQuery = query.trim() !== '';
+  const anyScopeDisabled = disabledScopes.size > 0;
 
   return {
-    mode,
-    toggleMode: () => setMode((m) => (m === 'holder' ? 'observer' : 'holder')),
-    rows,
-    problems,
+    loaded,
     now,
+    asOfLabel: asOfLabelFor(now),
+    tabs,
+    activeTrackId,
+    activeTrack,
+    selectTab: (trackId) => {
+      setTabChoice({ campaignPath, id: trackId });
+      saveSelectedTab(campaignPath, trackId);
+      setQuery('');
+      setDisabledScopes(NO_SCOPES);
+      setSortChoice(null);
+    },
+    problems,
+    trackProblems: problemsForTrack(problems, activeTrackId),
+    holderPicker,
+    selectHolder: (holderId) => {
+      if (!activeTrackId) return;
+      setHolderChoices((prev) => ({ ...prev, [activeTrackId]: holderId }));
+      saveSelectedHolder(campaignPath, activeTrackId, holderId);
+    },
+    scopes: kind && activeTrack ? scopeToggles(kind, activeTrack.name, disabledScopes) : [],
+    toggleScope: (scope) => setDisabledScopes((prev) => toggleDisabledScope(prev, scope)),
+    query,
+    setQuery,
+    countLabel: hasQuery ? countLabel(view.matched, view.total) : null,
+    emptyMessage:
+      hasQuery && view.total > 0 && view.matched === 0
+        ? emptyMessage(query, anyScopeDisabled)
+        : null,
+    sortModes: sortModeOptions(kind ?? 'numeric'),
+    sortMode,
+    setSortMode: setSortChoice,
+    groups: view.groups,
+    groupsListKey: activeTrackId ? groupListKey(activeTrackId) : null,
+    canDrag: view.canDrag,
+    toggleRow: (listKey, observerId) =>
+      setViewOrder((prev) => withToggledExpanded(prev, listKey, observerId)),
+    toggleGroup: (holderId) => {
+      if (!activeTrackId) return;
+      setViewOrder((prev) => withToggledCollapsed(prev, groupListKey(activeTrackId), holderId));
+    },
+    moveRow: (listKey, id, to) => {
+      if (!activeTrackId) return;
+      setViewOrder((prev) =>
+        moveInViewOrder(prev, groupsRef.current, activeTrackId, listKey, id, to),
+      );
+    },
     labelFor,
     entityIndex: getEntityIndex(),
-    isOuterExpanded: (row) => viewOrderState.expandedOuter[mode].has(outerRowStateKey(row)),
-    toggleOuter: toggleOuterExpanded,
-    isInnerExpanded: (outer, inner) =>
-      viewOrderState.expandedInner[mode].has(innerRowStateKey(outer, inner)),
-    toggleInner: toggleInnerExpanded,
-    isTrackExpanded: (row) => viewOrderState.expandedTrack.has(row.key),
-    toggleTrack: toggleTrackExpanded,
-    directivesFor,
-    moveRowToTop: (payload) => applyMove(payload, moveToTop),
-    moveRowUp: (payload) => applyMove(payload, moveUp),
-    moveRowDown: (payload) => applyMove(payload, moveDown),
-    moveRowBefore: (payload, targetId) => applyMoveWithTarget(payload, targetId, moveBefore),
-    moveRowAfter: (payload, targetId) => applyMoveWithTarget(payload, targetId, moveAfter),
   };
 }

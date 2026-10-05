@@ -38,6 +38,10 @@ export const relationshipsData = {
     return window.fsApi.getInvalidRelationshipDirectives();
   },
 
+  async getTitles(): Promise<Record<string, string>> {
+    return window.fsApi.getRelationshipTitles();
+  },
+
   async getUndatedSets(): Promise<ExternalUndatedSet[]> {
     return window.fsApi.getUndatedRelationshipSets();
   },

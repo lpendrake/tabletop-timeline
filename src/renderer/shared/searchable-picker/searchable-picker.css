@@ -37,6 +37,29 @@
   background: var(--theme-panel);
   border-left-color: var(--theme-accent-gold);
 }
+.searchable-picker-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.searchable-picker-group {
+  padding: 6px 10px 2px;
+  color: var(--theme-text-muted);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.searchable-picker-match {
+  background: color-mix(in srgb, var(--theme-accent-gold) 30%, transparent);
+  color: inherit;
+  border-radius: 2px;
+}
+.searchable-picker-count {
+  color: var(--theme-text-muted);
+  font-size: 12px;
+  flex-shrink: 0;
+}
 .searchable-picker-empty {
   padding: 12px 10px;
   color: var(--theme-text-muted);

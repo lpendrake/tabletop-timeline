@@ -6,8 +6,13 @@ import { indexSingleEntity, ASSET_EXTENSIONS } from './entity-index.js';
 import { getRelationshipsStore } from './relationships-store.js';
 import type { RelationshipFileInput, StoreChangeResult } from './relationships-store.js';
 
-function shouldNotify(result: StoreChangeResult): boolean {
-  return result.touched.length > 0 || result.invalidChanged || result.knownNotesChanged;
+export function shouldNotify(result: StoreChangeResult): boolean {
+  return (
+    result.touched.length > 0 ||
+    result.invalidChanged ||
+    result.knownNotesChanged ||
+    result.titleChanged
+  );
 }
 
 export class FileWatcher {
