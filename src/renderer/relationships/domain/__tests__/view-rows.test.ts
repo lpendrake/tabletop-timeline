@@ -215,6 +215,14 @@ describe('view-rows', () => {
     expect(deriveViewRows(input()).canDrag).toBe(true);
   });
 
+  it('is grouped under All holders, even when search leaves one group, and not under one holder', () => {
+    expect(deriveViewRows(input({ holderId: '*' })).grouped).toBe(true);
+    const narrowed = deriveViewRows(input({ holderId: '*', query: 'dax' }));
+    expect(narrowed.groups).toHaveLength(1);
+    expect(narrowed.grouped).toBe(true);
+    expect(deriveViewRows(input({ holderId: 'aaaa' })).grouped).toBe(false);
+  });
+
   it('sorts by value and by recent change', () => {
     expect(observers(deriveViewRows(input({ sortMode: 'value' })))).toEqual([
       'cccc',

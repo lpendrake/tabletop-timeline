@@ -121,6 +121,8 @@ export interface ViewRowsResult {
   /** Rows matching the query (equals `total` when the query is empty). */
   matched: number;
   canDrag: boolean;
+  /** Whether groups are per holder (All holders), even if search leaves only one. */
+  grouped: boolean;
 }
 
 /** Drag reordering only makes sense in My order with no active search. */
@@ -255,7 +257,9 @@ export function deriveView(base: readonly BaseRow[], input: DeriveViewInput): Vi
   const { track, trackId, holderId, now, titleByPath, labelFor, query, sortMode, viewOrder } =
     input;
 
-  const inScope = holderId === ALL_HOLDERS ? base : base.filter((r) => r.holderId === holderId);
+  const grouped = holderId === ALL_HOLDERS;
+
+  const inScope = grouped ? base : base.filter((r) => r.holderId === holderId);
   const search: SearchResult = searchRows(
     inScope.map((r) => r.searchable),
     query,
@@ -270,14 +274,13 @@ export function deriveView(base: readonly BaseRow[], input: DeriveViewInput): Vi
     else byHolder.set(r.holderId, [r]);
   }
 
-  const holderIds =
-    holderId === ALL_HOLDERS
-      ? applyOrder([...byHolder.keys()], viewOrder.order[groupListKey(trackId)], (a, b) =>
-          compareLabels(labelFor, a, b),
-        )
-      : byHolder.has(holderId)
-        ? [holderId]
-        : [];
+  const holderIds = grouped
+    ? applyOrder([...byHolder.keys()], viewOrder.order[groupListKey(trackId)], (a, b) =>
+        compareLabels(labelFor, a, b),
+      )
+    : byHolder.has(holderId)
+      ? [holderId]
+      : [];
   const collapsedIds = new Set(viewOrder.collapsed[groupListKey(trackId)] ?? []);
 
   const groups: ViewGroup[] = holderIds.map((id) => {
@@ -310,7 +313,7 @@ export function deriveView(base: readonly BaseRow[], input: DeriveViewInput): Vi
       holderId: id,
       label: labelFor(id),
       listKey,
-      collapsed: holderId === ALL_HOLDERS && collapsedIds.has(id),
+      collapsed: grouped && collapsedIds.has(id),
       rows,
     };
   });
@@ -320,6 +323,7 @@ export function deriveView(base: readonly BaseRow[], input: DeriveViewInput): Vi
     total: search.total,
     matched: search.matched,
     canDrag: canDragRows(sortMode, query),
+    grouped,
   };
 }
 

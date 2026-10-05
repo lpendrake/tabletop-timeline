@@ -143,29 +143,27 @@ export function validateTrackSpec(spec: TrackSpec): SpecValidationResult {
   return errors.length > 0 ? { ok: false, errors } : { ok: true };
 }
 
-interface NumericPosition {
+/** A band with its resolved extent: it runs to the next band's start, the last to `max` (null = unbounded). */
+export interface NumericBandRange {
   key: string;
   label: string;
   start: number;
   end: number | null;
 }
 
-function buildNumericPositions(spec: NumericTrackSpec): NumericPosition[] {
-  const bands = spec.bands ?? [];
+export function numericBandRanges(
+  bands: readonly BandSpec[],
+  max: number | null,
+): NumericBandRange[] {
   return bands.map((band, i) => {
     const next: BandSpec | undefined = bands[i + 1];
-    return {
-      key: band.key,
-      label: band.label,
-      start: band.start,
-      end: next ? next.start : spec.max,
-    };
+    return { key: band.key, label: band.label, start: band.start, end: next ? next.start : max };
   });
 }
 
 function compileNumeric(spec: NumericTrackSpec): NumericTrack {
-  const positions = buildNumericPositions(spec);
   const bands = spec.bands ?? [];
+  const positions = numericBandRanges(bands, spec.max);
 
   function clampNumber(v: number): number {
     let out = v;
@@ -174,9 +172,9 @@ function compileNumeric(spec: NumericTrackSpec): NumericTrack {
     return out;
   }
 
-  function bandFor(v: number): NumericPosition | undefined {
+  function bandFor(v: number): NumericBandRange | undefined {
     if (positions.length === 0) return undefined;
-    let found: NumericPosition | undefined;
+    let found: NumericBandRange | undefined;
     for (const pos of positions) {
       if (v >= pos.start) found = pos;
       else break;

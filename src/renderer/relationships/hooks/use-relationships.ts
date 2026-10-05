@@ -87,6 +87,8 @@ export interface RelationshipsViewState {
   setSortMode(m: SortMode): void;
   /** One group (holderId = selected holder) for a single holder; several for All holders. */
   groups: ViewGroup[];
+  /** True under All holders (group headers apply), even when search leaves a single group. */
+  grouped: boolean;
   /** The list key ordering the All-holders groups (`<track>:*`); null without an active track. */
   groupsListKey: string | null;
   canDrag: boolean;
@@ -265,7 +267,7 @@ export function useRelationships(options: UseRelationshipsOptions): Relationship
             sortMode,
             viewOrder,
           })
-        : { groups: [], total: 0, matched: 0, canDrag: false },
+        : { groups: [], total: 0, matched: 0, canDrag: false, grouped: false },
     [
       baseRows,
       activeTrack,
@@ -322,6 +324,7 @@ export function useRelationships(options: UseRelationshipsOptions): Relationship
     sortMode,
     setSortMode: setSortChoice,
     groups: view.groups,
+    grouped: view.grouped,
     groupsListKey: activeTrackId ? groupListKey(activeTrackId) : null,
     canDrag: view.canDrag,
     toggleRow: (listKey, observerId) =>

@@ -33,6 +33,24 @@ export type {
 } from './view-rows';
 export { buildBaseRows, deriveView, deriveViewRows, canDragRows, historyKey } from './view-rows';
 
+export type { PlotRange, BandSpan, PlotTick, PlotScale } from './plot-scale';
+export {
+  niceStep,
+  plotRange,
+  valueFraction,
+  bandSpans,
+  plotTicks,
+  zeroFraction,
+  plotScale,
+  percent,
+} from './plot-scale';
+
+export type { NumericRowModel, NumericTabModel } from './numeric-rows';
+export { numericRowModel, numericTabModel } from './numeric-rows';
+
+export type { ChangeTone } from './row-display';
+export { formatNumber, formatSigned, deltaTone } from './row-display';
+
 export { withoutPaths } from './directives-cache';
 
 export {

@@ -14,6 +14,7 @@ import {
   attitudeSpec,
   relationshipTagsSpec,
   compareDeltas,
+  numericBandRanges,
   currentValue,
   resolveTrack,
   listTracks,
@@ -75,6 +76,25 @@ describe('PF2E Reputation labels every band boundary', () => {
   it('clamps values outside [-50, 50]', () => {
     expect(pf2eReputation.clamp(51)).toBe(50);
     expect(pf2eReputation.clamp(-51)).toBe(-50);
+  });
+});
+
+describe('numericBandRanges', () => {
+  it('each band runs to the next start and the last to max', () => {
+    const ranges = numericBandRanges(pf2eReputationSpec.bands ?? [], 50);
+    expect(ranges.map((r) => r.start)).toEqual([-50, -29, -14, -4, 5, 15, 30]);
+    expect(ranges.map((r) => r.end)).toEqual([-29, -14, -4, 5, 15, 30, 50]);
+    expect(ranges[0]).toMatchObject({ key: 'hunted', label: 'Hunted' });
+  });
+
+  it('the last band is open-ended without a max', () => {
+    const ranges = numericBandRanges(pf2eReputationSpec.bands ?? [], null);
+    expect(ranges[ranges.length - 1].end).toBeNull();
+    expect(ranges[0].end).toBe(-29);
+  });
+
+  it('no bands, no ranges', () => {
+    expect(numericBandRanges([], 10)).toEqual([]);
   });
 });
 
