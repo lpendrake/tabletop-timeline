@@ -1,14 +1,13 @@
 import { useState } from 'react';
 import type { MouseEvent } from 'react';
-import { computeTooltipPosition } from '../../shared/tooltip-position';
+import { computeTooltipPosition, type TooltipPosition } from '../../shared/tooltip-position';
 import type { PlotPart } from '../domain/numeric-rows';
 
 export const TOOLTIP_MAX_WIDTH = 240;
 
 export interface PlotTooltip {
   part: PlotPart;
-  left: number;
-  bottom: number;
+  position: TooltipPosition;
 }
 
 /**
@@ -22,7 +21,7 @@ export function usePlotTooltip() {
     onMouseMove: (e: MouseEvent) =>
       setTooltip({
         part,
-        ...computeTooltipPosition(
+        position: computeTooltipPosition(
           { left: e.clientX, top: e.clientY },
           window.innerWidth,
           window.innerHeight,

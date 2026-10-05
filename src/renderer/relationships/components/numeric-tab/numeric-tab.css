@@ -5,7 +5,8 @@
   --rel-num-handle-width: 14px;
   /* Columns before and after the optional band column of the left grid. */
   --rel-num-leading-columns: var(--rel-num-handle-width) minmax(0, 1fr) 56px;
-  --rel-num-trailing-columns: 150px 48px 16px;
+  /* Last change, Entries (fits a three-digit count), chevron. */
+  --rel-num-trailing-columns: 170px 40px 16px;
   display: flex;
   flex-direction: column;
 }
@@ -215,6 +216,7 @@
   color: var(--theme-text-primary);
   border: 1px solid var(--theme-border-strong);
   border-radius: 4px;
+  font-family: var(--app-font);
   font-size: 12px;
   box-sizing: border-box;
 }

@@ -45,7 +45,7 @@ export function NumericPlot({ scale, model }: NumericPlotProps) {
         createPortal(
           <div
             className="rel-num-tooltip"
-            style={{ left: tooltip.left, bottom: tooltip.bottom, maxWidth: TOOLTIP_MAX_WIDTH }}
+            style={{ ...tooltip.position, maxWidth: TOOLTIP_MAX_WIDTH }}
           >
             {tooltipText(model, tooltip.part)}
           </div>,

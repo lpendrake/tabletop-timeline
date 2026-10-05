@@ -261,13 +261,26 @@ describe('NumericTab', () => {
       window.innerHeight,
       TOOLTIP_MAX_WIDTH,
     );
-    expect(tip.style.left).toBe(`${at.left}px`);
+    expect(at).toEqual({ left: 100, bottom: window.innerHeight - 200 + 6 });
+    expect(tip.style.left).toBe('100px');
+    expect(tip.style.right).toBe('');
     expect(tip.style.bottom).toBe(`${at.bottom}px`);
     expect(tip.style.maxWidth).toBe(`${TOOLTIP_MAX_WIDTH}px`);
     act(() => {
       fireEvent.mouseLeave(line);
     });
     expect($('.rel-num-tooltip', document.body)).toBeNull();
+  });
+
+  it('hovering near the right edge anchors the tooltip right edge at the pointer', () => {
+    render(pf2eProps());
+    const x = window.innerWidth - 20;
+    act(() => {
+      fireEvent.mouseMove($('.rel-num-line', rowFor('Anna')), { clientX: x, clientY: 200 });
+    });
+    const tip = $('.rel-num-tooltip', document.body);
+    expect(tip.style.right).toBe('20px');
+    expect(tip.style.left).toBe('');
   });
 
   it('the tooltip text follows the data while the line stays hovered', () => {

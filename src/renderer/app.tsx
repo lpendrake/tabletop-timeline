@@ -298,7 +298,7 @@ export default function App() {
           height: '100vh',
           backgroundColor: 'var(--theme-background)',
           color: 'var(--theme-text-primary)',
-          fontFamily: '"Inter", "Segoe UI", sans-serif',
+          fontFamily: 'var(--app-font)',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
