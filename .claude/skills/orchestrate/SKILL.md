@@ -1,6 +1,6 @@
 ---
 name: orchestrate
-description: Use this skill to orchestrate the implementation of a complex, multi-part task. The orchestrator (opus) never writes code — it plans, delegates to sonnet/haiku agents in parallel worktrees, reviews their output, merges results, resolves conflicts, and ships a single PR. Use when a task spans multiple files or systems and would benefit from parallel execution with unified oversight.
+description: Use this skill to orchestrate the implementation of a complex, multi-part task. The orchestrator (opus) never writes code — it plans, delegates to sonnet/haiku agents in parallel worktrees, has each worktree reviewed by a review agent, merges results, resolves conflicts, and ships a single PR. Use when a task spans multiple files or systems and would benefit from parallel execution with unified oversight.
 ---
 
 # Orchestrate a Complex Task
@@ -36,9 +36,10 @@ Before planning anything, build a complete picture.
 3. **Identify the AGENTS.md and CLAUDE.md rules** that apply. Your
    sub-agents won't read these unless you tell them to.
 4. **Check the design against the frameworks.** If a requirement will
-   force agents to fight CodeMirror, React, the DOM or markdown, raise
-   it with the user now, with a cheaper alternative (see CLAUDE.md
-   *Writing code*).
+   force agents to fight a framework the app uses (such as CodeMirror,
+   React or Electron), raise it with the user now, with a cheaper
+   alternative. Fighting the frameworks leads to bad code and a brittle
+   product (see CLAUDE.md *Writing code*).
 5. **Ask the user** if anything is ambiguous. Do this now, not after
    you've spun up six agents.
 
@@ -169,32 +170,20 @@ Work on something else or wait.
 
 ## Phase 4: Review
 
-When an agent completes, evaluate its worktree.
+When an implementation agent completes, hand its worktree to a **review
+agent** rather than reviewing it yourself. Use `sonnet` at minimum;
+use `opus` when the task's changes are large or complex. Run it in the
+same worktree (no `isolation`), in the background.
 
-### Check the diff
+Its prompt must say:
+- Use the `review-code` skill on the worktree at `<worktree-path>`.
+- Review against the **feature branch** (`<feature-branch>`), not `main`.
+- The plan you're following (the batch table and each task's goal), and
+  which task this worktree implements, so it can judge scope and fit.
+- Don't change code or post anywhere; return the report to you.
 
-```bash
-git -C <worktree-path> diff HEAD~1 --stat
-```
-
-Verify:
-- Only the expected files were changed (agents sometimes go rogue)
-- No code changes in a docs-only task, no unrelated "improvements"
-- The diff size is reasonable for the task
-
-### Read the output
-
-Read the key files the agent created/modified. Check for:
-- **Accuracy** — does it match the actual codebase?
-- **Completeness** — does it cover what was asked?
-- **Convention adherence** — file names kebab-case, no hardcoded
-  colors, logic not inside components, etc.
-- **Quality** — is it clear, concise, well-structured?
-- **De-duplication** — repeated logic that should be a shared helper, hook, or component.
-- **Meaningful tests** — tests exercise behaviour and edge cases, not just mirror the implementation.
-- **Reimplemented logic** — a new helper that duplicates one elsewhere in the repo.
-- **Dead or speculative code** — unused props or options, leftovers from a replaced approach, comments narrating history.
-- **Size vs. job** — a diff far larger than the task suggests the design is fighting a framework; find out why before approving.
+Read the report yourself, check its 🔴/🟠 findings against the diff,
+then decide.
 
 ### Decide
 
@@ -339,8 +328,9 @@ When a cherry-pick does conflict:
 2. **Never skip pre-commit hooks.** If an agent's commit fails hooks,
    that's a bug in the agent's output — fix the prompt and re-run.
 
-3. **Review every diff.** Don't blindly merge worktrees. Read the
-   actual files, not just the agent's summary of what it did.
+3. **Get every diff reviewed.** Every worktree goes through a review
+   agent (Phase 4) before it's merged. Check its findings against the
+   diff; never merge on the implementer's own summary.
 
 4. **Keep the user informed.** State what you're doing at each phase
    transition. Report batch progress. Flag risks early.
@@ -357,8 +347,8 @@ When a cherry-pick does conflict:
   the first.
 - **Forgetting `npm install`** → pre-commit hooks fail with
   "command not found". Run it once before the first commit.
-- **Not reading the worktree diff** → you miss rogue changes that
-  modify unrelated code or make unauthorized "improvements".
+- **Skipping the review agent** → you miss rogue changes that modify
+  unrelated code or make unauthorized "improvements".
 - **Over-batching** → 10 parallel agents sounds fast but produces
   10 things to review simultaneously. 3-5 per batch is practical.
 - **Splitting too fine** → a task smaller than the coordination
