@@ -21,6 +21,7 @@ export function GroupHeader(props: GroupHeaderProps) {
   return (
     <div
       className={`rel-group-header${dropIndicatorClass(drag.indicator)}`}
+      role="button"
       tabIndex={0}
       aria-expanded={!group.collapsed}
       onClick={toggle}

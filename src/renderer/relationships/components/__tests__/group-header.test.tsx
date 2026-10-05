@@ -122,6 +122,7 @@ describe('GroupHeader', () => {
     render(props());
     expect(container.querySelector('.rel-group-count')!.textContent).toBe('standing with 3');
     expect(container.querySelector('.rel-group-name')!.textContent).toBe('Holder One');
+    expect(header().getAttribute('role')).toBe('button');
     expect(header().getAttribute('aria-expanded')).toBe('true');
     render(props({ group: makeGroup({ collapsed: true }) }));
     expect(header().getAttribute('aria-expanded')).toBe('false');

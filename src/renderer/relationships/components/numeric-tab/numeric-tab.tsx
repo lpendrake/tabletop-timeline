@@ -1,0 +1,124 @@
+import { useMemo } from 'react';
+import type { ReactNode } from 'react';
+import type { InvalidDirectiveEntry, NumericTrack } from '../../../../shared/relationships';
+import { numericTabModel } from '../../domain/numeric-rows';
+import { percent, type PlotScale } from '../../domain/plot-scale';
+import type { MoveRow } from '../../domain/view-order';
+import type { ViewGroup } from '../../domain/view-rows';
+import { GroupHeader } from '../group-header';
+import { TabNotice, TrackProblems } from '../tab-notices';
+import { colourStyle, NumericRow } from './numeric-row';
+import './numeric-tab.css';
+
+export interface NumericTabProps {
+  track: NumericTrack;
+  /** The tab's toolbar, shown at the top of the sticky header. */
+  toolbar: ReactNode;
+  groups: ViewGroup[];
+  groupsListKey: string | null;
+  grouped: boolean;
+  canDrag: boolean;
+  query: string;
+  emptyMessage: string | null;
+  asOfLabel: string | null;
+  trackProblems: InvalidDirectiveEntry[];
+  toggleRow: (listKey: string, observerId: string) => void;
+  toggleGroup: (holderId: string) => void;
+  moveRow: MoveRow;
+  onOpenById: (id: string) => void;
+}
+
+/** Band names centred over their spans, or numeric ticks when the track has no bands. */
+function AxisLabels({ scale }: { scale: PlotScale }) {
+  return (
+    <div className="rel-num-axis">
+      {scale.bands.map((span) => (
+        <span
+          key={span.key}
+          className="rel-num-axis-band"
+          style={{
+            left: percent(span.start),
+            width: percent(span.end - span.start),
+            ...colourStyle(span.colour),
+          }}
+          title={span.label}
+        >
+          {span.label}
+        </span>
+      ))}
+      {scale.ticks.map((tick) => (
+        <span
+          key={tick.value}
+          className="rel-num-axis-tick"
+          style={{ left: percent(tick.fraction) }}
+        >
+          {tick.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+export function NumericTab(props: NumericTabProps) {
+  const { track, groups, groupsListKey, grouped, canDrag, query, asOfLabel } = props;
+  const { scale, rows } = useMemo(
+    () => numericTabModel(track, groups, asOfLabel),
+    [track, groups, asOfLabel],
+  );
+  return (
+    <div className={`rel-num-tab${scale.hasBands ? ' has-bands' : ''}`}>
+      <div className="rel-num-header">
+        {props.toolbar}
+        <div className="rel-num-columns">
+          <div className="rel-num-left">
+            <span />
+            <span>Standing with</span>
+            <span className="rel-num-right">Value</span>
+            {scale.hasBands && <span>Band</span>}
+            <span>Last change</span>
+            <span className="rel-num-right">Entries</span>
+            <span />
+          </div>
+          <AxisLabels scale={scale} />
+        </div>
+      </div>
+      <TabNotice
+        groups={groups}
+        query={query}
+        emptyMessage={props.emptyMessage}
+        trackName={track.name}
+      />
+      {groups.map((group, gi) => (
+        <section key={group.holderId} className="rel-group">
+          {grouped && groupsListKey && (
+            <GroupHeader
+              group={group}
+              groupsListKey={groupsListKey}
+              canDrag={canDrag}
+              moveRow={props.moveRow}
+              isFirst={gi === 0}
+              isLast={gi === groups.length - 1}
+              toggleGroup={props.toggleGroup}
+            />
+          )}
+          {!group.collapsed &&
+            group.rows.map((row, ri) => (
+              <NumericRow
+                key={row.key}
+                row={row}
+                model={rows.get(row.key)!}
+                scale={scale}
+                canDrag={canDrag}
+                isFirst={ri === 0}
+                isLast={ri === group.rows.length - 1}
+                moveRow={props.moveRow}
+                toggleRow={props.toggleRow}
+                onOpenById={props.onOpenById}
+              />
+            ))}
+        </section>
+      ))}
+      <TrackProblems problems={props.trackProblems} />
+    </div>
+  );
+}

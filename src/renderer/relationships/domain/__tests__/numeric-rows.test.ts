@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { currentValue, type DeltaOp, type Ledger } from '../../../../shared/relationships';
 import { formatNumber } from '../row-display';
-import { numericRowModel, numericTabModel } from '../numeric-rows';
+import { numericRowModel, numericTabModel, tooltipText } from '../numeric-rows';
 import { plotRange } from '../plot-scale';
 import { scaleColourCss, valueColour } from '../scale-colour';
 import { defaultViewOrder } from '../view-order';
@@ -67,10 +67,13 @@ describe('numeric-rows', () => {
     expect(model.dot).toBeCloseTo(0.68, 5);
     expect(model.lineTooltip).toBe('18 · Admired (+18 from 0)');
     expect(model.dotTooltip).toBe('18 · Admired as of 12 Lamashan 4725');
+    expect(tooltipText(model, 'line')).toBe(model.lineTooltip);
+    expect(tooltipText(model, 'dot')).toBe(model.dotTooltip);
     expect(model.lastChange).toEqual({
       amount: '+18',
       tone: 'positive',
       dateLabel: 'Undated note',
+      text: '+18 Undated note',
     });
   });
 

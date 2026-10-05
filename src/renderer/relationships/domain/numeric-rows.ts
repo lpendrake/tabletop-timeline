@@ -6,6 +6,7 @@ import { startingValue, type NumericTrack } from '../../../shared/relationships'
 import {
   deltaTone,
   formatDeltaChange,
+  formatLastChange,
   formatNumber,
   formatSigned,
   type ChangeTone,
@@ -18,7 +19,8 @@ export interface NumericRowModel {
   /** Null when the track has no bands. */
   bandLabel: string | null;
   colour: string;
-  lastChange: { amount: string; tone: ChangeTone; dateLabel: string } | null;
+  /** `text` is the amount and date as one string, for hover titles. */
+  lastChange: { amount: string; tone: ChangeTone; dateLabel: string; text: string } | null;
   entryCount: number;
   /** Fractions of the axis, spanning the track's initial value to the current one. */
   line: { left: number; width: number };
@@ -26,6 +28,13 @@ export interface NumericRowModel {
   dot: number;
   lineTooltip: string;
   dotTooltip: string;
+}
+
+/** The part of a row's plot a tooltip describes. */
+export type PlotPart = 'line' | 'dot';
+
+export function tooltipText(model: NumericRowModel, part: PlotPart): string {
+  return part === 'line' ? model.lineTooltip : model.dotTooltip;
 }
 
 export interface NumericTabModel {
@@ -62,6 +71,7 @@ export function numericRowModel(
           amount: formatDeltaChange(row.lastChange.delta),
           tone: deltaTone(row.lastChange.delta),
           dateLabel: row.lastChange.dateLabel,
+          text: formatLastChange(row.lastChange),
         }
       : null,
     entryCount: row.entryCount,
