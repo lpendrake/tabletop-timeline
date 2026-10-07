@@ -1,7 +1,7 @@
 export type { StepOpenTarget } from './step-open-target';
 export { resolveStepOpenTarget } from './step-open-target';
 
-export type { ViewOrder, RowMove, RowDragPayload, DropTarget } from './view-order';
+export type { ViewOrder, RowMove, MoveRow, RowDragPayload, DropTarget } from './view-order';
 export {
   rowListKey,
   groupListKey,
@@ -33,6 +33,24 @@ export type {
 } from './view-rows';
 export { buildBaseRows, deriveView, deriveViewRows, canDragRows, historyKey } from './view-rows';
 
+export type { PlotRange, BandSpan, PlotTick, PlotScale, TickAlign } from './plot-scale';
+export {
+  niceStep,
+  plotRange,
+  valueFraction,
+  bandSpans,
+  plotTicks,
+  zeroFraction,
+  plotScale,
+  percent,
+} from './plot-scale';
+
+export type { NumericRowModel, NumericTabModel } from './numeric-rows';
+export { numericRowModel, numericTabModel } from './numeric-rows';
+
+export type { ChangeTone } from './row-display';
+export { formatNumber, formatSigned, deltaTone } from './row-display';
+
 export { withoutPaths } from './directives-cache';
 
 export {
@@ -55,7 +73,8 @@ export {
   showHolderPicker,
   resolveSelectedHolder,
 } from './holders';
-export type { SortMode } from './sort';
+export type { ColumnSort, RowSort, SortColumn, SortDir, SortMode } from './sort';
+export { columnSortOf, nextColumnSort } from './sort';
 export { sortModesForKind, sortLabel } from './sort';
 
 export type { HolderPickerModel } from './view-state';

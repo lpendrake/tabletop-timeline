@@ -17,7 +17,7 @@ import {
   type HolderEntry,
 } from './holders';
 import { scopeLabel, scopesForKind, type SearchScope } from './search';
-import { sortLabel, sortModesForKind, type SortMode } from './sort';
+import { isColumnSort, sortLabel, sortModesForKind, type RowSort, type SortMode } from './sort';
 import {
   applyRowMove,
   groupListKey,
@@ -109,10 +109,16 @@ export function sortModeOptions(kind: TrackKind): Array<{ mode: SortMode; label:
   return sortModesForKind(kind).map((mode) => ({ mode, label: sortLabel(mode) }));
 }
 
-/** The chosen sort mode if the kind offers it, else the kind's default (first). */
-export function resolveSortMode(kind: TrackKind, chosen: SortMode | null): SortMode {
+/**
+ * The chosen sort if the kind offers it, else the kind's default. Numeric
+ * tracks accept My order or any column sort and default to My order; other
+ * kinds accept their listed modes and default to the first.
+ */
+export function resolveSortMode(kind: TrackKind, chosen: RowSort | null): RowSort {
   const modes = sortModesForKind(kind);
-  return chosen && modes.includes(chosen) ? chosen : modes[0];
+  if (chosen === null) return kind === 'numeric' ? 'mine' : modes[0];
+  if (kind === 'numeric') return chosen === 'mine' || isColumnSort(chosen) ? chosen : 'mine';
+  return !isColumnSort(chosen) && modes.includes(chosen) ? chosen : modes[0];
 }
 
 /** Entries whose envelope names `trackId`. */

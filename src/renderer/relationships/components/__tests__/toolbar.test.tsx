@@ -210,4 +210,10 @@ describe('SortControl', () => {
     });
     expect(onChange).toHaveBeenCalledWith('recent');
   });
+
+  it('no sort control when the track offers no modes', () => {
+    render(<SortControl modes={[]} active="mine" onChange={vi.fn()} />);
+    expect(container.querySelector('.rel-sort')).toBeNull();
+    expect(container.querySelector('button')).toBeNull();
+  });
 });

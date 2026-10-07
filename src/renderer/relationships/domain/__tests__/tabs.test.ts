@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import type { ViewGroup, ViewRow } from '../view-rows';
 import type { Ledger } from '../../../../shared/relationships/model';
 import { EMPTY_TRACK_LIBRARY } from '../../../../shared/relationships/registry';
 import {
@@ -7,6 +8,7 @@ import {
   nextTabIndex,
   problemsLabel,
   resolveActiveTab,
+  tabBodyNotice,
   tabMeta,
 } from '../tabs';
 
@@ -78,5 +80,33 @@ describe('tabs', () => {
   it('unknown-track invalid entries create no tab', () => {
     const tabs = buildTabs({ library, ledgers: [], invalid: [{ trackId: 'nope' }, {}] });
     expect(tabs.map((t) => t.trackId)).toEqual(['rp01', 'at01', 'tg01']);
+  });
+});
+
+describe('tabBodyNotice', () => {
+  const group = (rows: number): ViewGroup => ({
+    holderId: 'h',
+    label: 'Holder',
+    listKey: 'rp01:h',
+    collapsed: false,
+    rows: Array.from({ length: rows }, () => ({}) as ViewRow),
+  });
+
+  it('tabBodyNotice: no rows and empty query is the empty-track state', () => {
+    expect(tabBodyNotice([], '', 'No matches')).toEqual({ kind: 'empty-track' });
+    expect(tabBodyNotice([group(0)], '  ', 'No matches')).toEqual({ kind: 'empty-track' });
+  });
+
+  it('tabBodyNotice: no rows with a query is the no-match message', () => {
+    expect(tabBodyNotice([group(0)], 'zzz', 'No matches')).toEqual({
+      kind: 'no-match',
+      message: 'No matches',
+    });
+    expect(tabBodyNotice([], 'zzz', null)).toEqual({ kind: 'no-match', message: '' });
+  });
+
+  it('tabBodyNotice: any group with rows shows no notice', () => {
+    expect(tabBodyNotice([group(0), group(2)], '', null)).toBeNull();
+    expect(tabBodyNotice([group(1)], 'zzz', 'No matches')).toBeNull();
   });
 });

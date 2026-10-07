@@ -1,0 +1,361 @@
+.rel-num-tab {
+  --rel-num-hit-pad: 4px;
+  --rel-num-column-gap: 8px;
+  --rel-num-handle-width: 14px;
+  /* Share of the foreground colour tinting every second row of a group. */
+  --rel-num-stripe: 3%;
+  /* Share of its colour tinting a band behind the plot. */
+  --rel-num-band-tint: 7%;
+  /* Share of the foreground colour tinting the expand button under the pointer. */
+  --rel-num-toggle-hover: 10%;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 16px;
+}
+
+.rel-num-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--theme-background);
+  border-bottom: 1px solid var(--theme-border-strong);
+}
+
+.rel-num-columns,
+.rel-num-row {
+  display: flex;
+  align-items: stretch;
+}
+
+.rel-num-columns {
+  min-height: 24px;
+  color: var(--theme-text-muted);
+  font-size: 12px;
+  user-select: none;
+}
+
+/*
+ * Left part of the header and of every row: one grid so columns align. The drag handle has a
+ * fixed column; the rest come from `--rel-num-template` (set on the tab from the column
+ * widths), so the panel is as wide as its columns and the plot takes the rest.
+ */
+.rel-num-left {
+  display: grid;
+  grid-template-columns: var(--rel-num-handle-width) var(--rel-num-template);
+  align-items: center;
+  column-gap: var(--rel-num-column-gap);
+  flex: none;
+  padding: 0 var(--rel-inner-pad);
+  box-sizing: border-box;
+}
+
+.rel-num-left > * {
+  min-width: 0;
+}
+
+.rel-num-columns .rel-num-left {
+  align-items: stretch;
+}
+
+.rel-num-th {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.rel-num-th.is-entries,
+.rel-num-th.is-value {
+  justify-content: flex-end;
+}
+
+.rel-num-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.rel-num-title:hover {
+  color: var(--theme-text-primary);
+}
+
+.rel-num-title:focus-visible,
+.rel-num-grip:focus-visible {
+  outline: 1px solid var(--theme-accent-gold);
+  outline-offset: 1px;
+}
+
+.rel-num-title-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rel-num-sort-arrow {
+  flex: none;
+  font-size: 9px;
+  color: var(--theme-accent-gold);
+}
+
+/* Straddles the gap after its column, so it is easy to grab without covering the title. */
+.rel-num-grip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: calc(-1 * var(--rel-num-column-gap) - 1px);
+  width: 10px;
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+}
+
+.rel-num-grip::after {
+  content: '';
+  position: absolute;
+  top: 20%;
+  bottom: 20%;
+  left: 50%;
+  width: 1px;
+  background: var(--theme-border-strong);
+}
+
+.rel-num-grip:hover::after,
+.rel-num-grip:focus-visible::after {
+  background: var(--theme-accent-gold);
+}
+
+.rel-num-axis {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  /* Keeps a label or dot that reaches past the plot's edge from widening the view. */
+  overflow-x: clip;
+}
+
+/*
+ * What the axis labels and each row's plot draw into. Inset by the view's side padding so
+ * a dot or label at either end of the range stays inside its box; the percentage positions
+ * of bands, lines, dots and labels are fractions of this inset box, so they line up.
+ */
+.rel-num-layer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--rel-inner-pad);
+  right: var(--rel-inner-pad);
+}
+
+.rel-num-axis-band,
+.rel-num-axis-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  line-height: 24px;
+  white-space: nowrap;
+}
+
+.rel-num-axis-band {
+  color: var(--rel-num-colour);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+  box-sizing: border-box;
+  padding: 0 2px;
+}
+
+.rel-num-axis-tick {
+  transform: translateX(-50%);
+  font-variant-numeric: tabular-nums;
+}
+
+.rel-num-axis-tick.is-start {
+  transform: none;
+}
+
+.rel-num-axis-tick.is-end {
+  transform: translateX(-100%);
+}
+
+.rel-num-row {
+  min-height: 30px;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.rel-row-wrap.is-striped {
+  background: color-mix(in srgb, var(--theme-text-primary) var(--rel-num-stripe), transparent);
+}
+
+/* The row paints over its wrapper's stripe, so the hover colour shows on striped rows too. */
+.rel-num-row:hover {
+  background: var(--theme-relationships-row-hover);
+}
+
+.rel-num-row.is-future > * {
+  opacity: 0.5;
+}
+
+.rel-num-name,
+.rel-num-value,
+.rel-num-band-label,
+.rel-num-last {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rel-num-value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* The expand button: an arrow and the entry count in a box, so it reads as a control. */
+.rel-num-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 1px 6px;
+  border: 1px solid var(--theme-border-strong);
+  border-radius: 4px;
+  box-sizing: border-box;
+  color: var(--theme-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.rel-num-toggle:hover {
+  background: color-mix(
+    in srgb,
+    var(--theme-text-primary) var(--rel-num-toggle-hover),
+    transparent
+  );
+  color: var(--theme-text-primary);
+}
+
+.rel-num-arrow {
+  flex: none;
+}
+
+.rel-num-count {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rel-num-band-label {
+  color: var(--rel-num-colour);
+}
+
+.rel-num-last,
+.rel-num-date {
+  color: var(--theme-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.rel-num-amount {
+  color: var(--theme-text-muted);
+  font-weight: 700;
+}
+
+.rel-num-amount.is-positive {
+  color: var(--theme-relationships-scale-positive);
+}
+
+.rel-num-amount.is-negative {
+  color: var(--theme-relationships-scale-negative);
+}
+
+.rel-num-plot {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  /* Keeps a dot or line at the end of the range from spilling over the window edge. */
+  overflow-x: clip;
+}
+
+.rel-num-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--rel-num-colour) var(--rel-num-band-tint), transparent);
+  box-sizing: border-box;
+}
+
+.rel-num-gridline,
+.rel-num-zero {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+.rel-num-gridline {
+  background: color-mix(in srgb, var(--theme-border) 50%, transparent);
+}
+
+.rel-num-zero {
+  background: var(--theme-border-strong);
+}
+
+/* Full-row-height hit area; the padding keeps a zero-width line hoverable. */
+.rel-num-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--rel-num-hit-pad);
+  margin-left: calc(-1 * var(--rel-num-hit-pad));
+}
+
+.rel-num-line-fill {
+  width: 100%;
+  height: 2px;
+  background: var(--rel-num-colour);
+}
+
+.rel-num-dot-hit {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  transform: translateX(-50%);
+}
+
+.rel-num-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--rel-num-colour);
+}
+
+.rel-num-tooltip {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+  padding: 4px 8px;
+  background: var(--theme-panel);
+  color: var(--theme-text-primary);
+  border: 1px solid var(--theme-border-strong);
+  border-radius: 4px;
+  font-family: var(--app-font);
+  font-size: 12px;
+  box-sizing: border-box;
+}
+
+.rel-num-expanded {
+  /* Lines the text up under the Entries column, the first one after the drag handle. */
+  padding: 4px 8px 8px
+    calc(var(--rel-inner-pad) + var(--rel-num-handle-width) + var(--rel-num-column-gap));
+  color: var(--theme-text-muted);
+}

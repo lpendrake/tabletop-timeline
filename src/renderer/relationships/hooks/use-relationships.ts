@@ -31,6 +31,7 @@ import {
   emptyMessage,
   enabledScopesFor,
   moveInViewOrder,
+  nextColumnSort,
   problemsForTrack,
   resolveActiveTab,
   resolveEntityLabel,
@@ -43,6 +44,8 @@ import {
   groupListKey,
   type HolderPickerModel,
   type RowMove,
+  type RowSort,
+  type SortColumn,
   type SearchScope,
   type SortMode,
   type TrackTab,
@@ -83,10 +86,14 @@ export interface RelationshipsViewState {
   /** Set when a query matches nothing. */
   emptyMessage: string | null;
   sortModes: Array<{ mode: SortMode; label: string }>;
-  sortMode: SortMode;
+  sortMode: RowSort;
   setSortMode(m: SortMode): void;
+  /** Click on a column title: cycles that column's sort, ending back at My order. */
+  sortByColumn(column: SortColumn): void;
   /** One group (holderId = selected holder) for a single holder; several for All holders. */
   groups: ViewGroup[];
+  /** True under All holders (group headers apply), even when search leaves a single group. */
+  grouped: boolean;
   /** The list key ordering the All-holders groups (`<track>:*`); null without an active track. */
   groupsListKey: string | null;
   canDrag: boolean;
@@ -123,7 +130,7 @@ export function useRelationships(options: UseRelationshipsOptions): Relationship
   const [holderChoices, setHolderChoices] = useState<Record<string, string>>({});
   const [query, setQuery] = useState('');
   const [disabledScopes, setDisabledScopes] = useState<ReadonlySet<SearchScope>>(NO_SCOPES);
-  const [sortChoice, setSortChoice] = useState<SortMode | null>(null);
+  const [sortChoice, setSortChoice] = useState<RowSort | null>(null);
 
   // ---- Data loading ----
 
@@ -265,7 +272,7 @@ export function useRelationships(options: UseRelationshipsOptions): Relationship
             sortMode,
             viewOrder,
           })
-        : { groups: [], total: 0, matched: 0, canDrag: false },
+        : { groups: [], total: 0, matched: 0, canDrag: false, grouped: false },
     [
       baseRows,
       activeTrack,
@@ -321,7 +328,9 @@ export function useRelationships(options: UseRelationshipsOptions): Relationship
     sortModes: sortModeOptions(kind ?? 'numeric'),
     sortMode,
     setSortMode: setSortChoice,
+    sortByColumn: (column) => setSortChoice(nextColumnSort(sortMode, column)),
     groups: view.groups,
+    grouped: view.grouped,
     groupsListKey: activeTrackId ? groupListKey(activeTrackId) : null,
     canDrag: view.canDrag,
     toggleRow: (listKey, observerId) =>

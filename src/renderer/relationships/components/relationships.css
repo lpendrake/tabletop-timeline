@@ -1,17 +1,18 @@
 .rel-view {
+  /* Space between the window edge and the toolbar, rows and notices. */
+  --rel-inner-pad: 8px;
   display: flex;
   flex-direction: column;
   height: 100%;
   width: 100%;
   overflow: auto;
-  padding: 16px 24px;
   box-sizing: border-box;
   color: var(--theme-text-primary);
 }
 
 .rel-empty {
   color: var(--theme-text-muted);
-  padding: 24px;
+  padding: 24px var(--rel-inner-pad);
 }
 
 .rel-drag-handle {
@@ -47,4 +48,81 @@
   background: color-mix(in srgb, var(--theme-accent-gold) 35%, transparent);
   color: inherit;
   border-radius: 2px;
+}
+
+.rel-empty code {
+  color: var(--theme-accent-gold);
+}
+
+.rel-group-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 30px;
+  padding: 0 var(--rel-inner-pad);
+  cursor: pointer;
+  box-sizing: border-box;
+  font-weight: 700;
+  border-bottom: 1px solid var(--theme-border);
+}
+
+.rel-group-header:hover {
+  background: var(--theme-relationships-row-hover);
+}
+
+.rel-chevron {
+  color: var(--theme-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.rel-group-name {
+  color: var(--theme-accent-gold);
+}
+
+.rel-group-count {
+  font-weight: 400;
+  color: var(--theme-text-muted);
+}
+
+.rel-row-wrap,
+.rel-group-header {
+  position: relative;
+}
+
+.rel-row-wrap.drop-before::before,
+.rel-row-wrap.drop-after::after,
+.rel-group-header.drop-before::before,
+.rel-group-header.drop-after::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--theme-relationships-drop-indicator);
+  pointer-events: none;
+}
+
+.drop-before::before {
+  top: 0;
+}
+
+.drop-after::after {
+  bottom: 0;
+}
+
+.rel-track-problems {
+  margin-top: 16px;
+  padding: 8px var(--rel-inner-pad) 0;
+  border-top: 1px solid var(--theme-border);
+  color: var(--theme-warning);
+}
+
+.rel-track-problems .rel-problems-title {
+  margin: 0 0 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.rel-track-problems .rel-problem-file {
+  color: var(--theme-text-muted);
 }

@@ -38,6 +38,11 @@ export interface CurrentValueResult {
   steps: Step[];
 }
 
+/** A track's starting value as the engine sees it: `initial` clamped into the track's bounds. */
+export function startingValue(track: ResolvedTrack): TrackValue {
+  return track.clamp(track.initial);
+}
+
 /**
  * Applies a single delta op to a value. Exhaustive over `DeltaOp['op']` by
  * construction (every branch returns) — do not add a `default` branch, so
@@ -80,7 +85,7 @@ export function currentValue(
   const withSteps = options.withSteps ?? true;
   const sorted = [...ledger.deltas].sort(compareDeltas);
 
-  let value: TrackValue = track.clamp(track.initial);
+  let value: TrackValue = startingValue(track);
   let runningValue: TrackValue = value;
   const steps: Step[] = withSteps ? new Array(sorted.length) : [];
 
@@ -118,7 +123,7 @@ export function computeValueFromSorted(
   track: ResolvedTrack,
   now: number,
 ): TrackValue {
-  let value: TrackValue = track.clamp(track.initial);
+  let value: TrackValue = startingValue(track);
   let runningValue: TrackValue = value;
 
   for (const delta of sortedDeltas) {

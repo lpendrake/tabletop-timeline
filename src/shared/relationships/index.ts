@@ -36,13 +36,15 @@ export type {
   TagTrack,
   SpecError,
   SpecValidationResult,
+  NumericBandRange,
 } from './resolve.js';
-export { validateTrackSpec, compileTrack, resolveTrackSpec } from './resolve.js';
+export { validateTrackSpec, compileTrack, resolveTrackSpec, numericBandRanges } from './resolve.js';
 
 // Current value
 export type { Step, CurrentValueResult, CurrentValueOptions } from './current-value.js';
 export {
   compareDeltas,
+  startingValue,
   applyDelta,
   currentValue,
   computeValue,

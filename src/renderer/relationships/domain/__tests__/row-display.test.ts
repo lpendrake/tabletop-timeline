@@ -6,14 +6,59 @@ import {
   resolveTrack,
 } from '../../../../shared/relationships';
 import {
+  dropIndicatorClass,
+  deltaTone,
   dropToMove,
   formatDeltaChange,
   formatLastChange,
+  formatNumber,
+  formatSigned,
   historyEntryClasses,
   trackValueLabeller,
 } from '../row-display';
 
 describe('row display', () => {
+  it.each([
+    [0, '0'],
+    [-0, '0'],
+    [7, '7'],
+    [-16, '\u221216'],
+    [0.5, '0.5'],
+    [-0.25, '\u22120.25'],
+    [0.1 + 0.2, '0.3'],
+    [0.3 - 0.1, '0.2'],
+    [-(0.1 + 0.2), '\u22120.3'],
+    [1234567, '1234567'],
+  ])('formatNumber(%s) is %s', (n, expected) => {
+    expect(formatNumber(n)).toBe(expected);
+  });
+
+  it('formatSigned tidies float noise', () => {
+    expect(formatSigned(0.3 - 0.1)).toBe('+0.2');
+    expect(formatSigned(-0)).toBe('+0');
+  });
+
+  it('formatDeltaChange formats numeric set values with formatNumber', () => {
+    expect(formatDeltaChange({ op: 'set', value: -5 })).toBe('= \u22125');
+    expect(formatDeltaChange({ op: 'set', value: 0.1 + 0.2 })).toBe('= 0.3');
+  });
+
+  it('formatSigned always shows a sign, using U+2212 for negatives', () => {
+    expect(formatSigned(18)).toBe('+18');
+    expect(formatSigned(-16)).toBe('\u221216');
+    expect(formatSigned(0)).toBe('+0');
+    expect(formatSigned(0.5)).toBe('+0.5');
+  });
+
+  it('deltaTone is positive or negative only for a non-zero adjust', () => {
+    expect(deltaTone({ op: 'adjust', by: 3 })).toBe('positive');
+    expect(deltaTone({ op: 'adjust', by: -3 })).toBe('negative');
+    expect(deltaTone({ op: 'adjust', by: 0 })).toBe('neutral');
+    expect(deltaTone({ op: 'set', value: 40 })).toBe('neutral');
+    expect(deltaTone({ op: 'add', key: 'ally' })).toBe('neutral');
+    expect(deltaTone({ op: 'remove', key: 'ally' })).toBe('neutral');
+  });
+
   it('last-change formatter signs adjust amounts and describes set/add/remove', () => {
     const at = '23 Gozran 4725';
     expect(formatLastChange({ delta: { op: 'adjust', by: 2 }, dateLabel: at })).toBe(`+2 ${at}`);
@@ -56,5 +101,11 @@ describe('row display', () => {
   it('turns a drop position into a row move', () => {
     expect(dropToMove('before', 'x')).toEqual({ before: 'x' });
     expect(dropToMove('after', 'x')).toEqual({ after: 'x' });
+  });
+
+  it('maps a drag indicator to its class suffix', () => {
+    expect(dropIndicatorClass(null)).toBe('');
+    expect(dropIndicatorClass('before')).toBe(' drop-before');
+    expect(dropIndicatorClass('after')).toBe(' drop-after');
   });
 });
