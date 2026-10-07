@@ -1,8 +1,11 @@
-/** Per-campaign selected tab and per-track selected holder for the Relationships view (localStorage). */
+import { parseColumnWidths, type ColumnWidths } from './domain/column-widths';
+
+/** Per-campaign selected tab, per-track selected holder and numeric column widths for the Relationships view (localStorage). */
 
 interface Stored {
   tab?: string;
   holders?: Record<string, string>;
+  columnWidths?: unknown;
 }
 
 function storageKey(campaignPath: string): string {
@@ -48,4 +51,12 @@ export function saveSelectedHolder(campaignPath: string, trackId: string, holder
   const cur = read(campaignPath);
   const holders = cur.holders && typeof cur.holders === 'object' ? cur.holders : {};
   write(campaignPath, { ...cur, holders: { ...holders, [trackId]: holderId } });
+}
+
+export function loadColumnWidths(campaignPath: string): ColumnWidths {
+  return parseColumnWidths(read(campaignPath).columnWidths);
+}
+
+export function saveColumnWidths(campaignPath: string, widths: ColumnWidths): void {
+  write(campaignPath, { ...read(campaignPath), columnWidths: widths });
 }
