@@ -33,7 +33,7 @@ export type {
 } from './view-rows';
 export { buildBaseRows, deriveView, deriveViewRows, canDragRows, historyKey } from './view-rows';
 
-export type { PlotRange, BandSpan, PlotTick, PlotScale } from './plot-scale';
+export type { PlotRange, BandSpan, PlotTick, PlotScale, TickAlign } from './plot-scale';
 export {
   niceStep,
   plotRange,

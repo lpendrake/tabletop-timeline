@@ -1,14 +1,19 @@
 import { describe, it, expect } from 'vitest';
 import {
   COLUMN_LIMITS,
+  COLUMN_TITLES,
   DEFAULT_COLUMN_WIDTHS,
+  KEY_RESIZE_STEP,
+  columnTemplate,
+  draggedWidth,
+  keyResizedWidth,
   parseColumnWidths,
   resetColumn,
   resizeColumn,
   visibleColumns,
-} from '../column-widths';
+} from '../numeric-columns';
 
-describe('column widths', () => {
+describe('numeric columns', () => {
   it("resizing clamps to each column's limits and rounds", () => {
     expect(resizeColumn(DEFAULT_COLUMN_WIDTHS, 'name', 1).name).toBe(COLUMN_LIMITS.name.min);
     expect(resizeColumn(DEFAULT_COLUMN_WIDTHS, 'name', 5000).name).toBe(COLUMN_LIMITS.name.max);
@@ -70,5 +75,39 @@ describe('column widths', () => {
   it('visible columns follow the display order and drop band without bands', () => {
     expect(visibleColumns(true)).toEqual(['entries', 'last', 'name', 'band', 'value']);
     expect(visibleColumns(false)).toEqual(['entries', 'last', 'name', 'value']);
+  });
+
+  it('the template lists the visible columns in display order, band only with bands', () => {
+    expect(columnTemplate(DEFAULT_COLUMN_WIDTHS, true)).toBe('56px 170px 180px 96px 56px');
+    expect(columnTemplate(DEFAULT_COLUMN_WIDTHS, false)).toBe('56px 170px 180px 56px');
+    expect(columnTemplate({ ...DEFAULT_COLUMN_WIDTHS, band: 120, name: 300 }, true)).toBe(
+      '56px 170px 300px 120px 56px',
+    );
+    expect(columnTemplate({ ...DEFAULT_COLUMN_WIDTHS, band: 120 }, false)).toBe(
+      '56px 170px 180px 56px',
+    );
+  });
+
+  it('every visible column has a title', () => {
+    expect(visibleColumns(true).map((c) => COLUMN_TITLES[c])).toEqual([
+      'Entries',
+      'Last change',
+      'Standing with',
+      'Band',
+      'Value',
+    ]);
+  });
+
+  it('a dragged width moves with the pointer from where the drag started', () => {
+    expect(draggedWidth(180, 400, 430)).toBe(210);
+    expect(draggedWidth(180, 400, 370)).toBe(150);
+    expect(draggedWidth(180, 400, 400)).toBe(180);
+  });
+
+  it('Left and Right nudge a width by the step, other keys do nothing', () => {
+    expect(keyResizedWidth(100, 'ArrowRight')).toBe(100 + KEY_RESIZE_STEP);
+    expect(keyResizedWidth(100, 'ArrowLeft')).toBe(100 - KEY_RESIZE_STEP);
+    expect(keyResizedWidth(100, 'ArrowUp')).toBeNull();
+    expect(keyResizedWidth(100, 'Enter')).toBeNull();
   });
 });

@@ -1,17 +1,18 @@
 .rel-view {
+  /* Space between the window edge and the toolbar, rows and notices. */
+  --rel-inner-pad: 8px;
   display: flex;
   flex-direction: column;
   height: 100%;
   width: 100%;
   overflow: auto;
-  padding: 0 24px 16px;
   box-sizing: border-box;
   color: var(--theme-text-primary);
 }
 
 .rel-empty {
   color: var(--theme-text-muted);
-  padding: 24px;
+  padding: 24px var(--rel-inner-pad);
 }
 
 .rel-drag-handle {
@@ -58,7 +59,7 @@
   align-items: center;
   gap: 12px;
   min-height: 30px;
-  padding: 0 8px;
+  padding: 0 var(--rel-inner-pad);
   cursor: pointer;
   box-sizing: border-box;
   font-weight: 700;
@@ -111,7 +112,7 @@
 
 .rel-track-problems {
   margin-top: 16px;
-  padding-top: 8px;
+  padding: 8px var(--rel-inner-pad) 0;
   border-top: 1px solid var(--theme-border);
   color: var(--theme-warning);
 }

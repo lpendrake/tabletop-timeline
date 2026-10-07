@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { Ledger, RelationshipDelta } from '../../../../shared/relationships/model';
 import {
+  columnTitleLabel,
   columnSortOf,
   compareHistoryEntries,
   entryCount,
@@ -194,5 +195,13 @@ describe('sort', () => {
     expect(lastChange(ledger, 5)?.at).toBeNull();
     expect(lastChange({ ...ledger, deltas: [delta(500)] }, 100)).toBeNull();
     expect(entryCount(ledger)).toBe(4);
+  });
+});
+
+describe('columnTitleLabel', () => {
+  it('names the sort direction only for the sorted column', () => {
+    expect(columnTitleLabel('Value', 'asc')).toBe('Value, sorted ascending');
+    expect(columnTitleLabel('Value', 'desc')).toBe('Value, sorted descending');
+    expect(columnTitleLabel('Value', null)).toBe('Value');
   });
 });

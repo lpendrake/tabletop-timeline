@@ -1,4 +1,4 @@
-import { parseColumnWidths, type ColumnWidths } from './domain/column-widths';
+import { parseColumnWidths, type ColumnWidths } from './domain/numeric-columns';
 
 /** Per-campaign selected tab, per-track selected holder and numeric column widths for the Relationships view (localStorage). */
 

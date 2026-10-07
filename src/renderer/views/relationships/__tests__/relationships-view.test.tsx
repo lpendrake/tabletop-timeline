@@ -270,6 +270,25 @@ function rowFor(name: string, scope: HTMLElement = container): HTMLElement {
   return row;
 }
 
+function titleCell(title: string): HTMLElement {
+  const cell = $$('.rel-num-th').find(
+    (th) => th.querySelector('.rel-num-title-label')?.textContent === title,
+  );
+  if (!cell) throw new Error(`no column title ${title}`);
+  return cell;
+}
+
+const titleLabel = (title: string) =>
+  titleCell(title).querySelector('.rel-num-title')!.getAttribute('aria-label');
+
+const gripOf = (title: string) => titleCell(title).querySelector('.rel-num-grip') as HTMLElement;
+
+function clickTitle(title: string) {
+  act(() => {
+    fireEvent.click(titleCell(title).querySelector('.rel-num-title') as HTMLElement);
+  });
+}
+
 beforeEach(() => {
   localStorage.clear();
   state.ledgers = fixtureLedgers();
@@ -482,8 +501,6 @@ describe('RelationshipsView', () => {
     await search('');
     expect($$('.rel-drag-handle')).toHaveLength(2);
 
-    expect(rowNames()).toEqual(['Anna', 'Mira']);
-
     act(() => {
       fireEvent.contextMenu(rowFor('Anna'));
     });
@@ -502,6 +519,99 @@ describe('RelationshipsView', () => {
     expect(state.saveSpy).toHaveBeenCalled();
     const saved = state.saveSpy.mock.calls.at(-1)![1] as { order: Record<string, string[]> };
     expect(saved.order['rp01:aaaa']).toEqual(['cccc', 'bbbb']);
+  });
+
+  it('clicking a column title hides drag handles; the third click restores My order', async () => {
+    await mount();
+    act(() => {
+      fireEvent.contextMenu(rowFor('Anna'));
+    });
+    const items = state.contextMenuSpy.mock.calls[0][0] as Array<{
+      label: string;
+      onSelect: () => void;
+    }>;
+    act(() => {
+      items.find((i) => i.label === 'Move down')!.onSelect();
+    });
+    expect(rowNames()).toEqual(['Mira', 'Anna']);
+    expect($$('.rel-drag-handle')).toHaveLength(2);
+
+    clickTitle('Value');
+    expect($$('.rel-drag-handle')).toHaveLength(0);
+    expect(rowNames()).toEqual(['Anna', 'Mira']);
+    expect(titleLabel('Value')).toBe('Value, sorted descending');
+
+    clickTitle('Value');
+    expect($$('.rel-drag-handle')).toHaveLength(0);
+    expect(rowNames()).toEqual(['Mira', 'Anna']);
+    expect(titleLabel('Value')).toBe('Value, sorted ascending');
+
+    clickTitle('Value');
+    expect($$('.rel-drag-handle')).toHaveLength(2);
+    expect(rowNames()).toEqual(['Mira', 'Anna']);
+    expect(titleLabel('Value')).toBe('Value');
+  });
+
+  it('sorting by a column title also hides the group handles under All holders', async () => {
+    await mount();
+    await pickHolder('All holders');
+    expect($$('.rel-drag-handle')).toHaveLength(5);
+
+    clickTitle('Standing with');
+    expect($$('.rel-drag-handle')).toHaveLength(0);
+    expect(titleLabel('Standing with')).toBe('Standing with, sorted ascending');
+
+    clickTitle('Standing with');
+    expect($$('.rel-drag-handle')).toHaveLength(0);
+    clickTitle('Standing with');
+    expect($$('.rel-drag-handle')).toHaveLength(5);
+  });
+
+  it('column widths persist per campaign', async () => {
+    await mount('/camp-a');
+    const defaultName = Number(gripOf('Standing with').getAttribute('aria-valuenow'));
+    act(() => {
+      fireEvent.pointerDown(gripOf('Standing with'), { pointerId: 1, clientX: 100 });
+    });
+    // Each move is measured from where the drag started, however often the view re-renders.
+    act(() => {
+      fireEvent.pointerMove(gripOf('Standing with'), { pointerId: 1, clientX: 130 });
+    });
+    expect(gripOf('Standing with').getAttribute('aria-valuenow')).toBe(String(defaultName + 30));
+    act(() => {
+      fireEvent.pointerMove(gripOf('Standing with'), { pointerId: 1, clientX: 160 });
+    });
+    act(() => {
+      fireEvent.pointerUp(gripOf('Standing with'), { pointerId: 1, clientX: 160 });
+    });
+    expect(gripOf('Standing with').getAttribute('aria-valuenow')).toBe(String(defaultName + 60));
+    expect($('.rel-num-tab').style.getPropertyValue('--rel-num-template')).toContain(
+      `${defaultName + 60}px`,
+    );
+
+    await remount('/camp-a');
+    expect(gripOf('Standing with').getAttribute('aria-valuenow')).toBe(String(defaultName + 60));
+
+    await remount('/camp-b');
+    expect(gripOf('Standing with').getAttribute('aria-valuenow')).toBe(String(defaultName));
+  });
+
+  it('losing pointer capture ends a column drag', async () => {
+    await mount();
+    const defaultName = Number(gripOf('Standing with').getAttribute('aria-valuenow'));
+    act(() => {
+      fireEvent.pointerDown(gripOf('Standing with'), { pointerId: 1, clientX: 100 });
+    });
+    act(() => {
+      fireEvent.pointerMove(gripOf('Standing with'), { pointerId: 1, clientX: 120 });
+    });
+    act(() => {
+      fireEvent.lostPointerCapture(gripOf('Standing with'), { pointerId: 1 });
+    });
+    act(() => {
+      fireEvent.pointerMove(gripOf('Standing with'), { pointerId: 1, clientX: 200 });
+    });
+    expect(gripOf('Standing with').getAttribute('aria-valuenow')).toBe(String(defaultName + 20));
   });
 
   it('clicking a name opens the entity note without toggling the row', async () => {

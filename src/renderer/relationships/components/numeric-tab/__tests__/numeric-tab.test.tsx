@@ -12,6 +12,12 @@ import type {
   RelationshipDelta,
 } from '../../../../../shared/relationships';
 import { computeTooltipPosition } from '../../../../shared/tooltip-position';
+import {
+  columnTemplate,
+  COLUMN_LIMITS,
+  DEFAULT_COLUMN_WIDTHS,
+  KEY_RESIZE_STEP,
+} from '../../../domain/numeric-columns';
 import { formatEntryDate } from '../../../domain/entry-date';
 import { numericTabModel } from '../../../domain/numeric-rows';
 import { percent } from '../../../domain/plot-scale';
@@ -115,6 +121,11 @@ function props(
     emptyMessage: null,
     asOfLabel: AS_OF,
     trackProblems: [],
+    widths: DEFAULT_COLUMN_WIDTHS,
+    setColumnWidth: vi.fn(),
+    resetColumnWidth: vi.fn(),
+    sortMode: 'mine',
+    sortByColumn: vi.fn(),
     toggleRow: vi.fn(),
     toggleGroup: vi.fn(),
     moveRow: vi.fn(),
@@ -153,7 +164,10 @@ const $ = (sel: string, scope: ParentNode = container) => scope.querySelector<HT
 const $$ = (sel: string, scope: ParentNode = container) =>
   Array.from(scope.querySelectorAll<HTMLElement>(sel));
 const text = (els: HTMLElement[]) => els.map((e) => e.textContent);
-const headerLabels = () => text($$('.rel-num-columns .rel-num-left span')).filter(Boolean);
+const headerLabels = () => text($$('.rel-num-columns .rel-num-title-label'));
+const header = (title: string) =>
+  $$('.rel-num-th').find((th) => $('.rel-num-title-label', th).textContent === title)!;
+const gripOf = (title: string) => $('.rel-num-grip', header(title));
 
 function rowFor(name: string): HTMLElement {
   const row = $$('.rel-num-row').find((r) => $('.rel-num-name', r).textContent === name);
@@ -166,12 +180,11 @@ function ledgerRow(track: NumericTrack, value: number, observer = 'bbbb'): Ledge
 }
 
 describe('NumericTab', () => {
-  it('sticky header holds the toolbar slot and the column labels', () => {
+  it('sticky header holds the toolbar slot and the column titles', () => {
     render(pf2eProps());
-    const header = $('.rel-num-header');
-    expect($('[data-testid="toolbar"]', header)).not.toBeNull();
-    expect(headerLabels()).toEqual(['Standing with', 'Value', 'Band', 'Last change', 'Entries']);
-    expect(header.contains($('.rel-num-columns'))).toBe(true);
+    const stickyHeader = $('.rel-num-header');
+    expect($('[data-testid="toolbar"]', stickyHeader)).not.toBeNull();
+    expect(stickyHeader.contains($('.rel-num-columns'))).toBe(true);
   });
 
   it('labels every PF2E band over its span in its colour', () => {
@@ -234,11 +247,10 @@ describe('NumericTab', () => {
     expect(amount.classList.contains('is-negative')).toBe(false);
   });
 
-  it('the plot draws the zero line, shaded bands, initial→current line and dot', () => {
+  it('the plot draws the zero line, bands, initial→current line and dot', () => {
     render(pf2eProps());
     const plot = $('.rel-num-plot', rowFor('Anna'));
     expect($('.rel-num-zero', plot).style.left).toBe('50%');
-    expect($$('.rel-num-band.is-shaded', plot)).toHaveLength(3);
     expect($$('.rel-num-band', plot)).toHaveLength(7);
     const line = $('.rel-num-line', plot);
     expect(line.style.left).toBe('50%');
@@ -433,7 +445,7 @@ describe('NumericTab', () => {
 
   it('smoke: no-band track omits the Band column and shows numeric ticks', () => {
     render(props(noBands, derive(noBands, [ledgerRow(noBands, 7)], 'aaaa')));
-    expect(headerLabels()).toEqual(['Standing with', 'Value', 'Last change', 'Entries']);
+    expect(headerLabels()).toEqual(['Entries', 'Last change', 'Standing with', 'Value']);
     expect($$('.rel-num-band-label')).toHaveLength(0);
     expect($$('.rel-num-axis-band')).toHaveLength(0);
     expect(text($$('.rel-num-axis-tick'))).toEqual([-10, -5, 0, 5, 10].map(formatNumber));
@@ -441,6 +453,26 @@ describe('NumericTab', () => {
     expect(rowFor('Anna').style.getPropertyValue('--rel-num-colour')).toBe(
       'var(--theme-accent-gold)',
     );
+  });
+
+  it('a no-band track aligns its first tick label to start, its last to end and the rest centre', () => {
+    render(props(noBands, derive(noBands, [ledgerRow(noBands, 7)], 'aaaa')));
+    const ticks = $$('.rel-num-axis-tick');
+    expect(ticks.map((t) => t.classList.contains('is-start'))).toEqual([
+      true,
+      false,
+      false,
+      false,
+      false,
+    ]);
+    expect(ticks.map((t) => t.classList.contains('is-end'))).toEqual([
+      false,
+      false,
+      false,
+      false,
+      true,
+    ]);
+    expect(ticks[2].classList.contains('is-centre')).toBe(true);
   });
 
   it('smoke: unbounded track derives its axis from the data', () => {
@@ -460,5 +492,306 @@ describe('NumericTab', () => {
     expect(
       $('.rel-empty').compareDocumentPosition(problems) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+
+  it('column titles follow the new order', () => {
+    render(pf2eProps());
+    expect(headerLabels()).toEqual(['Entries', 'Last change', 'Standing with', 'Band', 'Value']);
+    expect($$('.rel-num-title').every((t) => t.tagName === 'BUTTON')).toBe(true);
+
+    render(props(noBands, derive(noBands, [ledgerRow(noBands, 7)], 'aaaa')));
+    expect(headerLabels()).toEqual(['Entries', 'Last change', 'Standing with', 'Value']);
+  });
+
+  it('rows render cells in the same order as the titles', () => {
+    const cellClasses = [
+      'rel-num-toggle',
+      'rel-num-last',
+      'rel-num-name',
+      'rel-num-band-label',
+      'rel-num-value',
+    ];
+    const titleOrder = ['entries', 'last', 'name', 'band', 'value'];
+    const cellOrder = (row: HTMLElement) =>
+      Array.from($('.rel-num-left', row).children)
+        .slice(1)
+        .map((cell) => cellClasses.findIndex((c) => cell.classList.contains(c)));
+
+    render(pf2eProps());
+    expect(
+      $$('.rel-num-th').map((th) => titleOrder.find((c) => th.classList.contains(`is-${c}`))),
+    ).toEqual(titleOrder);
+    expect(cellOrder(rowFor('Anna'))).toEqual([0, 1, 2, 3, 4]);
+
+    render(props(noBands, derive(noBands, [ledgerRow(noBands, 7)], 'aaaa')));
+    expect(cellOrder(rowFor('Anna'))).toEqual([0, 1, 2, 4]);
+  });
+
+  it('the entries toggle shows the arrow and count and flips when expanded', () => {
+    render(pf2eProps());
+    const toggle = $('.rel-num-toggle', rowFor('Anna'));
+    expect($('.rel-num-arrow', toggle).textContent).toBe('▸');
+    expect($('.rel-num-count', toggle).textContent).toBe('1');
+
+    const viewOrder: ViewOrder = {
+      ...defaultViewOrder(),
+      expanded: { [rowListKey(pf2e.id, 'aaaa')]: ['bbbb'] },
+    };
+    render(pf2eProps({}, viewOrder));
+    expect($('.rel-num-arrow', rowFor('Anna')).textContent).toBe('▾');
+    expect($('.rel-num-arrow', rowFor('Mira')).textContent).toBe('▸');
+  });
+
+  it('clicking a title sorts by it, and the title button names the sort and shows the arrow', () => {
+    const p = pf2eProps();
+    render(p);
+    expect($$('.rel-num-title').map((b) => b.getAttribute('aria-label'))).toEqual([
+      'Entries',
+      'Last change',
+      'Standing with',
+      'Band',
+      'Value',
+    ]);
+    expect($$('.rel-num-sort-arrow')).toHaveLength(0);
+    expect($$('[role="row"], [role="columnheader"], [aria-sort]')).toHaveLength(0);
+
+    act(() => {
+      fireEvent.click($('.rel-num-title', header('Last change')));
+    });
+    act(() => {
+      fireEvent.click($('.rel-num-title', header('Standing with')));
+    });
+    expect(p.sortByColumn).toHaveBeenNthCalledWith(1, 'last');
+    expect(p.sortByColumn).toHaveBeenNthCalledWith(2, 'name');
+    expect(p.toggleRow).not.toHaveBeenCalled();
+
+    render(pf2eProps({ sortMode: { column: 'value', dir: 'desc' } }));
+    const titleButton = (title: string) => $('.rel-num-title', header(title));
+    expect(titleButton('Value').getAttribute('aria-label')).toBe('Value, sorted descending');
+    expect($('.rel-num-sort-arrow', header('Value')).textContent).toBe('▼');
+    expect($('.rel-num-sort-arrow', header('Value')).getAttribute('aria-hidden')).toBe('true');
+    expect(titleButton('Entries').getAttribute('aria-label')).toBe('Entries');
+    expect($$('.rel-num-sort-arrow')).toHaveLength(1);
+
+    render(pf2eProps({ sortMode: { column: 'name', dir: 'asc' } }));
+    expect(titleButton('Standing with').getAttribute('aria-label')).toBe(
+      'Standing with, sorted ascending',
+    );
+    expect($('.rel-num-sort-arrow', header('Standing with')).textContent).toBe('▲');
+    expect(titleButton('Value').getAttribute('aria-label')).toBe('Value');
+  });
+
+  it('every title has a resize grip describing its column', () => {
+    render(pf2eProps());
+    const grip = gripOf('Standing with');
+    expect(grip.getAttribute('role')).toBe('separator');
+    expect(grip.getAttribute('aria-orientation')).toBe('vertical');
+    expect(grip.getAttribute('aria-valuenow')).toBe(String(DEFAULT_COLUMN_WIDTHS.name));
+    expect(grip.getAttribute('aria-valuemin')).toBe(String(COLUMN_LIMITS.name.min));
+    expect(grip.getAttribute('aria-valuemax')).toBe(String(COLUMN_LIMITS.name.max));
+    expect(grip.tabIndex).toBe(0);
+    expect(grip.title).toBe('Drag to resize, double-click to reset');
+    expect($$('.rel-num-grip')).toHaveLength(5);
+  });
+
+  it('dragging a grip resizes its column without sorting', () => {
+    const p = pf2eProps();
+    render(p);
+    const grip = gripOf('Standing with');
+    act(() => {
+      fireEvent.pointerMove(grip, { pointerId: 1, clientX: 500 });
+    });
+    expect(p.setColumnWidth).not.toHaveBeenCalled();
+
+    act(() => {
+      fireEvent.pointerDown(grip, { pointerId: 1, clientX: 400 });
+    });
+    act(() => {
+      fireEvent.pointerMove(grip, { pointerId: 1, clientX: 430 });
+    });
+    expect(p.setColumnWidth).toHaveBeenLastCalledWith('name', DEFAULT_COLUMN_WIDTHS.name + 30);
+    act(() => {
+      fireEvent.pointerMove(grip, { pointerId: 1, clientX: 370 });
+    });
+    expect(p.setColumnWidth).toHaveBeenLastCalledWith('name', DEFAULT_COLUMN_WIDTHS.name - 30);
+    act(() => {
+      fireEvent.pointerUp(grip, { pointerId: 1, clientX: 370 });
+      fireEvent.click(grip);
+    });
+    expect(p.setColumnWidth).toHaveBeenCalledTimes(2);
+
+    act(() => {
+      fireEvent.pointerMove(grip, { pointerId: 1, clientX: 100 });
+    });
+    expect(p.setColumnWidth).toHaveBeenCalledTimes(2);
+    expect(p.sortByColumn).not.toHaveBeenCalled();
+    expect(p.toggleRow).not.toHaveBeenCalled();
+  });
+
+  it('a drag starts from the current width, and pressing the grip does not start a text selection', () => {
+    const p = pf2eProps({ widths: { ...DEFAULT_COLUMN_WIDTHS, value: 80 } });
+    render(p);
+    const grip = gripOf('Value');
+    const down = new PointerEvent('pointerdown', {
+      pointerId: 2,
+      clientX: 10,
+      bubbles: true,
+      cancelable: true,
+    });
+    act(() => {
+      grip.dispatchEvent(down);
+    });
+    expect(down.defaultPrevented).toBe(true);
+    act(() => {
+      fireEvent.pointerMove(grip, { pointerId: 2, clientX: 25 });
+    });
+    expect(p.setColumnWidth).toHaveBeenCalledWith('value', 95);
+  });
+
+  it('only the primary button starts a drag', () => {
+    const p = pf2eProps();
+    render(p);
+    const grip = gripOf('Standing with');
+    act(() => {
+      fireEvent.pointerDown(grip, { pointerId: 1, button: 2, clientX: 400 });
+    });
+    act(() => {
+      fireEvent.pointerMove(grip, { pointerId: 1, clientX: 430 });
+    });
+    expect(p.setColumnWidth).not.toHaveBeenCalled();
+
+    act(() => {
+      fireEvent.pointerDown(grip, { pointerId: 1, button: 0, clientX: 400 });
+    });
+    act(() => {
+      fireEvent.pointerMove(grip, { pointerId: 1, clientX: 430 });
+    });
+    expect(p.setColumnWidth).toHaveBeenCalledTimes(1);
+  });
+
+  it('a drag ignores moves from another pointer', () => {
+    const p = pf2eProps();
+    render(p);
+    const grip = gripOf('Standing with');
+    act(() => {
+      fireEvent.pointerDown(grip, { pointerId: 1, clientX: 400 });
+    });
+    act(() => {
+      fireEvent.pointerMove(grip, { pointerId: 2, clientX: 450 });
+    });
+    expect(p.setColumnWidth).not.toHaveBeenCalled();
+    act(() => {
+      fireEvent.pointerMove(grip, { pointerId: 1, clientX: 410 });
+    });
+    expect(p.setColumnWidth).toHaveBeenCalledTimes(1);
+    expect(p.setColumnWidth).toHaveBeenLastCalledWith('name', DEFAULT_COLUMN_WIDTHS.name + 10);
+  });
+
+  it("another pointer's pointerup does not end a drag", () => {
+    const p = pf2eProps();
+    render(p);
+    const grip = gripOf('Standing with');
+    act(() => {
+      fireEvent.pointerDown(grip, { pointerId: 1, clientX: 400 });
+    });
+    act(() => {
+      fireEvent.pointerUp(grip, { pointerId: 2, clientX: 400 });
+    });
+    act(() => {
+      fireEvent.pointerMove(grip, { pointerId: 1, clientX: 410 });
+    });
+    expect(p.setColumnWidth).toHaveBeenLastCalledWith('name', DEFAULT_COLUMN_WIDTHS.name + 10);
+    act(() => {
+      fireEvent.pointerUp(grip, { pointerId: 1, clientX: 410 });
+    });
+    act(() => {
+      fireEvent.pointerMove(grip, { pointerId: 1, clientX: 420 });
+    });
+    expect(p.setColumnWidth).toHaveBeenCalledTimes(1);
+  });
+
+  it('double-click resets and arrow keys nudge a column', () => {
+    const p = pf2eProps();
+    render(p);
+    const grip = gripOf('Last change');
+    act(() => {
+      fireEvent.doubleClick(grip);
+    });
+    expect(p.resetColumnWidth).toHaveBeenCalledWith('last');
+    expect(p.sortByColumn).not.toHaveBeenCalled();
+
+    act(() => {
+      fireEvent.keyDown(grip, { key: 'ArrowRight' });
+    });
+    expect(p.setColumnWidth).toHaveBeenLastCalledWith(
+      'last',
+      DEFAULT_COLUMN_WIDTHS.last + KEY_RESIZE_STEP,
+    );
+    act(() => {
+      fireEvent.keyDown(grip, { key: 'ArrowLeft' });
+    });
+    expect(p.setColumnWidth).toHaveBeenLastCalledWith(
+      'last',
+      DEFAULT_COLUMN_WIDTHS.last - KEY_RESIZE_STEP,
+    );
+    act(() => {
+      fireEvent.keyDown(grip, { key: 'Enter' });
+    });
+    expect(p.setColumnWidth).toHaveBeenCalledTimes(2);
+  });
+
+  it('header and rows share the width template', () => {
+    const widths = { ...DEFAULT_COLUMN_WIDTHS, name: 260, band: 120 };
+    render(pf2eProps({ widths }));
+    const tab = $('.rel-num-tab');
+    expect(tab.style.getPropertyValue('--rel-num-template')).toBe(columnTemplate(widths, true));
+    expect(tab.style.getPropertyValue('--rel-num-template')).toBe('56px 170px 260px 120px 56px');
+    expect(tab.contains($('.rel-num-header .rel-num-left'))).toBe(true);
+    expect(tab.contains($('.rel-num-row .rel-num-left'))).toBe(true);
+
+    render(props(noBands, derive(noBands, [ledgerRow(noBands, 7)], 'aaaa'), { widths }));
+    expect($('.rel-num-tab').style.getPropertyValue('--rel-num-template')).toBe(
+      columnTemplate(widths, false),
+    );
+  });
+
+  it('bands carry their colour for the tint', () => {
+    const p = pf2eProps();
+    render(p);
+    const { scale } = numericTabModel(pf2e, p.groups, AS_OF);
+    const bands = $$('.rel-num-band', rowFor('Anna'));
+    expect(bands).toHaveLength(scale.bands.length);
+    const colours = bands.map((band) => band.style.getPropertyValue('--rel-num-colour'));
+    expect(colours).toEqual(scale.bands.map((span) => span.colour));
+    expect(new Set(colours).size).toBeGreaterThan(1);
+  });
+
+  it('every second row of a group is striped, with its expanded line', () => {
+    render(props(pf2e, derive(pf2e, pf2eLedgers(), '*')));
+    const wrappers = $$('.rel-row-wrap');
+    expect(wrappers.map((w) => w.classList.contains('is-striped'))).toEqual([false, false, true]);
+    expect($$('.rel-num-row.is-striped')).toHaveLength(0);
+
+    const viewOrder: ViewOrder = {
+      ...defaultViewOrder(),
+      expanded: { [rowListKey(pf2e.id, 'aaaa')]: ['cccc'] },
+    };
+    render(pf2eProps({}, viewOrder));
+    const striped = $('.rel-row-wrap.is-striped');
+    expect($('.rel-num-name', striped).textContent).toBe('Mira');
+    expect(striped.contains($('.rel-num-expanded'))).toBe(true);
+  });
+
+  it('the axis labels and every row plot draw into the same inset layer', () => {
+    render(pf2eProps());
+    const layers = [$('.rel-num-axis'), ...$$('.rel-num-plot')].map((box) => {
+      expect(box.children).toHaveLength(1);
+      return box.children[0] as HTMLElement;
+    });
+    expect(layers).toHaveLength(3);
+    layers.forEach((layer) => expect(layer.className).toBe('rel-num-layer'));
+    expect($$('.rel-num-axis-band', layers[0])).toHaveLength(7);
+    expect($('.rel-num-dot-hit', layers[1])).not.toBeNull();
+    expect($('.rel-num-line', layers[2])).not.toBeNull();
   });
 });

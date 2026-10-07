@@ -2,6 +2,7 @@ import { NumericTab } from '../../relationships/components/numeric-tab/numeric-t
 import { PlaceholderTabBody } from '../../relationships/components/placeholder-tab-body';
 import { Toolbar } from '../../relationships/components/toolbar';
 import { TopBar } from '../../relationships/components/top-bar';
+import { useColumnWidths } from '../../relationships/hooks/use-column-widths';
 import { useRelationships } from '../../relationships/hooks/use-relationships';
 import { useRelationshipLibraryContext } from '../../relationships/library-context';
 import type { EntityIndexEntry } from '../../../types/global';
@@ -27,6 +28,7 @@ export function RelationshipsView({
 }: RelationshipsViewProps) {
   const library = useRelationshipLibraryContext();
   const state = useRelationships({ campaignPath, library, entityLabelMap, getEntityIndex });
+  const columnWidths = useColumnWidths(campaignPath);
   const { activeTrack } = state;
 
   return (
@@ -45,6 +47,7 @@ export function RelationshipsView({
         <NumericTab
           {...state}
           track={activeTrack}
+          {...columnWidths}
           toolbar={<Toolbar {...state} />}
           onOpenById={onOpenById}
         />

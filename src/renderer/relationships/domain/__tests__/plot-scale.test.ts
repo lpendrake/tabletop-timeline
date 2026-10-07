@@ -41,15 +41,6 @@ describe('plot-scale', () => {
       expect(span.end).toBeCloseTo(expected[i][1], 5);
       expect(span.centre).toBeCloseTo((expected[i][0] + expected[i][1]) / 2, 5);
     });
-    expect(scale.bands.map((s) => s.shaded)).toEqual([
-      false,
-      true,
-      false,
-      true,
-      false,
-      true,
-      false,
-    ]);
     expect(scale.zero).toBeCloseTo(0.5, 5);
     expect(scale.ticks).toEqual([]);
   });
@@ -134,6 +125,15 @@ describe('plot-scale', () => {
     expect(niceStep(2, 5)).toBe(0.5);
     expect(niceStep(2, 5, 1)).toBe(1);
     expect(niceStep(0.3, 5)).toBe(0.05);
+  });
+
+  it('the first tick aligns its label to start, the last to end, the rest centre', () => {
+    const ticks = plotTicks({ lo: -10, hi: 10, step: 5 });
+    expect(ticks.map((t) => t.align)).toEqual(['start', 'centre', 'centre', 'centre', 'end']);
+  });
+
+  it('a lone tick in the middle of the axis is centred', () => {
+    expect(plotTicks({ lo: 5, hi: 5, step: 1 }).map((t) => t.align)).toEqual(['centre']);
   });
 
   it('tick labels carry no floating-point noise', () => {

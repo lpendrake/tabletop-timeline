@@ -28,14 +28,16 @@ export interface BandSpan {
   end: number;
   centre: number;
   colour: string;
-  /** Odd original band index: alternate bands are shaded so neighbours read apart. */
-  shaded: boolean;
 }
+
+/** Which side of its tick a label sits on, so labels at the ends of the axis stay inside it. */
+export type TickAlign = 'start' | 'centre' | 'end';
 
 export interface PlotTick {
   value: number;
   fraction: number;
   label: string;
+  align: TickAlign;
 }
 
 export interface PlotScale extends PlotRange {
@@ -103,10 +105,16 @@ export function bandSpans(track: NumericTrack, range: PlotRange): BandSpan[] {
       end: to,
       centre: (from + to) / 2,
       colour: scaleColourCss(bandColour(track, band.key)),
-      shaded: index % 2 === 1,
     });
   });
   return spans;
+}
+
+/** The label of a tick at `fraction` begins at the axis start, ends at the axis end, and is centred between. */
+function tickAlign(fraction: number): TickAlign {
+  if (fraction === 0) return 'start';
+  if (fraction === 1) return 'end';
+  return 'centre';
 }
 
 /** A tick at every multiple of the step inside the range. */
@@ -117,7 +125,8 @@ export function plotTicks(range: PlotRange): PlotTick[] {
   const last = Math.floor(tidy(range.hi / range.step));
   for (let i = first; i <= last; i++) {
     const value = tidy(i * range.step);
-    ticks.push({ value, fraction: valueFraction(range, value), label: formatNumber(value) });
+    const fraction = valueFraction(range, value);
+    ticks.push({ value, fraction, label: formatNumber(value), align: tickAlign(fraction) });
   }
   return ticks;
 }

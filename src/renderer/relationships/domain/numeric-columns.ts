@@ -1,5 +1,5 @@
 /**
- * Resizable info-panel columns of the numeric tab, in pixels.
+ * The numeric tab's info-panel columns: their order, titles, pixel widths and resize arithmetic.
  *
  * Limits keep content legible: entries fits the boxed `▸ 999`, last change fits a short date,
  * name can grow for long entity names, band fits a one-word label, value fits a signed number.
@@ -11,6 +11,18 @@ const COLUMN_ORDER = ['entries', 'last', 'name', 'band', 'value'] as const;
 
 export type NumericColumn = (typeof COLUMN_ORDER)[number];
 export type ColumnWidths = Readonly<Record<NumericColumn, number>>;
+
+/** Title shown over each column and sorted by when clicked. */
+export const COLUMN_TITLES: Readonly<Record<NumericColumn, string>> = {
+  entries: 'Entries',
+  last: 'Last change',
+  name: 'Standing with',
+  band: 'Band',
+  value: 'Value',
+};
+
+/** Pixels a column grows or shrinks per Left/Right press on its resize grip. */
+export const KEY_RESIZE_STEP = 8;
 
 export const DEFAULT_COLUMN_WIDTHS: ColumnWidths = {
   entries: 56,
@@ -65,4 +77,23 @@ export function parseColumnWidths(raw: unknown): ColumnWidths {
 
 export function visibleColumns(hasBands: boolean): readonly NumericColumn[] {
   return hasBands ? COLUMN_ORDER : COLUMN_ORDER.filter((column) => column !== 'band');
+}
+
+/** The CSS `grid-template-columns` of the visible columns, e.g. `56px 170px 180px 96px 56px`. */
+export function columnTemplate(widths: ColumnWidths, hasBands: boolean): string {
+  return visibleColumns(hasBands)
+    .map((column) => `${widths[column]}px`)
+    .join(' ');
+}
+
+/** The width of a column being dragged: its width when the drag started, moved by the pointer's travel. */
+export function draggedWidth(startWidth: number, startX: number, x: number): number {
+  return startWidth + (x - startX);
+}
+
+/** The width after Left/Right on a grip, or null for any other key. */
+export function keyResizedWidth(width: number, key: string): number | null {
+  if (key === 'ArrowLeft') return width - KEY_RESIZE_STEP;
+  if (key === 'ArrowRight') return width + KEY_RESIZE_STEP;
+  return null;
 }

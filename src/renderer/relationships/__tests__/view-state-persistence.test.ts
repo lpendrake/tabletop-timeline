@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
-import { DEFAULT_COLUMN_WIDTHS, resizeColumn } from '../domain/column-widths';
+import { DEFAULT_COLUMN_WIDTHS, resizeColumn } from '../domain/numeric-columns';
 import {
   loadColumnWidths,
   loadSelectedHolder,

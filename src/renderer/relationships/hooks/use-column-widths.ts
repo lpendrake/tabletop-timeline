@@ -4,7 +4,7 @@ import {
   resizeColumn,
   type ColumnWidths,
   type NumericColumn,
-} from '../domain/column-widths';
+} from '../domain/numeric-columns';
 import { createSaveQueue, type SaveQueue } from '../view-order-save-queue';
 import { loadColumnWidths, saveColumnWidths } from '../view-state-persistence';
 

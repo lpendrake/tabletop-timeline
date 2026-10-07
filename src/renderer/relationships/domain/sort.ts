@@ -7,11 +7,12 @@
 import type { Ledger, RelationshipDelta } from '../../../shared/relationships/model';
 import type { TrackKind } from '../../../shared/relationships/spec';
 import { compareDeltas } from '../../../shared/relationships/current-value';
+import type { NumericColumn } from './numeric-columns';
 
 export type SortMode = 'mine' | 'value' | 'recent' | 'alpha';
 
-/** A column a row list can be sorted by (the clickable column titles of a numeric tab). */
-export type SortColumn = 'entries' | 'last' | 'name' | 'band' | 'value';
+/** A column a row list can be sorted by: the clickable column titles of a numeric tab. */
+export type SortColumn = NumericColumn;
 export type SortDir = 'asc' | 'desc';
 export interface ColumnSort {
   column: SortColumn;
@@ -53,6 +54,12 @@ export function nextColumnSort(current: RowSort, column: SortColumn): RowSort {
 /** The direction `column` is currently sorted in, or null when another sort is active. */
 export function columnSortOf(sort: RowSort, column: SortColumn): SortDir | null {
   return isColumnSort(sort) && sort.column === column ? sort.dir : null;
+}
+
+/** The accessible name of a column title button: the title, plus the sort direction when it is the sorted column. */
+export function columnTitleLabel(title: string, dir: SortDir | null): string {
+  if (dir === null) return title;
+  return `${title}, sorted ${dir === 'asc' ? 'ascending' : 'descending'}`;
 }
 
 /** Display label: My order / By value / Recently changed / A–Z. */

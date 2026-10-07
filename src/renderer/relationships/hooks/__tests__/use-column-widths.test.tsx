@@ -4,7 +4,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
-import { COLUMN_LIMITS, DEFAULT_COLUMN_WIDTHS } from '../../domain/column-widths';
+import { COLUMN_LIMITS, DEFAULT_COLUMN_WIDTHS } from '../../domain/numeric-columns';
 import { loadColumnWidths, saveColumnWidths } from '../../view-state-persistence';
 import { useColumnWidths, type ColumnWidthsState } from '../use-column-widths';
 

@@ -1,6 +1,7 @@
 .rel-placeholder-body {
   display: flex;
   flex-direction: column;
+  padding-bottom: 16px;
   color: var(--theme-text-primary);
 }
 
@@ -9,7 +10,7 @@
   align-items: center;
   gap: 12px;
   min-height: 30px;
-  padding: 0 8px;
+  padding: 0 var(--rel-inner-pad);
   cursor: pointer;
   box-sizing: border-box;
 }
@@ -58,7 +59,7 @@
   display: flex;
   gap: 12px;
   align-items: baseline;
-  padding: 2px 8px;
+  padding: 2px var(--rel-inner-pad);
   border-radius: 4px;
 }
 

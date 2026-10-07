@@ -3,7 +3,7 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 12px;
-  padding: 8px 0;
+  padding: 8px var(--rel-inner-pad);
 }
 
 .rel-holder-picker {
