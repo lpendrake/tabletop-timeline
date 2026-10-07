@@ -89,6 +89,17 @@ export function valueFraction(range: PlotRange, value: number): number {
   return Math.min(1, Math.max(0, (value - range.lo) / (range.hi - range.lo)));
 }
 
+/** Fractions of the axis spanning `from` to `to`, as a CSS-ready left edge and width. */
+export function lineBetween(
+  range: PlotRange,
+  from: number,
+  to: number,
+): { left: number; width: number } {
+  const a = valueFraction(range, from);
+  const b = valueFraction(range, to);
+  return { left: Math.min(a, b), width: Math.abs(b - a) };
+}
+
 /** Band backgrounds clipped to the range; bands entirely outside it are dropped. */
 export function bandSpans(track: NumericTrack, range: PlotRange): BandSpan[] {
   const spans: BandSpan[] = [];

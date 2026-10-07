@@ -6,6 +6,8 @@ import type { ResolvedTrack } from '../../../shared/relationships/resolve';
 import type { HistoryEntry } from './view-rows';
 
 const MINUS = '−';
+/** Joins the parts of a one-line summary. */
+export const SEPARATOR = ' · ';
 /** Significant digits kept when snapping floating-point results onto a tidy decimal. */
 const TIDY_DIGITS = 12;
 
@@ -35,10 +37,10 @@ export function formatNumber(n: number): string {
   return tidied < 0 ? `${MINUS}${Math.abs(tidied)}` : String(tidied);
 }
 
-/** A number with an explicit sign, `+18` or `−16` (U+2212). */
+/** A number with an explicit sign, `+18` or `−16` (U+2212); zero is a bare `0`. */
 export function formatSigned(n: number): string {
   const text = formatNumber(n);
-  return tidy(n) < 0 ? text : `+${text}`;
+  return tidy(n) > 0 ? `+${text}` : text;
 }
 
 /**
@@ -60,10 +62,15 @@ export function formatDeltaChange(delta: DeltaOp, label: ValueLabeller = RAW): s
 
 export type ChangeTone = 'positive' | 'negative' | 'neutral';
 
+/** Direction of a number: positive, negative, or neutral for zero. */
+export function numberTone(n: number): ChangeTone {
+  const tidied = tidy(n);
+  return tidied === 0 ? 'neutral' : tidied > 0 ? 'positive' : 'negative';
+}
+
 /** Direction of a change: only an adjust by a non-zero amount is positive or negative. */
 export function deltaTone(delta: DeltaOp): ChangeTone {
-  if (delta.op !== 'adjust' || delta.by === 0) return 'neutral';
-  return delta.by > 0 ? 'positive' : 'negative';
+  return delta.op === 'adjust' ? numberTone(delta.by) : 'neutral';
 }
 
 /** Row "last change" text, e.g. `+2 23 Gozran 4725`. */
@@ -87,9 +94,12 @@ export function dropIndicatorClass(indicator: 'before' | 'after' | null): string
   return indicator ? ` drop-${indicator}` : '';
 }
 
-/** CSS classes for a history entry (search tint/dim, future fade). */
-export function historyEntryClasses(entry: Pick<HistoryEntry, 'hit' | 'applied'>): string {
-  const classes = ['rel-entry'];
+/** CSS classes for a history entry (search tint/dim, future fade) on top of `base`. */
+export function historyEntryClasses(
+  entry: Pick<HistoryEntry, 'hit' | 'applied'>,
+  base = 'rel-entry',
+): string {
+  const classes = [base];
   if (entry.hit === true) classes.push('is-hit');
   if (entry.hit === false) classes.push('is-dim');
   if (!entry.applied) classes.push('is-future');

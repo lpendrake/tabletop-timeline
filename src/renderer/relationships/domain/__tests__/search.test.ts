@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { NOTE_DEFAULT_REASON } from '../../../../shared/relationships';
 import {
   countLabel,
   emptyMessage,
@@ -42,7 +43,7 @@ describe('search', () => {
     const delta = {
       op: 'adjust' as const,
       by: 1,
-      at: null,
+      at: 1000,
       declaredIn: { path: 'e.md', ordinal: 0 },
       reason: '  ',
     };
@@ -51,6 +52,33 @@ describe('search', () => {
     const r: SearchableRow = { key: 'x', fields: {}, history: [{ key: 'h', ...text }] };
     expect(searchRows([r], 'siege', ['reason']).matched).toBe(1);
     expect(searchRows([r], 'siege', ['name']).matched).toBe(0);
+  });
+
+  it('a dated delta from an untitled event with an empty reason reads "Unspecified"', () => {
+    const delta = {
+      op: 'adjust' as const,
+      by: 1,
+      at: 1000,
+      declaredIn: { path: 'e.md', ordinal: 0 },
+    };
+    expect(historyEntryText(delta, new Map())).toEqual({
+      event: undefined,
+      reason: NOTE_DEFAULT_REASON,
+    });
+  });
+
+  it('an undated delta with an empty reason reads "Unspecified", and Reason search finds it', () => {
+    const delta = {
+      op: 'adjust' as const,
+      by: 1,
+      at: null,
+      declaredIn: { path: 'notes/x.md', ordinal: 0 },
+    };
+    const text = historyEntryText(delta, new Map([['notes/x.md', 'Elara']]));
+    expect(text).toEqual({ event: 'Elara', reason: NOTE_DEFAULT_REASON });
+    const r: SearchableRow = { key: 'x', fields: {}, history: [{ key: 'h', ...text }] };
+    expect(searchRows([r], 'unspecified', ['reason']).matched).toBe(1);
+    expect(searchRows([r], 'unspecified', ['event']).matched).toBe(0);
   });
 
   it('matches through history report the matching entries', () => {

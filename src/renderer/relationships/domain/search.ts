@@ -3,6 +3,7 @@
  * scopes, AND-across-words matching over row-level fields and history entries,
  * and highlight ranges. Pure — no IO, no React.
  */
+import { NOTE_DEFAULT_REASON } from '../../../shared/relationships';
 import type { RelationshipDelta } from '../../../shared/relationships/model';
 import type { TrackKind } from '../../../shared/relationships/spec';
 
@@ -71,14 +72,16 @@ export function tokenise(query: string): string[] {
 
 /**
  * Event title (of the declaring event or note, via `titleByPath`) and reason
- * for a delta. The reason falls back to the event title when empty.
+ * for a delta. An empty reason falls back to the event title for a dated delta,
+ * and to `NOTE_DEFAULT_REASON` when there is neither.
  */
 export function historyEntryText(
   delta: RelationshipDelta,
   titleByPath: ReadonlyMap<string, string>,
 ): { event: string | undefined; reason: string | undefined } {
   const event = titleByPath.get(delta.declaredIn.path);
-  const reason = delta.reason?.trim() || event;
+  const reason =
+    delta.reason?.trim() || (delta.at === null ? undefined : event) || NOTE_DEFAULT_REASON;
   return { event, reason };
 }
 
