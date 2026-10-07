@@ -1,4 +1,6 @@
 import { Fragment, type ReactNode } from 'react';
+import type { NumericTrack } from '../../../../shared/relationships';
+import type { EntityIndexEntry } from '../../../../types/global';
 import { visibleColumns, type NumericColumn } from '../../domain/numeric-columns';
 import type { NumericRowModel } from '../../domain/numeric-rows';
 import type { PlotScale } from '../../domain/plot-scale';
@@ -9,20 +11,26 @@ import { useRowReorder } from '../../hooks/use-row-drag';
 import { cssVars } from '../../../shared/css-vars';
 import { EntityLink } from '../entity-link';
 import { activateOnKey, DragHandle, dropTargetProps, openRowMoveMenu } from '../row-controls';
+import { NumericHistory } from './numeric-history';
 import { NumericPlot } from './numeric-plot';
 
 export interface NumericRowProps {
   row: ViewRow;
+  track: NumericTrack;
   model: NumericRowModel;
   scale: PlotScale;
   canDrag: boolean;
-  /** Every second row of a group, tinted (with its expanded line) so rows read apart across the info panel and the plot. */
+  /** Every second row of a group, tinted (with its history) so rows read apart across the info panel and the plot. */
   striped: boolean;
   isFirst: boolean;
   isLast: boolean;
   moveRow: MoveRow;
   toggleRow: (listKey: string, observerId: string) => void;
+  now: number;
+  query: string;
+  entityIndex: readonly EntityIndexEntry[] | null;
   onOpenById: (id: string) => void;
+  onOpenEvent: (filename: string) => void;
 }
 
 export function NumericRow(props: NumericRowProps) {
@@ -99,7 +107,20 @@ export function NumericRow(props: NumericRowProps) {
         </div>
         <NumericPlot scale={scale} model={model} />
       </div>
-      {row.expanded && <div className="rel-num-expanded">Change history will appear here.</div>}
+      {row.history && (
+        <NumericHistory
+          // A new search starts from its own open years.
+          key={props.query}
+          history={row.history}
+          track={props.track}
+          scale={scale}
+          now={props.now}
+          query={props.query}
+          entityIndex={props.entityIndex}
+          onOpenEvent={props.onOpenEvent}
+          onOpenById={props.onOpenById}
+        />
+      )}
     </div>
   );
 }

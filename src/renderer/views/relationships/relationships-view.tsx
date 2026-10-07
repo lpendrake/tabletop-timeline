@@ -50,6 +50,7 @@ export function RelationshipsView({
           {...columnWidths}
           toolbar={<Toolbar {...state} />}
           onOpenById={onOpenById}
+          onOpenEvent={onOpenEvent}
         />
       ) : activeTrack ? (
         <>

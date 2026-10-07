@@ -46,7 +46,6 @@ export interface HistoryEntryModel {
   amount: string;
   tone: ChangeTone;
   runningText: string;
-  isSet: boolean;
   future: boolean;
   classes: string;
   colour: string;
@@ -111,6 +110,7 @@ function entryModel(entry: HistoryEntry, ctx: NumericHistoryContext): HistoryEnt
   const { track, range } = ctx;
   const previous = Number(entry.previousValue);
   const running = Number(entry.runningValue);
+  const isSet = entry.delta.op === 'set';
   return {
     key: entry.key,
     path: entry.delta.declaredIn.path,
@@ -120,9 +120,8 @@ function entryModel(entry: HistoryEntry, ctx: NumericHistoryContext): HistoryEnt
     amount: amountOf(entry),
     tone: deltaTone(entry.delta),
     runningText: formatNumber(running),
-    isSet: entry.delta.op === 'set',
     future: !entry.applied,
-    classes: historyEntryClasses(entry, 'rel-num-entry'),
+    classes: historyEntryClasses(entry, 'rel-num-entry') + (isSet ? ' is-set' : ''),
     colour: scaleColourCss(valueColour(track, running)),
     line: lineBetween(range, previous, running),
     dot: valueFraction(range, running),

@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import type { ReactNode } from 'react';
 import type { InvalidDirectiveEntry, NumericTrack } from '../../../../shared/relationships';
+import type { EntityIndexEntry } from '../../../../types/global';
 import {
   columnTemplate,
   type ColumnWidths,
@@ -27,6 +28,8 @@ export interface NumericTabProps {
   grouped: boolean;
   canDrag: boolean;
   query: string;
+  now: number;
+  entityIndex: EntityIndexEntry[] | null;
   emptyMessage: string | null;
   asOfLabel: string | null;
   trackProblems: InvalidDirectiveEntry[];
@@ -39,6 +42,7 @@ export interface NumericTabProps {
   toggleGroup: (holderId: string) => void;
   moveRow: MoveRow;
   onOpenById: (id: string) => void;
+  onOpenEvent: (filename: string) => void;
 }
 
 /** Band names centred over their spans, or numeric ticks when the track has no bands; inset like the rows' plots so labels line up with them. */
@@ -123,6 +127,7 @@ export function NumericTab(props: NumericTabProps) {
               <NumericRow
                 key={row.key}
                 row={row}
+                track={track}
                 model={rows.get(row.key)!}
                 scale={scale}
                 canDrag={canDrag}
@@ -131,7 +136,11 @@ export function NumericTab(props: NumericTabProps) {
                 isLast={ri === group.rows.length - 1}
                 moveRow={props.moveRow}
                 toggleRow={props.toggleRow}
+                now={props.now}
+                query={query}
+                entityIndex={props.entityIndex}
                 onOpenById={props.onOpenById}
+                onOpenEvent={props.onOpenEvent}
               />
             ))}
         </section>

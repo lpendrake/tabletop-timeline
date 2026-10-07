@@ -64,7 +64,6 @@ describe('numeric-history', () => {
     expect(a).toMatchObject({
       amount: '+4',
       tone: 'positive',
-      isSet: false,
       future: false,
       linkLabel: 'Night of Ash',
       path: 'timeline/night.md',
@@ -78,7 +77,7 @@ describe('numeric-history', () => {
     expect(s).toMatchObject({
       amount: 'set',
       tone: 'neutral',
-      isSet: true,
+      classes: 'rel-num-entry is-set',
       tooltip: 'set · 14 → 10 · Night of Ash',
     });
     const range = ctx().range;

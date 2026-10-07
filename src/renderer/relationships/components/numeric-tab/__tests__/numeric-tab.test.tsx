@@ -18,7 +18,8 @@ import {
   DEFAULT_COLUMN_WIDTHS,
   KEY_RESIZE_STEP,
 } from '../../../domain/numeric-columns';
-import { formatEntryDate } from '../../../domain/entry-date';
+import { entryYear, formatEntryDate } from '../../../domain/entry-date';
+import { numericHistoryModel } from '../../../domain/numeric-history';
 import { numericTabModel } from '../../../domain/numeric-rows';
 import { percent } from '../../../domain/plot-scale';
 import { formatNumber } from '../../../domain/row-display';
@@ -27,6 +28,7 @@ import type { ViewOrder } from '../../../domain/view-order';
 import { deriveViewRows, type ViewRowsResult } from '../../../domain/view-rows';
 import { noBands, pf2e, tenBands, unbounded } from '../../../domain/__tests__/numeric-fixtures';
 import { TOOLTIP_MAX_WIDTH } from '../../../hooks/use-plot-tooltip';
+import { CalendarProvider } from '../../../../timeline/calendar/provider';
 import { NumericTab, type NumericTabProps } from '../numeric-tab';
 
 const showContextMenu = vi.hoisted(() => vi.fn());
@@ -78,6 +80,7 @@ function derive(
   ledgers: Ledger[],
   holderId: string,
   viewOrder: ViewOrder = defaultViewOrder(),
+  over: Partial<Parameters<typeof deriveViewRows>[0]> = {},
 ): ViewRowsResult {
   return deriveViewRows({
     ledgers,
@@ -91,6 +94,7 @@ function derive(
     enabledScopes: ['name', 'band'],
     sortMode: 'mine',
     viewOrder,
+    ...over,
   });
 }
 
@@ -126,10 +130,13 @@ function props(
     resetColumnWidth: vi.fn(),
     sortMode: 'mine',
     sortByColumn: vi.fn(),
+    now: NOW,
+    entityIndex: [],
     toggleRow: vi.fn(),
     toggleGroup: vi.fn(),
     moveRow: vi.fn(),
     onOpenById: vi.fn(),
+    onOpenEvent: vi.fn(),
     ...over,
   };
 }
@@ -177,6 +184,13 @@ function rowFor(name: string): HTMLElement {
 
 function ledgerRow(track: NumericTrack, value: number, observer = 'bbbb'): Ledger {
   return ledger('aaaa', observer, track, [delta({ op: 'set', value })]);
+}
+
+function expandedAnna(): ViewOrder {
+  return {
+    ...defaultViewOrder(),
+    expanded: { [rowListKey(pf2e.id, 'aaaa')]: ['bbbb'] },
+  };
 }
 
 describe('NumericTab', () => {
@@ -369,15 +383,245 @@ describe('NumericTab', () => {
     expect(p.toggleRow).toHaveBeenCalledTimes(2);
   });
 
-  it('an expanded row shows the history placeholder, not the history list', () => {
-    const viewOrder: ViewOrder = {
-      ...defaultViewOrder(),
-      expanded: { [rowListKey(pf2e.id, 'aaaa')]: ['bbbb'] },
-    };
-    render(pf2eProps({}, viewOrder));
+  it('an expanded row shows its history inline, outside the row button; a collapsed row has none', () => {
+    render(pf2eProps({}, expandedAnna()));
     expect(rowFor('Anna').getAttribute('aria-expanded')).toBe('true');
-    expect($$('.rel-num-expanded')).toHaveLength(1);
+    const history = $('.rel-num-history');
+    expect($$('.rel-num-history')).toHaveLength(1);
+    expect(rowFor('Anna').contains(history)).toBe(false);
+    expect(rowFor('Anna').parentElement!.contains(history)).toBe(true);
     expect($$('.rel-entry')).toHaveLength(0);
+    expect(rowFor('Mira').parentElement!.querySelector('.rel-num-history')).toBeNull();
+  });
+
+  describe('history', () => {
+    const NOW_YEAR = entryYear(NOW);
+    const EVENT_PATH = 'timeline/night.md';
+    const TITLES = new Map([[EVENT_PATH, 'Night of Ash']]);
+
+    function historyProps(
+      deltas: RelationshipDelta[],
+      query = '',
+      over: Partial<NumericTabProps> = {},
+    ): NumericTabProps {
+      const result = derive(pf2e, [ledger('aaaa', 'bbbb', pf2e, deltas)], 'aaaa', expandedAnna(), {
+        query,
+        titleByPath: TITLES,
+        enabledScopes: ['name', 'band', 'event', 'reason'],
+      });
+      return props(pf2e, result, { query, ...over });
+    }
+
+    /** Seconds after the start of the in-game year `offset` years from the as-of date's. */
+    const inYear = (offset: number, n = 10) =>
+      CalendarProvider.get().toEpochSeconds({
+        kind: 'month',
+        year: NOW_YEAR + offset,
+        month: 1,
+        day: 1,
+        hour: 0,
+        minute: 0,
+        second: 0,
+      }) + n;
+    let ordinal = 0;
+    const adjust = (by: number, at: number | null, extra: Partial<RelationshipDelta> = {}) =>
+      delta({
+        op: 'adjust',
+        by,
+        at,
+        declaredIn: { path: 'notes/a.md', ordinal: ordinal++ },
+        ...extra,
+      });
+    const yearRows = () => $$('.rel-num-year');
+    const yearRow = (label: string) =>
+      yearRows().find((r) => $('.rel-num-year-label', r).textContent === label)!;
+    const toggleOf = (label: string) => $('.rel-num-year-toggle', yearRow(label));
+    const click = (el: HTMLElement) =>
+      act(() => {
+        fireEvent.click(el);
+      });
+    const hover = (el: HTMLElement) =>
+      act(() => {
+        fireEvent.mouseMove(el, { clientX: 100, clientY: 200 });
+      });
+    const tooltipText = () => $('.rel-num-tooltip', document.body).textContent;
+
+    function manyEntries(): RelationshipDelta[] {
+      return Array.from({ length: 45 }, (_, i) => adjust(1, inYear(-8 + Math.floor(i / 5), i + 1)));
+    }
+
+    it('lists 45 entries in year groups and renders entry rows only for open years', () => {
+      render(historyProps(manyEntries()));
+      expect(yearRows()).toHaveLength(9);
+      expect($$('.rel-num-entry')).toHaveLength(5);
+      expect($$('.rel-num-year-toggle[aria-expanded="true"]')).toHaveLength(1);
+    });
+
+    it('opens the current and future years, closes older ones and puts undated last; a click toggles without toggling the row', () => {
+      const p = historyProps([
+        adjust(1, null),
+        adjust(1, inYear(-2)),
+        adjust(1, inYear(0)),
+        adjust(1, inYear(1)),
+      ]);
+      render(p);
+      expect(text($$('.rel-num-year-label'))).toEqual(
+        [NOW_YEAR + 1, NOW_YEAR, NOW_YEAR - 2].map(String).concat('Undated notes'),
+      );
+      expect($$('.rel-num-year-toggle').map((b) => b.getAttribute('aria-expanded'))).toEqual([
+        'true',
+        'true',
+        'false',
+        'false',
+      ]);
+      expect($$('.rel-num-entry')).toHaveLength(2);
+      click(toggleOf(String(NOW_YEAR - 2)));
+      expect(toggleOf(String(NOW_YEAR - 2)).getAttribute('aria-expanded')).toBe('true');
+      expect($$('.rel-num-entry')).toHaveLength(3);
+      click(toggleOf(String(NOW_YEAR + 1)));
+      expect(toggleOf(String(NOW_YEAR + 1)).getAttribute('aria-expanded')).toBe('false');
+      expect($$('.rel-num-entry')).toHaveLength(2);
+      expect(p.toggleRow).not.toHaveBeenCalled();
+    });
+
+    it('a new search resets the years to their default open state', () => {
+      const deltas = [adjust(1, inYear(-2)), adjust(1, inYear(0))];
+      render(historyProps(deltas));
+      click(toggleOf(String(NOW_YEAR)));
+      click(toggleOf(String(NOW_YEAR - 2)));
+      expect(toggleOf(String(NOW_YEAR)).getAttribute('aria-expanded')).toBe('false');
+      expect(toggleOf(String(NOW_YEAR - 2)).getAttribute('aria-expanded')).toBe('true');
+      render(historyProps(deltas, 'anna'));
+      expect(toggleOf(String(NOW_YEAR)).getAttribute('aria-expanded')).toBe('true');
+      expect(toggleOf(String(NOW_YEAR - 2)).getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('year headers show the label, count, scheduled mark and the change', () => {
+      render(historyProps([adjust(5, inYear(0)), adjust(4, inYear(0, 20)), adjust(-3, inYear(1))]));
+      const now = yearRow(String(NOW_YEAR));
+      expect($('.rel-num-year-count', now).textContent).toBe('2 entries');
+      expect($('.rel-num-amount', now).textContent).toBe(`0 → 9 (+9)`);
+      expect($('.rel-num-amount', now).classList.contains('is-positive')).toBe(true);
+      const future = yearRow(String(NOW_YEAR + 1));
+      expect($('.rel-num-year-count', future).textContent).toBe('1 entry · scheduled');
+      expect($('.rel-num-amount', future).textContent).toBe(`9 → 6 (−3)`);
+      expect($('.rel-num-amount', future).classList.contains('is-negative')).toBe(true);
+      expect($('.rel-num-year-match', now)).toBeNull();
+    });
+
+    it('future entries are dashed and set entries get a square dot', () => {
+      render(
+        historyProps([
+          adjust(5, inYear(0)),
+          adjust(2, inYear(1)),
+          delta({
+            op: 'set',
+            value: 7,
+            at: inYear(1, 20),
+            declaredIn: { path: 'notes/a.md', ordinal: ordinal++ },
+          }),
+        ]),
+      );
+      const entries = $$('.rel-num-entry');
+      expect(entries).toHaveLength(3);
+      const [set, future, applied] = entries;
+      expect(set.classList.contains('is-set')).toBe(true);
+      expect(set.classList.contains('is-future')).toBe(true);
+      expect(future.classList.contains('is-future')).toBe(true);
+      expect(future.classList.contains('is-set')).toBe(false);
+      expect(applied.classList.contains('is-future')).toBe(false);
+    });
+
+    it('links open the event or the note without toggling the row', () => {
+      const entityIndex = [
+        { id: 'nnnn', type: 'npc', name: 'N', path: 'notes/npcs/n.md' },
+      ] as unknown as NumericTabProps['entityIndex'];
+      const p = historyProps(
+        [
+          adjust(1, inYear(0), { declaredIn: { path: EVENT_PATH, ordinal: 0 } }),
+          adjust(1, null, { declaredIn: { path: 'notes/npcs/n.md', ordinal: 1 } }),
+        ],
+        '',
+        { entityIndex },
+      );
+      render(p);
+      click(toggleOf('Undated notes'));
+      const links = $$('.rel-num-entry-link');
+      expect(text(links)).toEqual(['Night of Ash', 'Note']);
+      click(links[0]);
+      expect(p.onOpenEvent).toHaveBeenCalledWith('night.md');
+      click(links[1]);
+      expect(p.onOpenById).toHaveBeenCalledWith('nnnn');
+      expect(p.toggleRow).not.toHaveBeenCalled();
+    });
+
+    it('a term found only in an old year opens that year, marks the hit and dims the rest', () => {
+      const p = historyProps(
+        [
+          adjust(1, inYear(-3), { reason: 'Saved the mayor' }),
+          adjust(1, inYear(0), { reason: 'Paid a debt' }),
+        ],
+        'mayor',
+      );
+      render(p);
+      expect(rowFor('Anna').getAttribute('aria-expanded')).toBe('true');
+      expect(toggleOf(String(NOW_YEAR - 3)).getAttribute('aria-expanded')).toBe('true');
+      expect($('.rel-num-year-match', yearRow(String(NOW_YEAR - 3))).textContent).toBe('· 1 match');
+      const entries = $$('.rel-num-entry');
+      expect(entries).toHaveLength(2);
+      expect(
+        entries.map((e) => [e.classList.contains('is-hit'), e.classList.contains('is-dim')]),
+      ).toEqual([
+        [false, true],
+        [true, false],
+      ]);
+      expect($('mark', $$('.rel-num-entry.is-hit')[0]).textContent).toBe('mayor');
+    });
+
+    it('hovering an entry segment, entry dot, year segment and year dot shows its tooltip', () => {
+      const p = historyProps([
+        adjust(5, inYear(0), { declaredIn: { path: EVENT_PATH, ordinal: 0 } }),
+      ]);
+      render(p);
+      const model = numericHistoryModel(p.groups[0].rows[0].history!, {
+        track: pf2e,
+        range: numericTabModel(pf2e, p.groups, AS_OF).scale,
+        now: NOW,
+        yearOf: entryYear,
+      })[0];
+      const entry = $('.rel-num-entry');
+      hover($('.rel-num-line', entry));
+      expect(tooltipText()).toBe(model.entries[0].tooltip);
+      expect(tooltipText()).toBe('+5 · 0 → 5 · Night of Ash');
+      act(() => {
+        fireEvent.mouseLeave($('.rel-num-line', entry));
+      });
+      expect($('.rel-num-tooltip', document.body)).toBeNull();
+      hover($('.rel-num-dot-hit', entry));
+      expect(tooltipText()).toBe(model.entries[0].tooltip);
+      const year = yearRow(String(NOW_YEAR));
+      hover($('.rel-num-line', year));
+      expect(tooltipText()).toBe(model.tooltip);
+      hover($('.rel-num-dot-hit', year));
+      expect(tooltipText()).toBe(model.tooltip);
+    });
+
+    it('hovering a long reason shows all of it', () => {
+      const reason = 'A very long reason '.repeat(30).trim();
+      render(historyProps([adjust(1, inYear(0), { reason })]));
+      hover($('.rel-num-entry-reason'));
+      expect(tooltipText()).toBe(reason);
+    });
+
+    it('the history plot uses the rows’ inset layer and backgrounds', () => {
+      render(historyProps([adjust(1, inYear(0))]));
+      const plots = $$('.rel-num-history .rel-num-plot');
+      expect(plots).toHaveLength(2);
+      plots.forEach((plot) => {
+        expect((plot.children[0] as HTMLElement).className).toBe('rel-num-layer');
+        expect($$('.rel-num-band', plot)).toHaveLength(7);
+      });
+    });
   });
 
   it('All holders shows group headers that collapse; a single holder shows none', () => {
@@ -766,7 +1010,7 @@ describe('NumericTab', () => {
     expect(new Set(colours).size).toBeGreaterThan(1);
   });
 
-  it('every second row of a group is striped, with its expanded line', () => {
+  it('every second row of a group is striped, with its history', () => {
     render(props(pf2e, derive(pf2e, pf2eLedgers(), '*')));
     const wrappers = $$('.rel-row-wrap');
     expect(wrappers.map((w) => w.classList.contains('is-striped'))).toEqual([false, false, true]);
@@ -779,7 +1023,7 @@ describe('NumericTab', () => {
     render(pf2eProps({}, viewOrder));
     const striped = $('.rel-row-wrap.is-striped');
     expect($('.rel-num-name', striped).textContent).toBe('Mira');
-    expect(striped.contains($('.rel-num-expanded'))).toBe(true);
+    expect(striped.contains($('.rel-num-history'))).toBe(true);
   });
 
   it('the axis labels and every row plot draw into the same inset layer', () => {
