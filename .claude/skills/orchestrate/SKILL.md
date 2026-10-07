@@ -40,7 +40,13 @@ Before planning anything, build a complete picture.
    React or Electron), raise it with the user now, with a cheaper
    alternative. Fighting the frameworks leads to bad code and a brittle
    product (see CLAUDE.md *Writing code*).
-5. **Ask the user** if anything is ambiguous. Do this now, not after
+5. **Weigh cost against gain.** For each requirement, compare the work
+   it needs (code, state, tests, edge cases) with what the user gets.
+   When a small gain needs a lot of work, offer the user a cheaper
+   version before planning. Example: an inner scroll box that needed
+   pinned headers and scrollbar alignment, when scrolling the main view
+   was enough.
+6. **Ask the user** if anything is ambiguous. Do this now, not after
    you've spun up six agents.
 
 ## Phase 2: Plan
