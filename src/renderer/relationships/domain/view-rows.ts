@@ -17,7 +17,7 @@ import type {
 import { computeValue, currentValue } from '../../../shared/relationships';
 import { formatEntryDate } from './entry-date';
 import { ALL_HOLDERS, ledgersForHolder } from './holders';
-import { rungColour, scaleColourCss, valueColour } from './scale-colour';
+import { bandIndexFor, rungColour, scaleColourCss, valueColour } from './scale-colour';
 import {
   historyEntryText,
   searchRows,
@@ -25,7 +25,7 @@ import {
   type SearchResult,
   type SearchScope,
 } from './search';
-import { entryCount, lastChange, sortRows, type SortableRow, type SortMode } from './sort';
+import { entryCount, lastChange, sortRows, type RowSort, type SortableRow } from './sort';
 import { applyOrder, groupListKey, rowListKey, type ViewOrder } from './view-order';
 
 const ACCENT_CSS = 'var(--theme-accent-gold)';
@@ -108,7 +108,7 @@ export interface DeriveViewInput {
   labelFor: (id: string) => string;
   query: string;
   enabledScopes: ReadonlySet<SearchScope> | readonly SearchScope[];
-  sortMode: SortMode;
+  sortMode: RowSort;
   viewOrder: ViewOrder;
 }
 
@@ -126,7 +126,7 @@ export interface ViewRowsResult {
 }
 
 /** Drag reordering only makes sense in My order with no active search. */
-export function canDragRows(sortMode: SortMode, query: string): boolean {
+export function canDragRows(sortMode: RowSort, query: string): boolean {
   return sortMode === 'mine' && query.trim() === '';
 }
 
@@ -238,8 +238,9 @@ function compareLabels(labelFor: (id: string) => string, a: string, b: string): 
 }
 
 function sortGroupRows(
+  track: ResolvedTrack,
   rows: readonly BaseRow[],
-  sortMode: SortMode,
+  sortMode: RowSort,
   order: readonly string[] | undefined,
 ): BaseRow[] {
   const byObserver = new Map(rows.map((r) => [r.observerId, r]));
@@ -248,6 +249,8 @@ function sortGroupRows(
     label: r.label,
     value: r.sortValue,
     lastAt: r.lastChange?.at ?? null,
+    entries: r.entryCount,
+    band: track.kind === 'numeric' ? bandIndexFor(track, Number(r.value)) : null,
   }));
   return sortRows(sortable, sortMode, order ?? []).map((s) => byObserver.get(s.key) as BaseRow);
 }
@@ -286,29 +289,32 @@ export function deriveView(base: readonly BaseRow[], input: DeriveViewInput): Vi
   const groups: ViewGroup[] = holderIds.map((id) => {
     const listKey = rowListKey(trackId, id);
     const expandedIds = new Set(viewOrder.expanded[listKey] ?? []);
-    const rows = sortGroupRows(byHolder.get(id) ?? [], sortMode, viewOrder.order[listKey]).map(
-      (b): ViewRow => {
-        const hits = search.historyHits.get(b.key);
-        const expanded = expandedIds.has(b.observerId) || (hits !== undefined && hits.size > 0);
-        return {
-          key: b.key,
-          listKey,
-          holderId: b.holderId,
-          observerId: b.observerId,
-          label: b.label,
-          ledger: b.ledger,
-          value: b.value,
-          formatted: b.formatted,
-          stateLabel: b.stateLabel,
-          colour: b.colour,
-          lastChange: b.lastChange,
-          entryCount: b.entryCount,
-          onlyFuture: b.onlyFuture,
-          expanded,
-          history: expanded ? buildHistory(b, track, now, titleByPath, hits) : null,
-        };
-      },
-    );
+    const rows = sortGroupRows(
+      track,
+      byHolder.get(id) ?? [],
+      sortMode,
+      viewOrder.order[listKey],
+    ).map((b): ViewRow => {
+      const hits = search.historyHits.get(b.key);
+      const expanded = expandedIds.has(b.observerId) || (hits !== undefined && hits.size > 0);
+      return {
+        key: b.key,
+        listKey,
+        holderId: b.holderId,
+        observerId: b.observerId,
+        label: b.label,
+        ledger: b.ledger,
+        value: b.value,
+        formatted: b.formatted,
+        stateLabel: b.stateLabel,
+        colour: b.colour,
+        lastChange: b.lastChange,
+        entryCount: b.entryCount,
+        onlyFuture: b.onlyFuture,
+        expanded,
+        history: expanded ? buildHistory(b, track, now, titleByPath, hits) : null,
+      };
+    });
     return {
       holderId: id,
       label: labelFor(id),

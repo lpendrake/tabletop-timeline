@@ -262,10 +262,6 @@ function toggleScope(label: string) {
   });
 }
 
-function sortOption(label: string): HTMLElement {
-  return $$('.rel-sort-option').find((b) => b.textContent === label) as HTMLElement;
-}
-
 function rowFor(name: string, scope: HTMLElement = container): HTMLElement {
   const row = Array.from(scope.querySelectorAll<HTMLElement>(ROW)).find(
     (r) => r.querySelector(NAME)?.textContent === name,
@@ -486,13 +482,6 @@ describe('RelationshipsView', () => {
     await search('');
     expect($$('.rel-drag-handle')).toHaveLength(2);
 
-    act(() => {
-      fireEvent.click(sortOption('By value'));
-    });
-    expect($$('.rel-drag-handle')).toHaveLength(0);
-    act(() => {
-      fireEvent.click(sortOption('My order'));
-    });
     expect(rowNames()).toEqual(['Anna', 'Mira']);
 
     act(() => {

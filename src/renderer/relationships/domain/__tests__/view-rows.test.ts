@@ -8,6 +8,7 @@ import {
 } from '../../../../shared/relationships';
 import { CalendarProvider } from '../../../timeline/calendar/provider';
 import { canDragRows, deriveViewRows, type ViewRowsInput } from '../view-rows';
+import { noBands, unboundedBands } from './numeric-fixtures';
 import { defaultViewOrder, groupListKey, rowListKey, type ViewOrder } from '../view-order';
 
 const track = resolveTrack('rp01', EMPTY_TRACK_LIBRARY) as ResolvedTrack;
@@ -230,5 +231,75 @@ describe('view-rows', () => {
       'dddd',
     ]);
     expect(observers(deriveViewRows(input({ sortMode: 'recent' })))[0]).toBe('cccc');
+  });
+
+  it('column sorts reorder rows within each group and disable drag', () => {
+    const names = (sortMode: ViewRowsInput['sortMode']) =>
+      deriveViewRows(input({ holderId: '*', sortMode })).groups.map((g) => [
+        g.holderId,
+        g.rows.map((r) => r.observerId),
+      ]);
+    expect(names({ column: 'name', dir: 'asc' })).toEqual([
+      ['bbbb', ['cccc']],
+      ['aaaa', ['dddd', 'eeee', 'cccc']],
+    ]);
+    expect(names({ column: 'name', dir: 'desc' })[1]).toEqual(['aaaa', ['cccc', 'eeee', 'dddd']]);
+    expect(names({ column: 'entries', dir: 'desc' })[1]).toEqual([
+      'aaaa',
+      ['cccc', 'dddd', 'eeee'],
+    ]);
+    expect(names({ column: 'value', dir: 'asc' })[1]).toEqual(['aaaa', ['dddd', 'eeee', 'cccc']]);
+    expect(names({ column: 'band', dir: 'desc' })[1]).toEqual(['aaaa', ['cccc', 'eeee', 'dddd']]);
+
+    const sorted = deriveViewRows(input({ sortMode: { column: 'name', dir: 'asc' } }));
+    expect(sorted.canDrag).toBe(false);
+    expect(deriveViewRows(input({ sortMode: 'mine' })).canDrag).toBe(true);
+    expect(canDragRows({ column: 'name', dir: 'asc' }, '')).toBe(false);
+  });
+
+  describe('band sort', () => {
+    const adjust = (observer: string, by: number): Ledger => ({
+      holder: 'aaaa',
+      observer,
+      track: 'fx',
+      deltas: [delta({ op: 'adjust', by })],
+    });
+    const bandOrder = (bandTrack: ResolvedTrack, ledgers: Ledger[], dir: 'asc' | 'desc') =>
+      observers(
+        deriveViewRows(
+          input({ track: bandTrack, trackId: 'fx', ledgers, sortMode: { column: 'band', dir } }),
+        ),
+      );
+
+    it('a value below the first band sorts with the first band, then by value, then name', () => {
+      // Bands start at -10, 0 and 10: -15 is below the first band but still band 0.
+      const ledgers = [
+        adjust('cccc', -15), // Mira, band 0 (below the first band)
+        adjust('dddd', -10), // Dax, band 0
+        adjust('eeee', -10), // Eve, band 0, ties Dax on value
+        adjust('ffff', 3), // band 1
+        adjust('bbbb', 12), // Anna, band 2
+      ];
+      expect(bandOrder(unboundedBands, ledgers, 'desc')).toEqual([
+        'bbbb',
+        'ffff',
+        'dddd',
+        'eeee',
+        'cccc',
+      ]);
+      expect(bandOrder(unboundedBands, ledgers, 'asc')).toEqual([
+        'cccc',
+        'dddd',
+        'eeee',
+        'ffff',
+        'bbbb',
+      ]);
+    });
+
+    it('a track without bands falls through to value, then name', () => {
+      const ledgers = [adjust('cccc', 5), adjust('dddd', 5), adjust('eeee', 2)];
+      expect(bandOrder(noBands, ledgers, 'desc')).toEqual(['dddd', 'cccc', 'eeee']);
+      expect(bandOrder(noBands, ledgers, 'asc')).toEqual(['eeee', 'dddd', 'cccc']);
+    });
   });
 });

@@ -73,7 +73,8 @@ export {
   showHolderPicker,
   resolveSelectedHolder,
 } from './holders';
-export type { SortMode } from './sort';
+export type { ColumnSort, RowSort, SortColumn, SortDir, SortMode } from './sort';
+export { columnSortOf, nextColumnSort } from './sort';
 export { sortModesForKind, sortLabel } from './sort';
 
 export type { HolderPickerModel } from './view-state';

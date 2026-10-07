@@ -207,4 +207,26 @@ describe('use-relationships', () => {
     expect(latest.query).toBe('');
     expect(latest.emptyMessage).toBeNull();
   });
+
+  it('sortByColumn cycles and resets on tab change', async () => {
+    await mount();
+    expect(latest.sortMode).toBe('mine');
+    expect(latest.sortModes).toEqual([]);
+    expect(latest.canDrag).toBe(true);
+
+    act(() => latest.sortByColumn('value'));
+    expect(latest.sortMode).toEqual({ column: 'value', dir: 'desc' });
+    expect(latest.canDrag).toBe(false);
+    act(() => latest.sortByColumn('value'));
+    expect(latest.sortMode).toEqual({ column: 'value', dir: 'asc' });
+    act(() => latest.sortByColumn('value'));
+    expect(latest.sortMode).toBe('mine');
+    expect(latest.canDrag).toBe(true);
+
+    act(() => latest.sortByColumn('name'));
+    expect(latest.sortMode).toEqual({ column: 'name', dir: 'asc' });
+    act(() => latest.selectTab('at01'));
+    act(() => latest.selectTab('rp01'));
+    expect(latest.sortMode).toBe('mine');
+  });
 });
