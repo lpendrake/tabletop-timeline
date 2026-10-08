@@ -13,7 +13,11 @@ import { notesToPickerOptions } from '../domain/entity-picker-options';
 import { externalSetConflictEntries } from '../domain/external-set-conflicts';
 import { notePath, findEntityIdByNotePath } from '../../notes/domain/link-resolution';
 import { buildRelationshipMenuItems } from '../editor-menu';
-import { buildRelationshipEditorConfig, makeHeldTagsResolver } from '../editor-host-config';
+import {
+  buildRelationshipEditorConfig,
+  makeHeldTagsResolver,
+  makeTrackUsageResolver,
+} from '../editor-host-config';
 
 export interface UseRelationshipEditorConfigOptions {
   entityIndex: readonly EntityIndexEntry[];
@@ -28,8 +32,8 @@ export interface UseRelationshipEditorConfigOptions {
   place: 'note' | 'event';
   /**
    * The notes editor's currently open note (folder/path). Used to derive
-   * both `currentNoteId` (the "already linked" recent-notes ordering) and
-   * `currentPath` when `currentPath` itself isn't supplied. Omit for the
+   * both `currentNoteId` (the "this note" badge) and `currentPath` when
+   * `currentPath` itself isn't supplied. Omit for the
    * event editor, which has no folder/path pair and passes `currentPath`
    * directly.
    */
@@ -56,8 +60,8 @@ export interface UseRelationshipEditorConfigResult {
  * host (the notes editor or the event editor): loads the track library from
  * context, keeps a ledger snapshot and the default holder fresh, and wires
  * the data/callbacks a directive's blanks need. All the actual logic lives in
- * `editor-host-config.ts`, `editor-menu.ts` and `domain/held-options.ts` —
- * this hook only wires refs and effects.
+ * `editor-host-config.ts`, `editor-menu.ts`, `domain/held-options.ts` and
+ * `domain/track-usage.ts` — this hook only wires refs and effects.
  */
 export function useRelationshipEditorConfig(
   opts: UseRelationshipEditorConfigOptions,
@@ -135,11 +139,13 @@ export function useRelationshipEditorConfig(
   );
 
   const relationshipDirectives = useMemo(() => {
-    const heldTags = makeHeldTagsResolver({
+    const deps = {
       library,
       currentPath,
       at: () => optsRef.current.at(),
-    });
+    };
+    const heldTags = makeHeldTagsResolver(deps);
+    const trackUsage = makeTrackUsageResolver({ ...deps, place: opts.place });
 
     return buildRelationshipEditorConfig({
       library,
@@ -150,6 +156,7 @@ export function useRelationshipEditorConfig(
       defaultHolderId: () => defaultHolderId,
       currentNoteId,
       heldTags,
+      trackUsage,
       externalSetConflicts,
     });
   }, [

@@ -12,6 +12,7 @@ import type { PickerOption } from '../shared/searchable-picker';
 import { parseDirectives, resolveTrack, type TrackLibrary } from '../../shared/relationships';
 import { relationshipsData } from './data';
 import { heldTagsByObserver } from './domain/held-options';
+import { trackUsageProximity } from './domain/track-usage';
 
 export interface HeldTagsDeps {
   library: TrackLibrary;
@@ -27,6 +28,17 @@ export type HeldTagsResolver = (q: {
   anchor: number;
   doc: string;
 }) => Promise<Map<string, string[]>>;
+
+export interface TrackUsageDeps extends HeldTagsDeps {
+  /** Whether this host is a note (undated) or an event — see `RelationshipDirectivesHostConfig.place`. */
+  place: 'note' | 'event';
+}
+
+export type TrackUsageResolver = (q: {
+  trackId: string;
+  anchor: number;
+  doc: string;
+}) => Promise<Map<string, number | null>>;
 
 /** Finds the buffer directive whose blank at `anchor` is being edited, and its ordinal (used to exclude its own deltas — direct and mirrored — from a fold). */
 function excludeOrdinalFor(doc: string, anchor: number): number | undefined {
@@ -63,6 +75,32 @@ export function makeHeldTagsResolver(deps: HeldTagsDeps): HeldTagsResolver {
   };
 }
 
+/**
+ * Builds the `trackUsage` resolver: which notes the track already uses, and
+ * how near each use is to the declaring date. Unlike `heldTags` it does not
+ * need a saved path — an unsaved buffer still counts the saved ledgers plus
+ * the buffer. Fetches every ledger lazily, only when a blank asks for its
+ * choices, and delegates to `domain/track-usage.ts`.
+ */
+export function makeTrackUsageResolver(deps: TrackUsageDeps): TrackUsageResolver {
+  return async ({ trackId, anchor, doc }) => {
+    const track = resolveTrack(trackId, deps.library);
+    if (!track) return new Map();
+
+    const ledgers = await relationshipsData.getAllLedgers();
+    return trackUsageProximity({
+      ledgers,
+      library: deps.library,
+      trackId: track.id,
+      path: deps.currentPath(),
+      doc,
+      isEvent: deps.place === 'event',
+      at: deps.at(),
+      excludeOrdinal: excludeOrdinalFor(doc, anchor),
+    });
+  };
+}
+
 export interface RelationshipEditorConfigDeps {
   library: TrackLibrary;
   defaultReason: string;
@@ -73,6 +111,7 @@ export interface RelationshipEditorConfigDeps {
   defaultHolderId: () => string | null;
   currentNoteId: () => string | null;
   heldTags?: HeldTagsResolver;
+  trackUsage: TrackUsageResolver;
   /** Every undated Set declared in another saved note (this buffer's own path already excluded). Note editors only. */
   externalSetConflicts?: ExternalSetConflictEntry[];
 }
@@ -97,6 +136,7 @@ export function buildRelationshipEditorConfig(
         return result.ok ? { key: result.option.key } : null;
       },
       heldTags: deps.heldTags,
+      trackUsage: deps.trackUsage,
     },
   };
 }

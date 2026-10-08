@@ -58,4 +58,4 @@ The view is full-bleed: `.rel-view` has no padding, and the top bar's tabs, the 
 
 ## Editor integration
 
-Files `editor-menu.ts`, `editor-host-config.ts`, `hooks/use-relationship-editor-config.ts` belong to directive editing, not this view.
+Files `editor-menu.ts`, `editor-host-config.ts`, `hooks/use-relationship-editor-config.ts` belong to directive editing, not this view. The held-tags and track-usage completions are fed by the `heldTags` and `trackUsage` resolvers in `editor-host-config.ts`, whose pure folds live in `domain/held-options.ts` and `domain/track-usage.ts`.
