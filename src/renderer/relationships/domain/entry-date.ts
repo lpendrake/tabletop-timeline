@@ -11,3 +11,8 @@ export function formatEntryDate(at: number | null, opts: { narrow?: boolean } = 
   if (at === null) return narrow ? 'Note' : 'Undated note';
   return formatDayMonthYear(CalendarProvider.get().fromEpochSeconds(at), { shortMonth: narrow });
 }
+
+/** The in-game year containing `at` (epoch seconds). */
+export function entryYear(at: number): number {
+  return CalendarProvider.get().fromEpochSeconds(at).year;
+}

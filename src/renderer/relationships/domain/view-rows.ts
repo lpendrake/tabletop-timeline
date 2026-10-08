@@ -14,7 +14,7 @@ import type {
   ResolvedTrack,
   TrackValue,
 } from '../../../shared/relationships';
-import { computeValue, currentValue } from '../../../shared/relationships';
+import { computeValue, currentValue, startingValue } from '../../../shared/relationships';
 import { formatEntryDate } from './entry-date';
 import { ALL_HOLDERS, ledgersForHolder } from './holders';
 import { bandIndexFor, rungColour, scaleColourCss, valueColour } from './scale-colour';
@@ -35,12 +35,14 @@ export interface HistoryEntry {
   at: number | null;
   dateLabel: string;
   delta: RelationshipDelta;
+  /** The value before this entry: the starting value for the first, else the prior entry's running value. */
+  previousValue: TrackValue;
   runningValue: TrackValue;
   runningFormatted: string;
   applied: boolean;
   mirrored: boolean;
   eventTitle: string | null;
-  reason: string | null;
+  reason: string;
   /** null when the row has no search history hits; else whether this entry is one of them. */
   hit: boolean | null;
 }
@@ -211,7 +213,10 @@ function buildHistory(
   hits: ReadonlySet<string> | undefined,
 ): HistoryEntry[] {
   const { steps } = currentValue(base.ledger, track, now, { withSteps: true });
+  let previousValue = startingValue(track);
   return steps.map((step) => {
+    const before = previousValue;
+    previousValue = step.runningValue;
     const key = historyKey(step.delta);
     const text = historyEntryText(step.delta, titleByPath);
     return {
@@ -219,12 +224,13 @@ function buildHistory(
       at: step.delta.at,
       dateLabel: formatEntryDate(step.delta.at, { narrow: false }),
       delta: step.delta,
+      previousValue: before,
       runningValue: step.runningValue,
       runningFormatted: track.format(step.runningValue),
       applied: step.applied,
       mirrored: step.delta.mirrored === true,
       eventTitle: text.event ?? null,
-      reason: text.reason ?? null,
+      reason: text.reason,
       hit: hits ? hits.has(key) : null,
     };
   });

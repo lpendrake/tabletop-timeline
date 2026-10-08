@@ -19,11 +19,12 @@ Judge whether the change leaves the product stable and easy to maintain, not jus
 ## 2. Look for (priority order)
 
 1. **Design fighting the frameworks.** If code is long, defensive or keeps breaking, ask whether a requirement is forcing it to work against a framework the app uses (e.g. CodeMirror, React, Electron, markdown). Fighting a framework produces brittle code and a brittle product. Say so plainly and propose the cheaper design, even unasked. Typical signs: manual focus or positioning, registries of DOM nodes, reimplemented built-ins, workarounds for platform limits.
-2. **Duplication and reimplemented logic.** Before accepting a new helper, search for an existing one. Flag copies that have already drifted.
-3. **Bugs.** Reproduce each suspected bug with a throwaway test, then delete it. Label each finding *reproduced* or *by reading*, with a concrete failure scenario.
-4. **Repo rules.** Everything in `CLAUDE.md` and the relevant `AGENTS.md` files, including that `AGENTS.md` is updated to match the change.
-5. **Dead or speculative code.** Unused props, escape hatches with no caller, "backwards compatibility" for unreleased code, leftovers from a replaced approach, comments that narrate history.
-6. **Consistency.** One source of truth for constants, types and rules. Safeguards apply by default, not only to code that opts in.
+2. **Cost out of proportion to the gain.** Flag code that is large relative to what it delivers: many lines, states or tests behind a small or rarely noticed behaviour. This often means the requirement isn't worth it. Name the requirement and propose the cheaper behaviour, so the user can decide whether to drop or simplify it.
+3. **Duplication and reimplemented logic.** Before accepting a new helper, search for an existing one. Flag copies that have already drifted.
+4. **Bugs.** Reproduce each suspected bug with a throwaway test, then delete it. Label each finding *reproduced* or *by reading*, with a concrete failure scenario.
+5. **Repo rules.** Everything in `CLAUDE.md` and the relevant `AGENTS.md` files, including that `AGENTS.md` is updated to match the change.
+6. **Dead or speculative code.** Unused props, escape hatches with no caller, "backwards compatibility" for unreleased code, leftovers from a replaced approach, comments that narrate history.
+7. **Consistency.** One source of truth for constants, types and rules. Safeguards apply by default, not only to code that opts in.
 
 ## 3. Respect product decisions
 

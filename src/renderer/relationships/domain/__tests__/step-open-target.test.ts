@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveStepOpenTarget } from '../step-open-target';
+import { openDeclaringFile, resolveStepOpenTarget } from '../step-open-target';
 import type { EntityIndexEntry } from '../../../../types/global';
 
 const entityIndex: EntityIndexEntry[] = [
@@ -29,5 +29,29 @@ describe('resolveStepOpenTarget', () => {
 
   it('is unknown for a path outside notes/ and timeline/', () => {
     expect(resolveStepOpenTarget('other/thing.md', entityIndex)).toEqual({ kind: 'unknown' });
+  });
+});
+
+describe('openDeclaringFile', () => {
+  function run(path: string): string[] {
+    const calls: string[] = [];
+    openDeclaringFile(path, entityIndex, {
+      event: (filename) => calls.push(`event:${filename}`),
+      note: (entityId) => calls.push(`note:${entityId}`),
+    });
+    return calls;
+  }
+
+  it('opens a timeline file as an event', () => {
+    expect(run('timeline/x.md')).toEqual(['event:x.md']);
+  });
+
+  it('opens a notes file as the note entity', () => {
+    expect(run('notes/npcs/elara.md')).toEqual(['note:nnnn']);
+  });
+
+  it('does nothing for an unknown path', () => {
+    expect(run('other/thing.md')).toEqual([]);
+    expect(run('notes/npcs/missing.md')).toEqual([]);
   });
 });

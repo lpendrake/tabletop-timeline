@@ -42,12 +42,13 @@ function entry(key: string, hit: boolean | null, title: string): HistoryEntry {
       at: 1,
       declaredIn: { path: 'timeline/battle.md', ordinal: 0 },
     } as RelationshipDelta,
+    previousValue: 0,
     runningValue: 2,
     runningFormatted: '2',
     applied: true,
     mirrored: false,
     eventTitle: title,
-    reason: null,
+    reason: 'Unspecified',
     hit,
   };
 }

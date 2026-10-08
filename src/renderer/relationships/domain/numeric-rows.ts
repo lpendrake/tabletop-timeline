@@ -9,9 +9,16 @@ import {
   formatLastChange,
   formatNumber,
   formatSigned,
+  SEPARATOR,
   type ChangeTone,
 } from './row-display';
-import { plotScale, valueFraction, type PlotRange, type PlotScale } from './plot-scale';
+import {
+  lineBetween,
+  plotScale,
+  valueFraction,
+  type PlotRange,
+  type PlotScale,
+} from './plot-scale';
 import type { ViewGroup, ViewRow } from './view-rows';
 
 export interface NumericRowModel {
@@ -48,8 +55,6 @@ type NumericRowSource = Pick<
   'value' | 'stateLabel' | 'colour' | 'lastChange' | 'entryCount'
 >;
 
-const SEPARATOR = ' · ';
-
 export function numericRowModel(
   row: NumericRowSource,
   track: NumericTrack,
@@ -60,7 +65,6 @@ export function numericRowModel(
   const start = Number(startingValue(track));
   const valueText = formatNumber(value);
   const summary = row.stateLabel === null ? valueText : `${valueText}${SEPARATOR}${row.stateLabel}`;
-  const from = valueFraction(range, start);
   const dot = valueFraction(range, value);
   return {
     valueText,
@@ -75,24 +79,29 @@ export function numericRowModel(
         }
       : null,
     entryCount: row.entryCount,
-    line: { left: Math.min(from, dot), width: Math.abs(dot - from) },
+    line: lineBetween(range, start, value),
     dot,
     lineTooltip: `${summary} (${formatSigned(value - start)} from ${formatNumber(start)})`,
     dotTooltip: asOfLabel === null ? summary : `${summary} as of ${asOfLabel}`,
   };
 }
 
-/** The axis and every row's model. The axis covers collapsed groups too, so it stays put when one is toggled. */
+/** A row's current value, plus its history's running values when it is expanded. */
+function plotValues(row: ViewRow): number[] {
+  return [Number(row.value), ...(row.history ?? []).map((entry) => Number(entry.runningValue))];
+}
+
+/**
+ * The axis and every row's model. The axis covers collapsed groups too, so it stays put
+ * when one is toggled, and widens (on unbounded tracks) to fit expanded rows' history.
+ */
 export function numericTabModel(
   track: NumericTrack,
   groups: readonly ViewGroup[],
   asOfLabel: string | null,
 ): NumericTabModel {
   const rows = groups.flatMap((group) => group.rows);
-  const scale = plotScale(
-    track,
-    rows.map((row) => Number(row.value)),
-  );
+  const scale = plotScale(track, rows.flatMap(plotValues));
   return {
     scale,
     rows: new Map(rows.map((row) => [row.key, numericRowModel(row, track, scale, asOfLabel)])),

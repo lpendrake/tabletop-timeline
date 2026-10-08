@@ -1,5 +1,5 @@
 export type { StepOpenTarget } from './step-open-target';
-export { resolveStepOpenTarget } from './step-open-target';
+export { resolveStepOpenTarget, openDeclaringFile } from './step-open-target';
 
 export type { ViewOrder, RowMove, MoveRow, RowDragPayload, DropTarget } from './view-order';
 export {
@@ -91,3 +91,11 @@ export {
   visibleIdsForList,
   moveInViewOrder,
 } from './view-state';
+
+export type { HistoryYear, YearOf } from './history-years';
+export { isYearOpen, withToggledYear } from './history-years';
+
+export type { NumericHistoryContext, HistoryEntryModel, HistoryYearModel } from './numeric-history';
+export { numericHistoryModel } from './numeric-history';
+
+export { entryYear } from './entry-date';

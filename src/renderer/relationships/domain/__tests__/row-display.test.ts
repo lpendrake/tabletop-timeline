@@ -35,7 +35,7 @@ describe('row display', () => {
 
   it('formatSigned tidies float noise', () => {
     expect(formatSigned(0.3 - 0.1)).toBe('+0.2');
-    expect(formatSigned(-0)).toBe('+0');
+    expect(formatSigned(-0)).toBe('0');
   });
 
   it('formatDeltaChange formats numeric set values with formatNumber', () => {
@@ -46,7 +46,7 @@ describe('row display', () => {
   it('formatSigned always shows a sign, using U+2212 for negatives', () => {
     expect(formatSigned(18)).toBe('+18');
     expect(formatSigned(-16)).toBe('\u221216');
-    expect(formatSigned(0)).toBe('+0');
+    expect(formatSigned(0)).toBe('0');
     expect(formatSigned(0.5)).toBe('+0.5');
   });
 

@@ -210,6 +210,12 @@
   white-space: nowrap;
 }
 
+/* Hugs the name so only the text opens the note; the rest of the cell toggles the row. */
+.rel-num-name {
+  justify-self: start;
+  max-width: 100%;
+}
+
 .rel-num-value {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -351,11 +357,158 @@
   font-family: var(--app-font);
   font-size: 12px;
   box-sizing: border-box;
+  /* A long reason wraps within the max width instead of running off screen. */
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
-.rel-num-expanded {
-  /* Lines the text up under the Entries column, the first one after the drag handle. */
-  padding: 4px 8px 8px
-    calc(var(--rel-inner-pad) + var(--rel-num-handle-width) + var(--rel-num-column-gap));
+.rel-num-history {
+  padding-bottom: 6px;
+}
+
+.rel-num-year,
+.rel-num-entry {
+  display: flex;
+  align-items: stretch;
+  min-height: 26px;
+  box-sizing: border-box;
+}
+
+/*
+ * The history wrapper also has the class `rel-num-left`, so it has the same footprint as a row's
+ * info panel: the plot beside it starts at the same x as the rows' plots and the bands line up.
+ * Its content skips the drag handle column, which stays empty.
+ */
+.rel-num-history-left > * {
+  grid-column: 2 / -1;
+}
+
+.rel-num-year-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  background: none;
+  border: none;
   color: var(--theme-text-muted);
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.rel-num-year-toggle:hover {
+  color: var(--theme-text-primary);
+}
+
+.rel-num-year-toggle:focus-visible,
+.rel-num-entry-reason:focus-visible {
+  outline: 1px solid var(--theme-accent-gold);
+  outline-offset: 1px;
+}
+
+.rel-num-year-label {
+  color: var(--theme-text-primary);
+  font-weight: 700;
+}
+
+.rel-num-year-toggle > * {
+  flex: none;
+}
+
+/* The change and match texts give way first: the toggle clips them with an ellipsis. */
+.rel-num-year-toggle > .rel-num-amount,
+.rel-num-year-toggle > .rel-num-year-match {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rel-num-year-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.rel-num-year-match {
+  color: var(--theme-accent-gold);
+}
+
+.rel-num-entry-grid {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) 44px 52px;
+  align-items: center;
+  column-gap: var(--rel-num-column-gap);
+}
+
+.rel-num-entry-grid > * {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rel-num-entry-date {
+  color: var(--theme-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.rel-num-entry-reason {
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--theme-link);
+  font: inherit;
+  cursor: pointer;
+}
+
+.rel-num-entry-reason:hover {
+  text-decoration: underline;
+}
+
+.rel-num-entry-amount,
+.rel-num-entry-running {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.rel-num-entry-running {
+  font-weight: 700;
+}
+
+.rel-num-entry.is-hit {
+  background: color-mix(in srgb, var(--theme-accent-gold) 18%, transparent);
+}
+
+.rel-num-entry.is-dim {
+  opacity: 0.45;
+}
+
+.rel-num-entry.is-future > * {
+  opacity: 0.5;
+}
+
+.rel-num-entry.is-future .rel-num-line-fill {
+  height: 0;
+  background: none;
+  border-top: 2px dashed var(--rel-num-colour);
+}
+
+.rel-num-entry.is-set .rel-num-dot {
+  border-radius: 0;
+}
+
+.rel-num-history .rel-num-line:hover .rel-num-line-fill {
+  height: 4px;
+}
+
+.rel-num-history .rel-num-entry.is-future .rel-num-line:hover .rel-num-line-fill {
+  height: 0;
+  border-top-width: 4px;
 }

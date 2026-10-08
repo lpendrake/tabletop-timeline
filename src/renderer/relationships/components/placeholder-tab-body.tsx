@@ -10,7 +10,7 @@ import {
   trackValueLabeller,
   type ValueLabeller,
 } from '../domain/row-display';
-import { resolveStepOpenTarget } from '../domain/step-open-target';
+import { openDeclaringFile } from '../domain/step-open-target';
 import type { MoveRow } from '../domain/view-order';
 import type { HistoryEntry, ViewGroup, ViewRow } from '../domain/view-rows';
 import { useRowReorder } from '../hooks/use-row-drag';
@@ -54,9 +54,10 @@ function EntryItem(props: {
   const { entry, label, query, entityIndex, onOpenById, onOpenEvent } = props;
   const openTitle = (e: MouseEvent) => {
     e.stopPropagation();
-    const target = resolveStepOpenTarget(entry.delta.declaredIn.path, entityIndex ?? []);
-    if (target.kind === 'event') onOpenEvent(target.filename);
-    else if (target.kind === 'note') onOpenById(target.entityId);
+    openDeclaringFile(entry.delta.declaredIn.path, entityIndex ?? [], {
+      event: onOpenEvent,
+      note: onOpenById,
+    });
   };
   return (
     <li className={historyEntryClasses(entry)}>
@@ -69,11 +70,9 @@ function EntryItem(props: {
           <HighlightText text={entry.eventTitle} query={query} />
         </span>
       )}
-      {entry.reason && (
-        <span className="rel-entry-reason">
-          <HighlightText text={entry.reason} query={query} />
-        </span>
-      )}
+      <span className="rel-entry-reason">
+        <HighlightText text={entry.reason} query={query} />
+      </span>
       {entry.mirrored && <span className="rel-entry-mirrored">(mirrored)</span>}
     </li>
   );
