@@ -66,7 +66,8 @@ describe('numeric-history', () => {
       amount: '+4',
       tone: 'positive',
       future: false,
-      linkLabel: 'Night of Ash',
+      reason: 'Because',
+      reasonTooltip: 'Night of Ash: Because',
       path: 'timeline/night.md',
       runningText: '18',
       classes: 'rel-num-entry',
@@ -89,10 +90,23 @@ describe('numeric-history', () => {
     const [n] = undatedYear.entries;
     expect(n).toMatchObject({
       dateLabel: '',
-      linkLabel: 'Note',
+      reasonTooltip: 'Note: Because',
       path: 'notes/x.md',
       tooltip: '+5 · 0 → 5 · Note',
     });
+  });
+
+  it('builds the reason tooltip from the link label and the reason', () => {
+    const tooltipOf = (over: Parameters<typeof historyEntry>[0]) =>
+      numericHistoryModel([historyEntry(over)], ctx())[0].entries[0].reasonTooltip;
+    const dated = { at: at(4724, 1), previousValue: 0, runningValue: 1 };
+    expect(tooltipOf({ ...dated, reason: 'Burned the orchard' })).toBe(
+      'Night of Ash: Burned the orchard',
+    );
+    expect(tooltipOf({ ...dated, reason: 'Night of Ash' })).toBe('Night of Ash');
+    expect(tooltipOf({ at: null, previousValue: 0, runningValue: 1, reason: 'Unspecified' })).toBe(
+      'Note: Unspecified',
+    );
   });
 
   it('flags hit, dim and future entries in the classes', () => {

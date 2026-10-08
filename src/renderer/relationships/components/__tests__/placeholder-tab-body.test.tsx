@@ -47,7 +47,7 @@ function entry(key: string, hit: boolean | null, title: string): HistoryEntry {
     applied: true,
     mirrored: false,
     eventTitle: title,
-    reason: null,
+    reason: 'Unspecified',
     hit,
   };
 }

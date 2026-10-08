@@ -109,22 +109,17 @@ export function NumericHistory(props: NumericHistoryProps) {
                       <span className="rel-num-entry-date">{entry.dateLabel}</span>
                       <button
                         type="button"
-                        className="rel-num-entry-link"
+                        className="rel-num-entry-reason"
                         onClick={() =>
                           openDeclaringFile(entry.path, entityIndex ?? [], {
                             event: onOpenEvent,
                             note: onOpenById,
                           })
                         }
-                      >
-                        <HighlightText text={entry.linkLabel} query={query} />
-                      </button>
-                      <span
-                        className="rel-num-entry-reason"
-                        {...(entry.reason ? hoverProps(entry.reason) : {})}
+                        {...hoverProps(entry.reasonTooltip)}
                       >
                         <HighlightText text={entry.reason} query={query} />
-                      </span>
+                      </button>
                       <span className={`rel-num-entry-amount ${toneClass(entry.tone)}`}>
                         {entry.amount}
                       </span>

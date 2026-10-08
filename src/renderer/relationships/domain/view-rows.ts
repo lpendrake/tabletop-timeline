@@ -42,7 +42,7 @@ export interface HistoryEntry {
   applied: boolean;
   mirrored: boolean;
   eventTitle: string | null;
-  reason: string | null;
+  reason: string;
   /** null when the row has no search history hits; else whether this entry is one of them. */
   hit: boolean | null;
 }
@@ -230,7 +230,7 @@ function buildHistory(
       applied: step.applied,
       mirrored: step.delta.mirrored === true,
       eventTitle: text.event ?? null,
-      reason: text.reason ?? null,
+      reason: text.reason,
       hit: hits ? hits.has(key) : null,
     };
   });

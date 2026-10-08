@@ -398,7 +398,7 @@
 }
 
 .rel-num-year-toggle:focus-visible,
-.rel-num-entry-link:focus-visible {
+.rel-num-entry-reason:focus-visible {
   outline: 1px solid var(--theme-accent-gold);
   outline-offset: 1px;
 }
@@ -431,7 +431,7 @@
 
 .rel-num-entry-grid {
   display: grid;
-  grid-template-columns: 96px minmax(0, 1fr) minmax(0, 2fr) 44px 52px;
+  grid-template-columns: 96px minmax(0, 1fr) 44px 52px;
   align-items: center;
   column-gap: var(--rel-num-column-gap);
 }
@@ -443,16 +443,12 @@
   white-space: nowrap;
 }
 
-.rel-num-entry-date,
-.rel-num-entry-reason {
-  color: var(--theme-text-muted);
-}
-
 .rel-num-entry-date {
+  color: var(--theme-text-muted);
   font-variant-numeric: tabular-nums;
 }
 
-.rel-num-entry-link {
+.rel-num-entry-reason {
   min-width: 0;
   padding: 0;
   overflow: hidden;
@@ -466,7 +462,7 @@
   cursor: pointer;
 }
 
-.rel-num-entry-link:hover {
+.rel-num-entry-reason:hover {
   text-decoration: underline;
 }
 

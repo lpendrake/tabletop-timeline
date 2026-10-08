@@ -538,7 +538,7 @@ describe('NumericTab', () => {
       expect(dates).toEqual([formatEntryDate(inYear(0), { narrow: true })]);
     });
 
-    it('links open the event or the note without toggling the row', () => {
+    it('reasons open the event or the note without toggling the row', () => {
       const entityIndex = [
         { id: 'nnnn', type: 'npc', name: 'N', path: 'notes/npcs/n.md' },
       ] as unknown as NumericTabProps['entityIndex'];
@@ -552,13 +552,22 @@ describe('NumericTab', () => {
       );
       render(p);
       click(toggleOf('Undated notes'));
-      const links = $$('.rel-num-entry-link');
-      expect(text(links)).toEqual(['Night of Ash', 'Note']);
+      const links = $$('.rel-num-entry-reason');
+      expect(text(links)).toEqual(['Night of Ash', 'Unspecified']);
       click(links[0]);
       expect(p.onOpenEvent).toHaveBeenCalledWith('night.md');
       click(links[1]);
       expect(p.onOpenById).toHaveBeenCalledWith('nnnn');
       expect(p.toggleRow).not.toHaveBeenCalled();
+    });
+
+    it('an entry has four cells and no separate link cell; the reason is the link button', () => {
+      render(historyProps([adjust(1, inYear(0))]));
+      const grid = $('.rel-num-entry-grid');
+      expect(grid.children).toHaveLength(4);
+      const reason = grid.children[1];
+      expect(reason.tagName).toBe('BUTTON');
+      expect(reason.classList.contains('rel-num-entry-reason')).toBe(true);
     });
 
     it('a term found only in an old year opens that year, marks the hit and dims the rest', () => {
@@ -612,11 +621,20 @@ describe('NumericTab', () => {
       expect(tooltipText()).toBe(model.tooltip);
     });
 
-    it('hovering a long reason shows all of it', () => {
+    it('hovering a reason shows the event title and all of the reason', () => {
       const reason = 'A very long reason '.repeat(30).trim();
-      render(historyProps([adjust(1, inYear(0), { reason })]));
+      render(
+        historyProps([
+          adjust(1, inYear(0), { reason, declaredIn: { path: EVENT_PATH, ordinal: 0 } }),
+        ]),
+      );
       hover($('.rel-num-entry-reason'));
-      expect(tooltipText()).toBe(reason);
+      expect(tooltipText()).toBe(`Night of Ash: ${reason}`);
+    });
+
+    it('a search hit in the reason is highlighted inside the reason button', () => {
+      render(historyProps([adjust(1, inYear(0), { reason: 'Saved the mayor' })], 'mayor'));
+      expect($('mark', $('.rel-num-entry-reason')).textContent).toBe('mayor');
     });
 
     it('the history plot uses the rows’ inset layer and backgrounds', () => {

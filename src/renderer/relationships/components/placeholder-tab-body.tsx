@@ -70,11 +70,9 @@ function EntryItem(props: {
           <HighlightText text={entry.eventTitle} query={query} />
         </span>
       )}
-      {entry.reason && (
-        <span className="rel-entry-reason">
-          <HighlightText text={entry.reason} query={query} />
-        </span>
-      )}
+      <span className="rel-entry-reason">
+        <HighlightText text={entry.reason} query={query} />
+      </span>
       {entry.mirrored && <span className="rel-entry-mirrored">(mirrored)</span>}
     </li>
   );

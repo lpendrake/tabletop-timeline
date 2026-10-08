@@ -78,7 +78,7 @@ export function tokenise(query: string): string[] {
 export function historyEntryText(
   delta: RelationshipDelta,
   titleByPath: ReadonlyMap<string, string>,
-): { event: string | undefined; reason: string | undefined } {
+): { event: string | undefined; reason: string } {
   const event = titleByPath.get(delta.declaredIn.path);
   const reason =
     delta.reason?.trim() || (delta.at === null ? undefined : event) || NOTE_DEFAULT_REASON;

@@ -42,8 +42,9 @@ export interface HistoryEntryModel {
   path: string;
   /** Short-month date to fit the fixed date column; empty when undated. */
   dateLabel: string;
-  linkLabel: string;
   reason: string;
+  /** `Night of Ash: Burned the orchard`; just the reason when it already is the link label. */
+  reasonTooltip: string;
   amount: string;
   tone: ChangeTone;
   runningText: string;
@@ -82,6 +83,13 @@ function linkLabelOf(entry: HistoryEntry): string {
   return entry.eventTitle ?? basename(entry.delta.declaredIn.path);
 }
 
+/** `Event: reason`, or the reason alone when it is the event title (an empty reason defaults to it). */
+function reasonTooltipOf(entry: HistoryEntry): string {
+  const label = linkLabelOf(entry);
+  const { reason } = entry;
+  return reason === label ? reason : `${label}: ${reason}`;
+}
+
 function amountOf(entry: HistoryEntry): string {
   return entry.delta.op === 'adjust' ? formatSigned(entry.delta.by) : SET_AMOUNT;
 }
@@ -116,8 +124,8 @@ function entryModel(entry: HistoryEntry, ctx: NumericHistoryContext): HistoryEnt
     key: entry.key,
     path: entry.delta.declaredIn.path,
     dateLabel: entry.at === null ? '' : formatEntryDate(entry.at, { narrow: true }),
-    linkLabel: linkLabelOf(entry),
-    reason: entry.reason ?? '',
+    reason: entry.reason,
+    reasonTooltip: reasonTooltipOf(entry),
     amount: amountOf(entry),
     tone: deltaTone(entry.delta),
     runningText: formatNumber(running),
