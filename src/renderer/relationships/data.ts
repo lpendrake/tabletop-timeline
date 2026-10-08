@@ -3,7 +3,6 @@ import type {
   ExternalUndatedSet,
   InvalidDirectiveEntry,
   Ledger,
-  LedgersAs,
   ParsedDirective,
   TrackLibrary,
 } from '../../shared/relationships';
@@ -15,10 +14,6 @@ import type {
  * computed by the renderer from these raw ledgers/tracks, never over IPC.
  */
 export const relationshipsData = {
-  async getLedgers(entityId: string, as: LedgersAs): Promise<Ledger[]> {
-    return window.fsApi.getRelationshipLedgers(entityId, as);
-  },
-
   async getAllLedgers(): Promise<Ledger[]> {
     return window.fsApi.getAllRelationshipLedgers();
   },

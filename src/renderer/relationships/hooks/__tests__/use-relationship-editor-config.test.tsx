@@ -3,12 +3,16 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
-import { act } from 'react';
+import { act, StrictMode, type ReactNode } from 'react';
+import { renderHook } from '@testing-library/react';
+import { relationshipTagsSpec } from '../../../../shared/relationships';
 
 const state = vi.hoisted(() => ({
   defaultHolderId: null as string | null,
   onDefaultHolderChangedCb: null as ((id: string | null) => void) | null,
-  onChangedCb: null as (() => void) | null,
+  onChangedCbs: [] as Array<() => void>,
+  ledgerFetches: 0,
+  undatedFetches: 0,
   undatedSets: [] as Array<{ trackId: string; holder: string; observer: string; path: string }>,
 }));
 
@@ -22,13 +26,19 @@ vi.mock('../../data', () => ({
       };
     },
     onChanged: (cb: () => void) => {
-      state.onChangedCb = cb;
+      state.onChangedCbs.push(cb);
       return () => {
-        state.onChangedCb = null;
+        state.onChangedCbs = state.onChangedCbs.filter((c) => c !== cb);
       };
     },
-    getAllLedgers: () => Promise.resolve([]),
-    getUndatedSets: () => Promise.resolve(state.undatedSets),
+    getAllLedgers: () => {
+      state.ledgerFetches++;
+      return Promise.resolve([]);
+    },
+    getUndatedSets: () => {
+      state.undatedFetches++;
+      return Promise.resolve(state.undatedSets);
+    },
   },
 }));
 
@@ -61,8 +71,10 @@ async function flush() {
 beforeEach(() => {
   state.defaultHolderId = null;
   state.onDefaultHolderChangedCb = null;
-  state.onChangedCb = null;
+  state.onChangedCbs = [];
+  state.ledgerFetches = 0;
   state.undatedSets = [];
+  state.undatedFetches = 0;
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -147,9 +159,9 @@ describe('useRelationshipEditorConfig undated-Set conflicts (note editors only)'
     state.undatedSets = [
       { trackId: 'rp01', holder: 'a1b2', observer: 'c3d4', path: 'notes/other.md' },
     ];
-    expect(state.onChangedCb).toBeTruthy();
+    expect(state.onChangedCbs.length).toBeGreaterThan(0);
     await act(async () => {
-      state.onChangedCb!();
+      for (const cb of [...state.onChangedCbs]) cb();
     });
     await flush();
 
@@ -164,7 +176,7 @@ describe('useRelationshipEditorConfig undated-Set conflicts (note editors only)'
     ]);
   });
 
-  it('never fetches for an event editor', async () => {
+  it('never fetches undated sets for an event editor', async () => {
     function EventHost() {
       useRelationshipEditorConfig({
         entityIndex: [],
@@ -178,6 +190,52 @@ describe('useRelationshipEditorConfig undated-Set conflicts (note editors only)'
     }
     act(() => root.render(<EventHost />));
     await flush();
-    expect(state.onChangedCb).toBeNull();
+    expect(state.undatedFetches).toBe(0);
+  });
+});
+
+describe('useRelationshipEditorConfig ledger snapshot under StrictMode', () => {
+  function wrapper({ children }: { children: ReactNode }) {
+    return <StrictMode>{children}</StrictMode>;
+  }
+
+  it('shares one ledger fetch until a change, and leaves no listener after unmount', async () => {
+    const { result, unmount } = renderHook(
+      () =>
+        useRelationshipEditorConfig({
+          entityIndex: [],
+          defaultReason: 'Unspecified',
+          place: 'event',
+          currentPath: () => 'timeline/e.md',
+          at: () => 100,
+          getDocText: () => '',
+        }),
+      { wrapper },
+    );
+    const trackUsage = () =>
+      result.current.relationshipDirectives.choices?.trackUsage?.({
+        trackId: relationshipTagsSpec.id,
+        anchor: 0,
+        doc: '',
+      });
+
+    expect(state.onChangedCbs).toHaveLength(1);
+
+    await act(async () => {
+      await trackUsage();
+      await trackUsage();
+    });
+    expect(state.ledgerFetches).toBe(1);
+
+    await act(async () => {
+      for (const cb of [...state.onChangedCbs]) cb();
+    });
+    await act(async () => {
+      await trackUsage();
+    });
+    expect(state.ledgerFetches).toBe(2);
+
+    unmount();
+    expect(state.onChangedCbs).toHaveLength(0);
   });
 });

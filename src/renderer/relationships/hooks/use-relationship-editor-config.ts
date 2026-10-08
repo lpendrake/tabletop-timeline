@@ -8,6 +8,7 @@ import { composeExtraItems } from '../../shared/markdown-editor';
 import type { EntityIndexEntry } from '../../../types/global';
 import type { ExternalUndatedSet } from '../../../shared/relationships';
 import { relationshipsData } from '../data';
+import { createLedgerSnapshot } from '../ledger-snapshot';
 import { useRelationshipLibraryContext } from '../library-context';
 import { notesToPickerOptions } from '../domain/entity-picker-options';
 import { externalSetConflictEntries } from '../domain/external-set-conflicts';
@@ -69,6 +70,12 @@ export function useRelationshipEditorConfig(
   const library = useRelationshipLibraryContext();
 
   const [defaultHolderId, setDefaultHolderId] = useState<string | null>(null);
+
+  // The initializer has no side effects, and the effect subscribes on every
+  // mount, so StrictMode's mount/unmount/mount cycle leaves one live listener.
+  const [ledgerSnapshot] = useState(createLedgerSnapshot);
+
+  useEffect(() => ledgerSnapshot.listen(), [ledgerSnapshot]);
 
   useEffect(() => {
     let active = true;
@@ -143,6 +150,7 @@ export function useRelationshipEditorConfig(
       library,
       currentPath,
       at: () => optsRef.current.at(),
+      ledgers: () => ledgerSnapshot.all(),
     };
     const heldTags = makeHeldTagsResolver(deps);
     const trackUsage = makeTrackUsageResolver({ ...deps, place: opts.place });
@@ -166,6 +174,7 @@ export function useRelationshipEditorConfig(
     opts.place,
     defaultHolderId,
     externalSetConflicts,
+    ledgerSnapshot,
   ]);
 
   const contextMenu = useMemo(

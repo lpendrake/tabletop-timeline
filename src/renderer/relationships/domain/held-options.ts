@@ -50,7 +50,7 @@ export interface HeldTagsByObserverParams {
   holder: string;
   track: ResolvedTrack;
   library: TrackLibrary;
-  /** The holder's own ledgers (any track) — e.g. from `relationshipsData.getLedgers(holder, 'holder')`. Ledgers for a different track are ignored. */
+  /** The holder's own ledgers (any track), filtered from the editor's saved-ledger snapshot. Ledgers for a different track are ignored. */
   ledgers: readonly Ledger[];
   /** The editor's current (possibly unsaved) document text. */
   doc: string;

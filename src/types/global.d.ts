@@ -17,7 +17,6 @@ import type {
   ExternalUndatedSet,
   InvalidDirectiveEntry,
   Ledger,
-  LedgersAs,
   ParsedDirective,
   TrackLibrary,
 } from '../shared/relationships';
@@ -149,7 +148,6 @@ declare global {
       listSystemCalendars: () => Promise<CalendarSpec[]>;
 
       // Relationships
-      getRelationshipLedgers: (entityId: string, as: LedgersAs) => Promise<Ledger[]>;
       getAllRelationshipLedgers: () => Promise<Ledger[]>;
       getRelationshipTracks: () => Promise<TrackLibrary>;
       addRelationshipOption: (

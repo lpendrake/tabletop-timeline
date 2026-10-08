@@ -2,7 +2,6 @@ import { ipcMain } from 'electron';
 import { getCampaignPath } from './campaign-state.js';
 import { windowManager } from './windowManager.js';
 import { getRelationshipsStore } from './relationships-store.js';
-import type { LedgersAs } from './relationships-store.js';
 import { EMPTY_TRACK_LIBRARY } from '../shared/relationships/index.js';
 import { readRootDir } from './settings/root-dir.js';
 import { addOption, readTrackLibrary } from './settings/relationship-tracks.js';
@@ -12,10 +11,6 @@ import {
 } from './settings/relationship-settings.js';
 
 export function registerRelationshipsIpcHandlers() {
-  ipcMain.handle('relationships:getLedgers', (_event, entityId: string, as: LedgersAs) => {
-    return getRelationshipsStore().ledgersFor(entityId, as);
-  });
-
   ipcMain.handle('relationships:getAllLedgers', () => {
     return getRelationshipsStore().ledgers();
   });
