@@ -22,8 +22,12 @@ import { YEAR, fixtureYearOf, historyEntry } from './history-fixtures';
 import { noBands } from './numeric-fixtures';
 
 const at = (year: number, offset = 0) => year * YEAR + offset;
-const dated = (year: number, prev: number, run: number, over: Partial<HistoryEntry> = {}) =>
-  historyEntry({ at: at(year, 1), previousValue: prev, runningValue: run, ...over });
+const dated = (
+  year: number,
+  prev: number,
+  run: number,
+  over: Omit<Partial<HistoryEntry>, 'previousValue' | 'runningValue'> = {},
+) => historyEntry({ at: at(year, 1), previousValue: prev, runningValue: run, ...over });
 const undated = (prev: number, run: number) =>
   historyEntry({ at: null, previousValue: prev, runningValue: run });
 const group = (history: HistoryEntry[], now = at(4724, 500)) =>
