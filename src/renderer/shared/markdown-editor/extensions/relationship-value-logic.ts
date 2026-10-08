@@ -5,7 +5,7 @@
  * wire these into the editor.
  */
 import type { ActionKind, Role, ResolvedTrack } from '../../../../shared/relationships';
-import { recentsFirst, type PickerOption } from '../../searchable-picker';
+import type { PickerOption } from '../../searchable-picker';
 import { compareRanked, rankEntityMatch, type MatchRank } from '../../entity-match';
 import { rankMatch } from '../../search/rank';
 
@@ -112,71 +112,113 @@ export function observersHoldingTag(
   return ids;
 }
 
-/** Recent note ids for a holder/observer picker: `currentNoteId` pinned to the front if not already present. */
-export function buildNotePickerRecents(
-  recentNoteIds: readonly string[],
-  currentNoteId: string | null,
-): string[] {
-  const recents = [...recentNoteIds];
-  if (currentNoteId && !recents.includes(currentNoteId)) recents.unshift(currentNoteId);
-  return recents;
-}
-
 interface RankedOption {
   option: PickerOption;
   index: number;
   rank: MatchRank;
 }
 
-/**
- * Ranks note options the same way the `@` link search does (title/id
- * substring matching via `shared/entity-match.ts`'s `rankEntityMatch`), not
- * `rankPickerOptions`'s file-path-segment matching — a note titled "The
- * Whispering Claw" needs to be found by typing its title, not by segments
- * of its file path. Used by `noteChoices` for holder/observer blanks.
- */
-export function rankNoteOptions(
-  options: readonly PickerOption[],
-  query: string,
-  recentIds?: readonly string[],
-): PickerOption[] {
-  const q = query.trim();
-  if (!q) return recentsFirst(options, recentIds);
-  const ranked: RankedOption[] = [];
-  options.forEach((option, index) => {
-    const rank = rankEntityMatch(option.label ?? option.path, option.id, q);
-    if (rank !== null) ranked.push({ option, index, rank });
-  });
-  ranked.sort(compareRanked);
-  return ranked.map((entry) => entry.option);
+/** Note id to its proximity in seconds from the track's nearest entry; `null` = used but undated. Absent = not used. */
+export type NoteUsage = ReadonlyMap<string, number | null>;
+
+/** The holder/observer list's first section: notes the track already uses. */
+export const USED_SECTION = { name: 'Used on this track', rank: 0 } as const;
+/** The holder/observer list's second section: every other note. */
+export const UNUSED_SECTION = { name: 'Not used on this track', rank: 1 } as const;
+export type NoteSection = typeof USED_SECTION | typeof UNUSED_SECTION;
+
+/** Nearest first; an undated proximity (`null`) after every dated one. */
+export function compareProximity(a: number | null, b: number | null): number {
+  if (a === b) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+  return a - b;
 }
 
-export interface NoteChoiceInput {
+function noteLabel(option: PickerOption): string {
+  return option.label ?? option.path;
+}
+
+/**
+ * The note options that match `query` (title/id matching via
+ * `shared/entity-match.ts`'s `rankEntityMatch`, like the `@` link search —
+ * not file-path-segment matching, so "The Whispering Claw" is found by its
+ * title), each with its match rank. An empty query matches every note with
+ * the same rank. Input order is kept for ties.
+ */
+export function matchNoteOptions(options: readonly PickerOption[], query: string): RankedOption[] {
+  const q = query.trim();
+  const matches: RankedOption[] = [];
+  options.forEach((option, index) => {
+    const rank = q ? rankEntityMatch(noteLabel(option), option.id, q) : 0;
+    if (rank !== null) matches.push({ option, index, rank });
+  });
+  return matches;
+}
+
+export interface SectionedNote {
+  option: PickerOption;
+  /** `null` for the pinned default holder, which sits above both sections. */
+  section: NoteSection | null;
+}
+
+export interface NoteSectionInput {
   role: Role;
+  /** Already narrowed (a Remove's observers); every note still listed is a candidate. */
   options: readonly PickerOption[];
   /** What's typed in the blank (empty when it holds a picked note). */
   query: string;
-  recentNoteIds: readonly string[];
-  currentNoteId: string | null;
+  /** The track's usage, or `null` when unknown (every note is then "not used"). */
+  usage: NoteUsage | null;
   defaultHolderId: string | null;
-  /** Ids to restrict to (a Remove's observer), or null for every note. */
-  restrictedIds: readonly string[] | null;
 }
 
 /**
- * The notes a holder/observer blank offers, best first: filtered by
- * `restrictedIds`, ranked by title like `@` links, with recents (the open
- * note pinned first, and for a holder the default holder ahead of that)
- * leading an empty query.
+ * The note pinned as the first row of a blank, if any: the campaign's default
+ * holder, on a holder blank with an empty query, when it is among `options`
+ * (already narrowed). The one rule behind both the pinned row and Tab/Enter
+ * picking it.
  */
-export function noteChoices(input: NoteChoiceInput): PickerOption[] {
-  const options = filterHeldOptions(input.options, input.restrictedIds);
-  const recents = buildNotePickerRecents(input.recentNoteIds, input.currentNoteId);
-  if (input.role === 'holder' && input.defaultHolderId) {
-    const without = recents.filter((id) => id !== input.defaultHolderId);
-    return rankNoteOptions(options, input.query, [input.defaultHolderId, ...without]);
-  }
-  return rankNoteOptions(options, input.query, recents);
+export function pinnedDefaultHolder(input: {
+  role: Role;
+  query: string;
+  defaultHolderId: string | null;
+  options: readonly PickerOption[];
+}): PickerOption | null {
+  if (input.role !== 'holder' || input.query.trim() || !input.defaultHolderId) return null;
+  return input.options.find((o) => o.id === input.defaultHolderId) ?? null;
+}
+
+/**
+ * The notes a holder/observer blank offers, in final display order: the
+ * default holder pinned first (`pinnedDefaultHolder`), then the used notes,
+ * then the rest. The query filters and ranks within each section: the best
+ * text match comes first, then used notes nearest in time (undated last) and
+ * everything else A–Z, ties falling back to A–Z.
+ */
+export function sectionNotes(input: NoteSectionInput): SectionedNote[] {
+  const matches = matchNoteOptions(input.options, input.query);
+  const pinnedOption = pinnedDefaultHolder({ ...input, options: input.options });
+  const pinned = pinnedOption ? matches.find((m) => m.option === pinnedOption) : undefined;
+
+  const isUsed = (m: RankedOption) => Boolean(input.usage?.has(m.option.id));
+  const proximity = (m: RankedOption) => input.usage?.get(m.option.id) ?? null;
+  const byLabel = (a: RankedOption, b: RankedOption) =>
+    noteLabel(a.option).localeCompare(noteLabel(b.option));
+
+  const rest = matches.filter((m) => m !== pinned);
+  const used = rest
+    .filter(isUsed)
+    .sort(
+      (a, b) => a.rank - b.rank || compareProximity(proximity(a), proximity(b)) || byLabel(a, b),
+    );
+  const unused = rest.filter((m) => !isUsed(m)).sort((a, b) => a.rank - b.rank || byLabel(a, b));
+
+  return [
+    ...(pinned ? [{ option: pinned.option, section: null }] : []),
+    ...used.map((m) => ({ option: m.option, section: USED_SECTION })),
+    ...unused.map((m) => ({ option: m.option, section: UNUSED_SECTION })),
+  ];
 }
 
 /**

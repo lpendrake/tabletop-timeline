@@ -157,8 +157,6 @@ contextBridge.exposeInMainWorld('fsApi', {
   listSystemCalendars: () => ipcRenderer.invoke('calendar:listSystem'),
 
   // Relationships
-  getRelationshipLedgers: (entityId: string, as: 'holder' | 'observer' | 'both') =>
-    ipcRenderer.invoke('relationships:getLedgers', entityId, as),
   getAllRelationshipLedgers: () => ipcRenderer.invoke('relationships:getAllLedgers'),
   getRelationshipTracks: () => ipcRenderer.invoke('relationships:getTracks'),
   addRelationshipOption: (trackId: string, input: { label: string; mutual: boolean }) =>

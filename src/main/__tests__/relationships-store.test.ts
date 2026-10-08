@@ -62,6 +62,23 @@ function newStore(): RelationshipsStore {
   return store;
 }
 
+/** Ledgers where `id` is the holder, the observer, or either. */
+function ledgersOf(
+  store: RelationshipsStore,
+  id: string,
+  as: 'holder' | 'observer' | 'both',
+): ReturnType<RelationshipsStore['ledgers']> {
+  return store
+    .ledgers()
+    .filter((l) =>
+      as === 'holder'
+        ? l.holder === id
+        : as === 'observer'
+          ? l.observer === id
+          : l.holder === id || l.observer === id,
+    );
+}
+
 describe('event directives get at from epochSeconds; note directives are undated', () => {
   it('assigns `at` from the event epochSeconds and null for a note directive', () => {
     const store = newStore();
@@ -70,11 +87,11 @@ describe('event directives get at from epochSeconds; note directives are undated
       noteFile('notes/n1.md', repSetDirective(C, A, 3, 'gift')),
     ]);
 
-    const eventLedger = store.ledgersFor(A, 'holder')[0];
+    const eventLedger = ledgersOf(store, A, 'holder')[0];
     expect(eventLedger.deltas).toHaveLength(1);
     expect(eventLedger.deltas[0].at).toBe(1000);
 
-    const noteLedger = store.ledgersFor(C, 'holder')[0];
+    const noteLedger = ledgersOf(store, C, 'holder')[0];
     expect(noteLedger.deltas).toHaveLength(1);
     expect(noteLedger.deltas[0].at).toBeNull();
   });
@@ -114,16 +131,16 @@ describe('saving a file replaces all its directives and mirrors', () => {
     ].join('\n');
     store.rebuild([noteFile('notes/n1.md', originalSource)]);
 
-    expect(store.ledgersFor(A, 'holder').find((l) => l.track === 'tg01')).toBeDefined();
-    expect(store.ledgersFor(C, 'holder').find((l) => l.track === 'tg01')).toBeDefined(); // mirror
-    expect(store.ledgersFor(A, 'holder').find((l) => l.track === 'rp01')).toBeDefined();
+    expect(ledgersOf(store, A, 'holder').find((l) => l.track === 'tg01')).toBeDefined();
+    expect(ledgersOf(store, C, 'holder').find((l) => l.track === 'tg01')).toBeDefined(); // mirror
+    expect(ledgersOf(store, A, 'holder').find((l) => l.track === 'rp01')).toBeDefined();
 
     const revisedSource = repSetDirective(A, C, -5, 'feud');
     store.updateFile(noteFile('notes/n1.md', revisedSource));
 
-    expect(store.ledgersFor(A, 'holder').find((l) => l.track === 'tg01')).toBeUndefined();
-    expect(store.ledgersFor(C, 'holder').find((l) => l.track === 'tg01')).toBeUndefined();
-    expect(store.ledgersFor(A, 'holder').find((l) => l.track === 'rp01')).toBeDefined();
+    expect(ledgersOf(store, A, 'holder').find((l) => l.track === 'tg01')).toBeUndefined();
+    expect(ledgersOf(store, C, 'holder').find((l) => l.track === 'tg01')).toBeUndefined();
+    expect(ledgersOf(store, A, 'holder').find((l) => l.track === 'rp01')).toBeDefined();
   });
 });
 
@@ -132,8 +149,8 @@ describe('mutual options mirror', () => {
     const store = newStore();
     store.rebuild([noteFile('notes/n1.md', tagsGainsDirective(A, C, 'married', 'wedding'))]);
 
-    const direct = store.ledgersFor(A, 'both').find((l) => l.holder === A && l.observer === C);
-    const mirror = store.ledgersFor(C, 'both').find((l) => l.holder === C && l.observer === A);
+    const direct = ledgersOf(store, A, 'both').find((l) => l.holder === A && l.observer === C);
+    const mirror = ledgersOf(store, C, 'both').find((l) => l.holder === C && l.observer === A);
     expect(direct?.deltas).toEqual([expect.objectContaining({ op: 'add', key: 'married' })]);
     expect(mirror?.deltas).toEqual([
       expect.objectContaining({ op: 'add', key: 'married', mirrored: true }),
@@ -149,7 +166,7 @@ describe('mutual options mirror', () => {
     ].join('\n');
     store.rebuild([eventFile('timeline/e1.md', source, 1000)]);
 
-    const mirror = store.ledgersFor(C, 'both').find((l) => l.holder === C && l.observer === A);
+    const mirror = ledgersOf(store, C, 'both').find((l) => l.holder === C && l.observer === A);
     expect(mirror?.deltas.map((d) => d.op)).toEqual(['add', 'remove']);
     expect(mirror?.deltas.every((d) => d.mirrored)).toBe(true);
   });
@@ -158,7 +175,7 @@ describe('mutual options mirror', () => {
     const store = newStore();
     store.rebuild([noteFile('notes/n1.md', tagsGainsDirective(A, C, 'member', 'joined'))]);
 
-    const mirror = store.ledgersFor(C, 'both').find((l) => l.holder === C && l.observer === A);
+    const mirror = ledgersOf(store, C, 'both').find((l) => l.holder === C && l.observer === A);
     expect(mirror).toBeUndefined();
   });
 });
@@ -194,12 +211,12 @@ describe("flipping an option's mutual flag re-derives history", () => {
     store.rebuild([noteFile('notes/n1.md', flipTrackDirective(A, C))]);
 
     expect(
-      store.ledgersFor(C, 'both').find((l) => l.holder === C && l.observer === A),
+      ledgersOf(store, C, 'both').find((l) => l.holder === C && l.observer === A),
     ).toBeUndefined();
 
     store.setLibrary({ custom: [FLIP_TRACK_MUTUAL], optionAdditions: {} });
 
-    const mirror = store.ledgersFor(C, 'both').find((l) => l.holder === C && l.observer === A);
+    const mirror = ledgersOf(store, C, 'both').find((l) => l.holder === C && l.observer === A);
     expect(mirror?.deltas).toEqual([
       expect.objectContaining({ op: 'add', key: 'friend', mirrored: true }),
     ]);
@@ -214,13 +231,13 @@ describe('reverse index recomputes only touched ledgers', () => {
       noteFile('notes/n2.md', tagsGainsDirective('e5f6', 'g7h8', 'member', 'joined')),
     ]);
 
-    const untouchedBefore = store.ledgersFor('e5f6', 'holder')[0];
-    const touchedBefore = store.ledgersFor(A, 'holder')[0];
+    const untouchedBefore = ledgersOf(store, 'e5f6', 'holder')[0];
+    const touchedBefore = ledgersOf(store, A, 'holder')[0];
 
     const result = store.updateFile(noteFile('notes/n1.md', repSetDirective(A, C, -9, 'b')));
 
-    const untouchedAfter = store.ledgersFor('e5f6', 'holder')[0];
-    const touchedAfter = store.ledgersFor(A, 'holder')[0];
+    const untouchedAfter = ledgersOf(store, 'e5f6', 'holder')[0];
+    const touchedAfter = ledgersOf(store, A, 'holder')[0];
 
     expect(untouchedAfter).toBe(untouchedBefore);
     expect(touchedAfter).not.toBe(touchedBefore);
@@ -236,7 +253,7 @@ describe('moving an event re-orders its deltas', () => {
       eventFile('timeline/late.md', repChangeDirective(A, C, 2, 'b'), 2000),
     ]);
 
-    const ledger = () => store.ledgersFor(A, 'holder').find((l) => l.observer === C)!;
+    const ledger = () => ledgersOf(store, A, 'holder').find((l) => l.observer === C)!;
     const sortedPathsBefore = [...ledger().deltas]
       .sort(compareDeltas)
       .map((d) => d.declaredIn.path);
@@ -256,13 +273,13 @@ describe('deleting an event removes its deltas and mirrors', () => {
       eventFile('timeline/e1.md', tagsGainsDirective(A, C, 'married', 'wedding'), 1000),
     ]);
 
-    expect(store.ledgersFor(A, 'holder')).toHaveLength(1); // direct: (A, C)
-    expect(store.ledgersFor(C, 'holder')).toHaveLength(1); // mirror: (C, A)
+    expect(ledgersOf(store, A, 'holder')).toHaveLength(1); // direct: (A, C)
+    expect(ledgersOf(store, C, 'holder')).toHaveLength(1); // mirror: (C, A)
 
     store.removeFile('timeline/e1.md');
 
-    expect(store.ledgersFor(A, 'holder')).toHaveLength(0);
-    expect(store.ledgersFor(C, 'holder')).toHaveLength(0);
+    expect(ledgersOf(store, A, 'holder')).toHaveLength(0);
+    expect(ledgersOf(store, C, 'holder')).toHaveLength(0);
   });
 });
 
@@ -290,7 +307,7 @@ describe('the store owns known notes as path -> id, seeded at load', () => {
     store.rebuild([noteFile('notes/n1.md', repSetDirective(A, C, 5, 'gift'))]);
 
     expect(store.invalid()).toHaveLength(0);
-    expect(store.ledgersFor(A, 'holder')).toHaveLength(1);
+    expect(ledgersOf(store, A, 'holder')).toHaveLength(1);
 
     // The note was untouched since load — its id came only from seedKnownNotes.
     const removeResult = store.removeFile('notes/holder.md');
@@ -299,7 +316,7 @@ describe('the store owns known notes as path -> id, seeded at load', () => {
     const invalidAfterDelete = store.invalid();
     expect(invalidAfterDelete).toHaveLength(1);
     expect(invalidAfterDelete[0].path).toBe('notes/n1.md');
-    expect(store.ledgersFor(A, 'holder')).toHaveLength(0);
+    expect(ledgersOf(store, A, 'holder')).toHaveLength(0);
 
     // Recreating the note (same id) re-derives the referencing file back to valid.
     const recreateResult = store.updateFile(noteFile('notes/holder.md', ''));
@@ -329,7 +346,7 @@ describe('the store owns known notes as path -> id, seeded at load', () => {
     store.updateFile(input);
 
     expect(store.invalid()).toHaveLength(0);
-    expect(store.ledgersFor(A, 'holder')).toHaveLength(1);
+    expect(ledgersOf(store, A, 'holder')).toHaveLength(1);
   });
 });
 
@@ -341,7 +358,7 @@ describe('more than one undated Set on the same relationship', () => {
       noteFile('notes/n2.md', repSetDirective(A, C, 9, 'second')),
     ]);
 
-    const ledger = store.ledgersFor(A, 'holder').find((l) => l.track === 'rp01');
+    const ledger = ledgersOf(store, A, 'holder').find((l) => l.track === 'rp01');
     expect(ledger?.deltas).toHaveLength(0);
 
     const invalid = store.invalid();
@@ -362,7 +379,7 @@ describe('more than one undated Set on the same relationship', () => {
     store.removeFile('notes/n2.md');
 
     expect(store.invalid()).toHaveLength(0);
-    const ledger = store.ledgersFor(A, 'holder').find((l) => l.track === 'rp01');
+    const ledger = ledgersOf(store, A, 'holder').find((l) => l.track === 'rp01');
     expect(ledger?.deltas).toHaveLength(1);
     expect(ledger?.deltas[0].declaredIn.path).toBe('notes/n1.md');
   });
@@ -377,7 +394,7 @@ describe('undatedSets', () => {
     ]);
 
     // cleanLedger (via ledgers()) drops both conflicting Sets...
-    const ledger = store.ledgersFor(A, 'holder').find((l) => l.track === 'rp01');
+    const ledger = ledgersOf(store, A, 'holder').find((l) => l.track === 'rp01');
     expect(ledger?.deltas).toHaveLength(0);
 
     // ...but undatedSets() still reports both, straight from the raw ledger.

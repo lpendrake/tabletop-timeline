@@ -14,7 +14,12 @@
  *
  * No IO, no React.
  */
-import type { Ledger, ResolvedTrack, TrackLibrary } from '../../../shared/relationships';
+import type {
+  Ledger,
+  RelationshipDelta,
+  ResolvedTrack,
+  TrackLibrary,
+} from '../../../shared/relationships';
 import {
   computeValue,
   deltasForFile,
@@ -22,11 +27,30 @@ import {
   splitLedgerKey,
 } from '../../../shared/relationships';
 
+/**
+ * One ledger's deltas as the editor sees them: the saved deltas minus those
+ * declared in `path` (the buffer is the truth for that file), plus the
+ * buffer's own deltas minus the directive being edited. A `null` path (an
+ * unsaved buffer) keeps every saved delta.
+ */
+export function deltasWithBuffer(input: {
+  saved: readonly RelationshipDelta[];
+  fromBuffer: readonly RelationshipDelta[];
+  path: string | null;
+  excludeOrdinal: number | undefined;
+}): RelationshipDelta[] {
+  const { saved, fromBuffer, path, excludeOrdinal } = input;
+  return [
+    ...saved.filter((d) => path === null || d.declaredIn.path !== path),
+    ...fromBuffer.filter((d) => d.declaredIn.ordinal !== excludeOrdinal),
+  ];
+}
+
 export interface HeldTagsByObserverParams {
   holder: string;
   track: ResolvedTrack;
   library: TrackLibrary;
-  /** The holder's own ledgers (any track) — e.g. from `relationshipsData.getLedgers(holder, 'holder')`. Ledgers for a different track are ignored. */
+  /** The holder's own ledgers (any track), filtered from the editor's saved-ledger snapshot. Ledgers for a different track are ignored. */
   ledgers: readonly Ledger[];
   /** The editor's current (possibly unsaved) document text. */
   doc: string;
@@ -67,15 +91,13 @@ export function heldTagsByObserver(params: HeldTagsByObserverParams): Map<string
     const saved: Ledger = ledgers.find(
       (l) => l.holder === holder && l.observer === observer && l.track === trackId,
     ) ?? { holder, observer, track: trackId, deltas: [] };
-    const savedOutsideFile = saved.deltas.filter((d) => d.declaredIn.path !== path);
-    const fromBuffer = (bufferLedgers.get(ledgerKey(holder, observer, trackId)) ?? []).filter(
-      (d) => d.declaredIn.ordinal !== excludeOrdinal,
-    );
-    const value = computeValue(
-      { ...saved, deltas: [...savedOutsideFile, ...fromBuffer] },
-      track,
-      at ?? -Infinity,
-    );
+    const deltas = deltasWithBuffer({
+      saved: saved.deltas,
+      fromBuffer: bufferLedgers.get(ledgerKey(holder, observer, trackId)) ?? [],
+      path,
+      excludeOrdinal,
+    });
+    const value = computeValue({ ...saved, deltas }, track, at ?? -Infinity);
     result.set(observer, Array.isArray(value) ? value : []);
   }
   return result;
