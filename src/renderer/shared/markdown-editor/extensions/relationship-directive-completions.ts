@@ -19,6 +19,7 @@ import {
   type Completion,
   type CompletionContext,
   type CompletionResult,
+  type CompletionSection,
 } from '@codemirror/autocomplete';
 import { MapMode, Prec, type EditorState, type Extension, type Text } from '@codemirror/state';
 import { EditorView, ViewPlugin, keymap, type Command, type ViewUpdate } from '@codemirror/view';
@@ -42,18 +43,28 @@ import { displayFor, liveSlotAt, moveToAdjacentBlank } from './relationship-dire
 import {
   allowsCreateOption,
   filterHeldOptions,
-  noteChoices,
+  matchNoteOptions,
   observersHoldingTag,
   rankLabelled,
+  pinnedDefaultHolder,
+  sectionNotes,
   shouldOfferCreateOption,
   unionHeldTags,
+  type NoteUsage,
+  type SectionedNote,
 } from './relationship-value-logic';
-import { getRecentNoteIds, rememberRecentNote } from './relationship-recent-notes';
 
 /** Which holder a Remove blank's tags should be fetched for, plus the directive's position and the buffer's text so the host can exclude this directive's own delta. */
 export interface HeldTagsQuery {
   trackId: string;
   holder: string;
+  anchor: number;
+  doc: string;
+}
+
+/** Which track's usage a holder/observer blank should be sectioned by, plus the directive's position and the buffer's text so the host can exclude this directive's own delta. */
+export interface TrackUsageQuery {
+  trackId: string;
   anchor: number;
   doc: string;
 }
@@ -72,6 +83,13 @@ export interface RelationshipCompletionOptions {
   ) => Promise<{ key: string } | null>;
   /** The holder's held tags, by observer, at the declaring event's date. A rejection shows every tag/note, unfiltered. */
   heldTags?: (q: HeldTagsQuery) => Promise<Map<string, string[]>>;
+  /**
+   * The notes the track already uses: note id to the absolute distance in
+   * seconds to that note's nearest entry on the track, or `null` for a used
+   * note with no dated proximity. Ids absent from the map are not used. A
+   * missing callback or a rejection lists every note as not used.
+   */
+  trackUsage?: (q: TrackUsageQuery) => Promise<Map<string, number | null>>;
 }
 
 /** At most this many notes are listed; typing narrows the rest. */
@@ -138,11 +156,13 @@ function pick(
   value: string,
   label: string,
   detail?: string,
+  section?: CompletionSection,
   onPicked?: (view: EditorView) => void,
 ): Completion {
   return completionReactivates({
     label,
     detail,
+    section,
     apply: (view, completion, from, to) => {
       writeAndAdvance(view, completion, from, to, value);
       onPicked?.(view);
@@ -152,7 +172,7 @@ function pick(
 
 function noteCompletions(
   role: Role,
-  choices: readonly PickerOption[],
+  notes: readonly SectionedNote[],
   opts: RelationshipCompletionOptions,
 ): Completion[] {
   const defaultHolderId = opts.defaultHolderId?.() ?? null;
@@ -161,7 +181,7 @@ function noteCompletions(
   // holder blank offers a second row that also makes the note the default —
   // there's no separate dialog, so the list never loses focus.
   const offerDefault = role === 'holder' && !defaultHolderId && Boolean(opts.setDefaultHolder);
-  return choices.slice(0, NOTE_LIMIT).flatMap((option) => {
+  return notes.slice(0, NOTE_LIMIT).flatMap(({ option, section }) => {
     const label = option.label ?? option.path;
     const detail =
       role === 'holder' && option.id === defaultHolderId
@@ -169,16 +189,14 @@ function noteCompletions(
         : option.id === currentNoteId
           ? 'this note'
           : undefined;
-    const plain = pick(noteRoleValue(option.id), label, detail, () => {
-      rememberRecentNote(option.id);
-    });
+    const plain = pick(noteRoleValue(option.id), label, detail, section ?? undefined);
     if (!offerDefault) return [plain];
     const makeDefault = pick(
       noteRoleValue(option.id),
       `Use ${label} and make it the default holder`,
       undefined,
+      section ?? undefined,
       () => {
-        rememberRecentNote(option.id);
         void opts.setDefaultHolder?.(option.id);
       },
     );
@@ -296,15 +314,7 @@ function baseChoices(
   const track = model.track;
   const query = displayFor(state, model, slot).kind === 'text' ? slot.value : '';
   if (slot.role === 'holder' || slot.role === 'observer') {
-    const choices = noteChoices({
-      role: slot.role,
-      options: opts.noteOptions(),
-      query,
-      recentNoteIds: getRecentNoteIds(),
-      currentNoteId: opts.currentNoteId?.() ?? null,
-      defaultHolderId: opts.defaultHolderId?.() ?? null,
-      restrictedIds: null,
-    });
+    const choices = matchNoteOptions(opts.noteOptions(), query).map((m) => m.option);
     return { query, choices };
   }
   if (slot.role === 'option' && track?.kind === 'categorical') {
@@ -350,6 +360,20 @@ async function narrowing(
   return observer ? (byObserver.get(observer) ?? []) : unionHeldTags(byObserver);
 }
 
+/** The notes the track already uses, or `null` when unknown (no host callback, or the lookup failed). */
+function trackUsage(
+  state: EditorState,
+  directive: ParsedDirective,
+  opts: RelationshipCompletionOptions,
+): Promise<NoteUsage | null> {
+  const lookup = opts.trackUsage;
+  const doc = state.doc.toString();
+  const run = lookup
+    ? () => lookup({ trackId: directive.trackId, anchor: directive.from, doc })
+    : null;
+  return cachedLookup(state.doc, `usage:${directive.from}:${directive.trackId}`, run);
+}
+
 async function completeBlank(
   context: CompletionContext,
   getOptions: () => RelationshipCompletionOptions,
@@ -368,10 +392,21 @@ async function completeBlank(
   );
   if (context.aborted) return null;
 
-  const options =
-    slot.role === 'holder' || slot.role === 'observer'
-      ? noteCompletions(slot.role, narrowed, opts)
-      : narrowed.map((o) => pick(o.id, o.label ?? o.path));
+  let options: Completion[];
+  if (slot.role === 'holder' || slot.role === 'observer') {
+    const usage = await trackUsage(state, directive, opts);
+    if (context.aborted) return null;
+    const notes = sectionNotes({
+      role: slot.role,
+      options: narrowed,
+      query,
+      usage,
+      defaultHolderId: opts.defaultHolderId?.() ?? null,
+    });
+    options = noteCompletions(slot.role, notes, opts);
+  } else {
+    options = narrowed.map((o) => pick(o.id, o.label ?? o.path));
+  }
 
   if (
     slot.role === 'option' &&
@@ -388,9 +423,9 @@ async function completeBlank(
 }
 
 /**
- * Tab or Enter on a typed query picks a real match without waiting on the
- * popup: the highlighted one when the list is open, otherwise the top match
- * computed straight from the same source — so typing "spi" and pressing Tab
+ * Tab or Enter on a typed query (or an empty holder blank with a pinned
+ * default holder) picks a real match without waiting on the popup: the highlighted one when the list is open, otherwise the first row
+ * the source would show, computed straight from it — so typing "spi" and pressing Tab
  * always fills Spire Watch, however fast it's typed.
  *
  * Never a "Create …" row unless the user moved the highlight onto it:
@@ -403,12 +438,21 @@ function makeAcceptTypedQuery(getOptions: () => RelationshipCompletionOptions): 
     const { state } = view;
     const sel = state.selection.main;
     const hit = sel.empty ? liveSlotAt(state, sel.head) : null;
-    if (!hit || hit.slot.value === '' || !roleHasChoices(hit.slot.role, hit.model.track)) {
-      return false;
-    }
+    if (!hit || !roleHasChoices(hit.slot.role, hit.model.track)) return false;
     const opts = getOptions();
     const { query, choices } = baseChoices(state, hit, opts);
-    if (!query) return false;
+    // An empty holder blank with a default holder pinned first picks it; a
+    // blank already holding a note (empty query) moves on.
+    const pinned =
+      hit.slot.value === ''
+        ? pinnedDefaultHolder({
+            role: hit.slot.role,
+            query,
+            defaultHolderId: opts.defaultHolderId?.() ?? null,
+            options: choices,
+          })
+        : null;
+    if (!pinned && (hit.slot.value === '' || !query)) return false;
 
     if (completionStatus(state) === 'active') {
       const selected = selectedCompletion(state);

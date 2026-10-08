@@ -74,6 +74,12 @@ export const lastGaspTheme = EditorView.theme(
         color: 'var(--theme-text-primary)',
       },
     },
+    // Section headers ("Used on this track"); matches the base theme's specificity.
+    '.cm-tooltip.cm-tooltip-autocomplete > ul > completion-section': {
+      borderBottom: '1px solid var(--theme-border)',
+      color: 'var(--theme-text-muted)',
+      opacity: 1,
+    },
   },
   // Note: { dark: true } tells CodeMirror to use its dark-mode defaults for
   // any unthemed elements. The editor theme object is created once at module

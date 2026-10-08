@@ -155,6 +155,7 @@ function makeCompletionOptions(
     setDefaultHolder: choices?.setDefaultHolder,
     createOption: choices?.createOption,
     heldTags: choices?.heldTags,
+    trackUsage: choices?.trackUsage,
   };
 }
 

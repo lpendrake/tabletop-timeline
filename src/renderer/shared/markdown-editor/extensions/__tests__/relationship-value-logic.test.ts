@@ -8,9 +8,10 @@ import {
   filterHeldOptions,
   unionHeldTags,
   observersHoldingTag,
-  buildNotePickerRecents,
-  rankNoteOptions,
-  noteChoices,
+  compareProximity,
+  matchNoteOptions,
+  sectionNotes,
+  pinnedDefaultHolder,
   rankLabelled,
 } from '../relationship-value-logic';
 import { resolveTrackSpec, sanitiseValue } from '../../../../../shared/relationships';
@@ -87,50 +88,28 @@ describe('unionHeldTags / observersHoldingTag (pure)', () => {
   });
 });
 
-describe('buildNotePickerRecents (pure)', () => {
-  it('pins the current note to the front when not already present', () => {
-    expect(buildNotePickerRecents(['a1', 'b2'], 'c3')).toEqual(['c3', 'a1', 'b2']);
-  });
-
-  it('leaves recents untouched when the current note is already there', () => {
-    expect(buildNotePickerRecents(['a1', 'b2'], 'a1')).toEqual(['a1', 'b2']);
-  });
-
-  it('leaves recents untouched when there is no current note', () => {
-    expect(buildNotePickerRecents(['a1', 'b2'], null)).toEqual(['a1', 'b2']);
-  });
-});
-
-describe('rankNoteOptions (pure)', () => {
+describe('matchNoteOptions (pure)', () => {
   const options = [
     { id: 'a1', path: 'notes/factions/twc.md', label: 'The Whispering Claw' },
     { id: 'b2', path: 'notes/places/claws.md', label: 'Claw Hammer Inn' },
     { id: 'c3', path: 'notes/npcs/whisper.md', label: 'Whisper the Spy' },
   ];
 
-  it('ranks by title using entity-match semantics (title/id substring)', () => {
-    const ranked = rankNoteOptions(options, 'whispering');
-    // Should find "The Whispering Claw" by title substring
-    expect(ranked[0]?.id).toBe('a1');
+  it('matches by title using entity-match semantics, not file path', () => {
+    expect(matchNoteOptions(options, 'whispering').map((m) => m.option.id)).toEqual(['a1']);
+    expect(matchNoteOptions(options, 'hammer').map((m) => m.option.id)).toEqual(['b2']);
   });
 
-  it('finds options by title when path does not match', () => {
-    const ranked = rankNoteOptions(options, 'hammer');
-    // "Claw Hammer Inn" matches by title, not by path
-    expect(ranked[0]?.id).toBe('b2');
+  it('gives every note the same rank for an empty query', () => {
+    const matches = matchNoteOptions(options, '  ');
+    expect(matches).toHaveLength(3);
+    expect(new Set(matches.map((m) => m.rank)).size).toBe(1);
   });
+});
 
-  it('an empty query returns recents first', () => {
-    const ranked = rankNoteOptions(options, '', ['c3', 'a1']);
-    // With recents, c3 should come first, then a1
-    expect(ranked[0]?.id).toBe('c3');
-    expect(ranked[1]?.id).toBe('a1');
-    expect(ranked[2]?.id).toBe('b2');
-  });
-
-  it('returns all options when there is no query', () => {
-    const ranked = rankNoteOptions(options, '');
-    expect(ranked.length).toBe(3);
+describe('compareProximity (pure)', () => {
+  it('orders nearest first and undated after every dated value', () => {
+    expect([null, 90, 0, 5].sort(compareProximity)).toEqual([0, 5, 90, null]);
   });
 });
 
@@ -140,42 +119,130 @@ describe('sanitiseValue (pure, shared)', () => {
   });
 });
 
-describe('noteChoices (pure)', () => {
+describe('pinnedDefaultHolder (pure)', () => {
   const options = [
-    { id: 'a1', path: 'a1.md', label: 'The Vanguard' },
-    { id: 'b2', path: 'b2.md', label: 'Spire Watch' },
-    { id: 'c3', path: 'c3.md', label: 'Borin Stoneberg' },
+    { id: 'a1', path: 'a1.md', label: 'Aldric' },
+    { id: 'b2', path: 'b2.md', label: 'Borin' },
+  ];
+  const base = { role: 'holder' as const, query: '', defaultHolderId: 'b2', options };
+
+  it('is the default holder on an empty holder query', () => {
+    expect(pinnedDefaultHolder(base)).toBe(options[1]);
+    expect(pinnedDefaultHolder({ ...base, query: '  ' })).toBe(options[1]);
+  });
+
+  it('is nothing for an observer, a typed query, no default or a default outside the choices', () => {
+    expect(pinnedDefaultHolder({ ...base, role: 'observer' })).toBeNull();
+    expect(pinnedDefaultHolder({ ...base, query: 'b' })).toBeNull();
+    expect(pinnedDefaultHolder({ ...base, defaultHolderId: null })).toBeNull();
+    expect(pinnedDefaultHolder({ ...base, options: [options[0]] })).toBeNull();
+  });
+});
+
+describe('sectionNotes (pure)', () => {
+  const DAY = 86400;
+  const options = [
+    { id: 'c3', path: 'c3.md', label: 'Charis' },
+    { id: 'a1', path: 'a1.md', label: 'Aldric' },
+    { id: 'b2', path: 'b2.md', label: 'Borin' },
+    { id: 'd4', path: 'd4.md', label: 'Dessa' },
   ];
   const base = {
+    role: 'observer' as const,
     options,
     query: '',
-    recentNoteIds: ['c3'],
-    currentNoteId: null,
+    usage: null,
     defaultHolderId: null,
-    restrictedIds: null,
   };
+  const ids = (input: Parameters<typeof sectionNotes>[0]) =>
+    sectionNotes(input).map((n) => n.option.id);
+  const sections = (input: Parameters<typeof sectionNotes>[0]) =>
+    sectionNotes(input).map((n) => n.section?.name ?? null);
 
-  it('leads an empty query with recents, then everything else', () => {
-    expect(noteChoices({ ...base, role: 'observer' }).map((o) => o.id)).toEqual(['c3', 'a1', 'b2']);
-  });
-
-  it('puts the default holder first for a holder blank only', () => {
-    const withDefault = { ...base, defaultHolderId: 'b2' };
-    expect(noteChoices({ ...withDefault, role: 'holder' })[0].id).toBe('b2');
-    expect(noteChoices({ ...withDefault, role: 'observer' })[0].id).toBe('c3');
-  });
-
-  it('pins the open note ahead of other recents', () => {
-    expect(noteChoices({ ...base, role: 'observer', currentNoteId: 'a1' })[0].id).toBe('a1');
-  });
-
-  it('ranks a typed query by title and respects a restriction list', () => {
-    expect(noteChoices({ ...base, role: 'observer', query: 'spire' }).map((o) => o.id)).toEqual([
-      'b2',
+  it('lists used notes above unused ones, in their own sections', () => {
+    const usage = new Map([['d4', DAY]]);
+    expect(ids({ ...base, usage })).toEqual(['d4', 'a1', 'b2', 'c3']);
+    expect(sections({ ...base, usage })).toEqual([
+      'Used on this track',
+      'Not used on this track',
+      'Not used on this track',
+      'Not used on this track',
     ]);
-    expect(
-      noteChoices({ ...base, role: 'observer', restrictedIds: ['a1'] }).map((o) => o.id),
-    ).toEqual(['a1']);
+  });
+
+  it('puts every note under "not used", A-Z, when usage is unknown or empty', () => {
+    expect(ids(base)).toEqual(['a1', 'b2', 'c3', 'd4']);
+    expect(ids({ ...base, usage: new Map() })).toEqual(['a1', 'b2', 'c3', 'd4']);
+    expect(new Set(sections(base))).toEqual(new Set(['Not used on this track']));
+  });
+
+  it('has no unused rows when every note is used', () => {
+    const usage = new Map(options.map((o, i) => [o.id, i * DAY]));
+    expect(new Set(sections({ ...base, usage }))).toEqual(new Set(['Used on this track']));
+  });
+
+  it('orders used notes by proximity, ties A-Z, dateless last', () => {
+    const usage = new Map<string, number | null>([
+      ['b2', DAY],
+      ['a1', DAY],
+      ['c3', 9 * DAY],
+      ['d4', null],
+    ]);
+    expect(ids({ ...base, usage })).toEqual(['a1', 'b2', 'c3', 'd4']);
+    const reversed = new Map<string, number | null>([
+      ['d4', null],
+      ['c3', 9 * DAY],
+      ['a1', DAY],
+      ['b2', DAY],
+    ]);
+    expect(ids({ ...base, usage: reversed })).toEqual(['a1', 'b2', 'c3', 'd4']);
+  });
+
+  it('puts unused notes A-Z whatever the input order', () => {
+    expect(ids({ ...base, options: [...options].reverse() })).toEqual(['a1', 'b2', 'c3', 'd4']);
+  });
+
+  it('filters by the query, ranking the best text match first inside each section', () => {
+    const opts = [
+      { id: 'x1', path: 'x1.md', label: 'The Brass Gate' },
+      { id: 'x2', path: 'x2.md', label: 'Gate Warden' },
+      { id: 'x3', path: 'x3.md', label: 'Gatehouse' },
+      { id: 'x4', path: 'x4.md', label: 'Unrelated' },
+    ];
+    const usage = new Map<string, number | null>([
+      ['x1', DAY],
+      ['x2', 5 * DAY],
+    ]);
+    const input = { ...base, options: opts, query: 'gate', usage };
+    // Used: prefix match (x2) beats the nearer substring match (x1).
+    expect(ids(input)).toEqual(['x2', 'x1', 'x3']);
+    expect(sections({ ...input, query: 'house' })).toEqual(['Not used on this track']);
+  });
+
+  it('pins the default holder first, without a section, on an empty holder query only', () => {
+    const usage = new Map([['d4', DAY]]);
+    const holder = { ...base, role: 'holder' as const, usage, defaultHolderId: 'c3' };
+    expect(ids(holder)).toEqual(['c3', 'd4', 'a1', 'b2']);
+    expect(sections(holder)).toEqual([
+      null,
+      'Used on this track',
+      'Not used on this track',
+      'Not used on this track',
+    ]);
+    // Typing: it sits in its normal section.
+    expect(ids({ ...holder, query: 'char' })).toEqual(['c3']);
+    expect(sections({ ...holder, query: 'char' })).toEqual(['Not used on this track']);
+    // An observer blank never pins it.
+    expect(ids({ ...holder, role: 'observer' })).toEqual(['d4', 'a1', 'b2', 'c3']);
+  });
+
+  it('does not pin a default holder that was narrowed away', () => {
+    const narrowed = options.filter((o) => o.id !== 'c3');
+    expect(ids({ ...base, role: 'holder', options: narrowed, defaultHolderId: 'c3' })).toEqual([
+      'a1',
+      'b2',
+      'd4',
+    ]);
   });
 });
 

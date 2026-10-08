@@ -1,7 +1,7 @@
 /**
  * The matching rule behind the `@` link search (`suggestLinks`) — title/id
  * substring matching against the entity index. Shared with relationship
- * directive note blanks (`rankNoteOptions` in
+ * directive note blanks (`matchNoteOptions` and `sectionNotes` in
  * `markdown-editor/extensions/relationship-value-logic.ts`) so a note like
  * "The Whispering Claw" is found the same way in both places, instead of
  * those blanks re-implementing their own search over `SearchablePicker`'s
