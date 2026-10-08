@@ -19,7 +19,7 @@ import {
   deltasForFile,
   splitLedgerKey,
 } from '../shared/relationships/index.js';
-import type { InvalidDirectiveEntry, LedgersAs } from '../shared/relationships/ipc-types.js';
+import type { InvalidDirectiveEntry } from '../shared/relationships/ipc-types.js';
 
 /** One file's directive-bearing content, as handed to the store by its caller. */
 export interface RelationshipFileInput {
@@ -36,7 +36,7 @@ export interface RelationshipFileInput {
   noteId?: string;
 }
 
-export type { InvalidDirectiveEntry, LedgersAs, LedgerKeyTriple };
+export type { InvalidDirectiveEntry, LedgerKeyTriple };
 
 export interface StoreChangeResult {
   touched: LedgerKeyTriple[];
@@ -308,14 +308,6 @@ export class RelationshipsStore {
       }
     }
     return out;
-  }
-
-  ledgersFor(entityId: string, as: LedgersAs): Ledger[] {
-    return this.ledgers().filter((l) => {
-      if (as === 'holder') return l.holder === entityId;
-      if (as === 'observer') return l.observer === entityId;
-      return l.holder === entityId || l.observer === entityId;
-    });
   }
 
   invalid(): InvalidDirectiveEntry[] {

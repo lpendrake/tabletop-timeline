@@ -18,8 +18,6 @@ export interface InvalidDirectiveEntry {
   messages: string[];
 }
 
-export type LedgersAs = 'holder' | 'observer' | 'both';
-
 export type AddOptionResult =
   | { ok: true; option: OptionSpec; library: TrackLibrary }
   | { ok: false; reason: 'unknown-track' | 'not-categorical' };
