@@ -11,6 +11,7 @@ import {
   type HistoryYear,
   type YearOf,
 } from './history-years';
+import { formatEntryDate } from './entry-date';
 import { lineBetween, valueFraction, type PlotRange } from './plot-scale';
 import { scaleColourCss, valueColour } from './scale-colour';
 import {
@@ -39,7 +40,7 @@ export interface HistoryEntryModel {
   key: string;
   /** Path of the declaring event or note. */
   path: string;
-  /** Empty when undated. */
+  /** Short-month date to fit the fixed date column; empty when undated. */
   dateLabel: string;
   linkLabel: string;
   reason: string;
@@ -114,7 +115,7 @@ function entryModel(entry: HistoryEntry, ctx: NumericHistoryContext): HistoryEnt
   return {
     key: entry.key,
     path: entry.delta.declaredIn.path,
-    dateLabel: entry.at === null ? '' : entry.dateLabel,
+    dateLabel: entry.at === null ? '' : formatEntryDate(entry.at, { narrow: true }),
     linkLabel: linkLabelOf(entry),
     reason: entry.reason ?? '',
     amount: amountOf(entry),

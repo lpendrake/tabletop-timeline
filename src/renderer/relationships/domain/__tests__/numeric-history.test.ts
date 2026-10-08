@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { startingValue, type Ledger } from '../../../../shared/relationships';
+import { formatEntryDate } from '../entry-date';
 import { entryTooltip, numericHistoryModel, yearTooltip } from '../numeric-history';
 import { plotRange, valueFraction } from '../plot-scale';
 import { scaleColourCss, valueColour } from '../scale-colour';
@@ -72,7 +73,7 @@ describe('numeric-history', () => {
       colour: scaleColourCss(valueColour(pf2e, 18)),
       tooltip: '+4 · 14 → 18 · Night of Ash',
     });
-    expect(a.dateLabel).toBe(adjust.dateLabel);
+    expect(a.dateLabel).toBe(formatEntryDate(adjust.at, { narrow: true }));
     expect(d).toMatchObject({ amount: '−3', tone: 'negative' });
     expect(s).toMatchObject({
       amount: 'set',

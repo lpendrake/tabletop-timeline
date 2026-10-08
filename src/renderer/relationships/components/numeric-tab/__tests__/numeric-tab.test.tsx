@@ -532,6 +532,12 @@ describe('NumericTab', () => {
       expect(applied.classList.contains('is-future')).toBe(false);
     });
 
+    it('shows each entry date with a short month so it fits the date column', () => {
+      render(historyProps([adjust(5, inYear(0))]));
+      const dates = $$('.rel-num-entry-date').map((el) => el.textContent);
+      expect(dates).toEqual([formatEntryDate(inYear(0), { narrow: true })]);
+    });
+
     it('links open the event or the note without toggling the row', () => {
       const entityIndex = [
         { id: 'nnnn', type: 'npc', name: 'N', path: 'notes/npcs/n.md' },
