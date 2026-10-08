@@ -210,6 +210,12 @@
   white-space: nowrap;
 }
 
+/* Hugs the name so only the text opens the note; the rest of the cell toggles the row. */
+.rel-num-name {
+  justify-self: start;
+  max-width: 100%;
+}
+
 .rel-num-value {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
