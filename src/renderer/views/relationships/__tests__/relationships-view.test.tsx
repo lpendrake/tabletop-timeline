@@ -623,7 +623,7 @@ describe('RelationshipsView', () => {
     });
     expect(onOpenById).toHaveBeenCalledWith('bbbb');
     expect(rowFor('Anna').getAttribute('aria-expanded')).toBe('false');
-    expect($$('.rel-num-expanded')).toHaveLength(0);
+    expect($$('.rel-num-history')).toHaveLength(0);
 
     act(() => {
       fireEvent.click(row);
@@ -639,21 +639,21 @@ describe('RelationshipsView', () => {
     expect(annaLast.querySelector('.rel-num-date')?.textContent).toMatch(/\d{4}/);
   });
 
-  it('clicking a numeric row expands it and shows the numeric placeholder', async () => {
+  it('clicking a numeric row expands it and shows its change history', async () => {
     await mount();
-    expect($$('.rel-num-expanded')).toHaveLength(0);
+    expect($$('.rel-num-history')).toHaveLength(0);
     act(() => {
       fireEvent.click(rowFor('Anna'));
     });
     expect(rowFor('Anna').getAttribute('aria-expanded')).toBe('true');
-    expect($$('.rel-num-expanded')).toHaveLength(1);
-    expect(rowFor('Anna').parentElement!.querySelector('.rel-num-expanded')).not.toBeNull();
+    expect($$('.rel-num-history')).toHaveLength(1);
+    expect(rowFor('Anna').parentElement!.querySelector('.rel-num-history')).not.toBeNull();
     expect($$('.rel-entry')).toHaveLength(0);
 
     act(() => {
       fireEvent.click(rowFor('Anna'));
     });
-    expect($$('.rel-num-expanded')).toHaveLength(0);
+    expect($$('.rel-num-history')).toHaveLength(0);
   });
 
   it('a relationship reads the same under a single holder and under All holders', async () => {

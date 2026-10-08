@@ -29,3 +29,14 @@ export function resolveStepOpenTarget(
   }
   return { kind: 'unknown' };
 }
+
+/** Opens the event or note a delta was declared in; does nothing for an unknown path. */
+export function openDeclaringFile(
+  path: string,
+  entityIndex: readonly EntityIndexEntry[],
+  open: { event(filename: string): void; note(entityId: string): void },
+): void {
+  const target = resolveStepOpenTarget(path, entityIndex);
+  if (target.kind === 'event') open.event(target.filename);
+  else if (target.kind === 'note') open.note(target.entityId);
+}

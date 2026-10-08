@@ -4,7 +4,7 @@ import { formatNumber } from '../row-display';
 import { numericRowModel, numericTabModel, tooltipText } from '../numeric-rows';
 import { plotRange } from '../plot-scale';
 import { scaleColourCss, valueColour } from '../scale-colour';
-import { defaultViewOrder } from '../view-order';
+import { defaultViewOrder, rowListKey } from '../view-order';
 import { deriveViewRows, type ViewGroup, type ViewRow } from '../view-rows';
 import { noBands, pf2e, tenths, unbounded } from './numeric-fixtures';
 
@@ -20,7 +20,7 @@ function ledgerOf(op: DeltaOp, track = pf2e, observer = 'bbbb'): Ledger {
   };
 }
 
-function viewRowFor(ledger: Ledger, track = pf2e): ViewRow {
+function viewRowFor(ledger: Ledger, track = pf2e, expanded = false): ViewRow {
   const { groups } = deriveViewRows({
     ledgers: [ledger],
     track,
@@ -32,7 +32,10 @@ function viewRowFor(ledger: Ledger, track = pf2e): ViewRow {
     query: '',
     enabledScopes: ['name', 'band'],
     sortMode: 'mine',
-    viewOrder: defaultViewOrder(),
+    viewOrder: {
+      ...defaultViewOrder(),
+      expanded: expanded ? { [rowListKey(track.id, ledger.holder)]: [ledger.observer] } : {},
+    },
   });
   return groups[0].rows[0];
 }
@@ -130,6 +133,30 @@ describe('numeric-rows', () => {
   it('the dot tooltip drops the date when there is no as-of label', () => {
     const model = modelFor(viewRowFor(ledgerOf({ op: 'adjust', by: 18 })), pf2e, null);
     expect(model.dotTooltip).toBe('18 · Admired');
+  });
+
+  it('an expanded row widens an unbounded axis to its history; the same row collapsed does not', () => {
+    const ledger: Ledger = {
+      holder: 'aaaa',
+      observer: 'bbbb',
+      track: unbounded.id,
+      deltas: [
+        { op: 'set', value: 80, at: 10, declaredIn: { path: 'timeline/a.md', ordinal: 0 } },
+        { op: 'set', value: 5, at: 20, declaredIn: { path: 'timeline/b.md', ordinal: 0 } },
+      ],
+    };
+    const expandedRow = viewRowFor(ledger, unbounded, true);
+    const collapsedRow = viewRowFor(ledger, unbounded, false);
+    expect(expandedRow.history).not.toBeNull();
+    expect(collapsedRow.history).toBeNull();
+    const modelOf = (row: ViewRow) =>
+      numericTabModel(
+        unbounded,
+        [{ holderId: 'aaaa', label: 'aaaa', listKey: 'fx:aaaa', collapsed: false, rows: [row] }],
+        AS_OF,
+      );
+    expect(modelOf(expandedRow).scale.hi).toBeGreaterThanOrEqual(80);
+    expect(modelOf(collapsedRow).scale.hi).toBeLessThan(80);
   });
 
   it('the tab model scales to every group, collapsed or not', () => {
