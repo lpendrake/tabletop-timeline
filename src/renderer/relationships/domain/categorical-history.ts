@@ -2,6 +2,7 @@
  * The tag-history popover for one holder–observer ledger and option: when the
  * tag was gained or lost, and whether it is held now. Pure — no IO, no React.
  */
+import { basename } from '../../../shared/path';
 import type { Ledger, TagTrack } from '../../../shared/relationships';
 import { currentValue } from '../../../shared/relationships';
 import { formatEntryDate } from './entry-date';
@@ -17,6 +18,8 @@ export interface TagHistoryEntry {
   /** Title of the declaring event or note. */
   title: string | null;
   declaredPath: string;
+  /** What the entry links by: the title, or the declaring file's name when it has none. */
+  linkLabel: string;
   reason: string | null;
   /** The entity whose ledger this entry was mirrored from. */
   mirroredFrom: string | null;
@@ -57,13 +60,15 @@ export function tagHistory(
     if (nowHeld === held) continue;
     held = nowHeld;
     const { delta } = step;
+    const title = titleByPath.get(delta.declaredIn.path) ?? null;
     chronological.push({
       key: historyKey(delta),
       at: delta.at,
       dateLabel: formatEntryDate(delta.at, { narrow: false }),
       change: nowHeld ? 'gained' : 'lost',
-      title: titleByPath.get(delta.declaredIn.path) ?? null,
+      title,
       declaredPath: delta.declaredIn.path,
+      linkLabel: title ?? basename(delta.declaredIn.path),
       reason: delta.reason?.trim() || null,
       mirroredFrom: delta.mirrored ? labelFor(ledger.observer) : null,
     });

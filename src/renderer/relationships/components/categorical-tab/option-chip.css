@@ -1,0 +1,7 @@
+.rel-tag-chip {
+  padding: 0 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--rel-tag-colour) 25%, transparent);
+  border: 1px solid var(--rel-tag-colour);
+  font-weight: 400;
+}

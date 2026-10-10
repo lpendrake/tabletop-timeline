@@ -124,3 +124,16 @@ describe('tagHistory status', () => {
     expect(history([]).statusText).toBe('Not currently held');
   });
 });
+
+describe('tagHistory linkLabel', () => {
+  it('uses the title', () => {
+    const titles = new Map([['events/100.md', 'The Heist']]);
+    const h = history([tagDelta('add', 'member', at(100))], titles);
+    expect(h.entries[0].linkLabel).toBe('The Heist');
+  });
+
+  it("falls back to the declaring file's basename", () => {
+    const h = history([tagDelta('add', 'member', at(100))]);
+    expect(h.entries[0].linkLabel).toBe('100.md');
+  });
+});
