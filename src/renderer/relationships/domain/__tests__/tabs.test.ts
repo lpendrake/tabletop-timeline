@@ -41,6 +41,32 @@ const ledger = (track: string, holder = 'h', observer = 'o'): Ledger => ({
 });
 const library = EMPTY_TRACK_LIBRARY;
 
+describe('tab counts', () => {
+  const delta = (mirrored?: boolean) => ({ mirrored }) as unknown as Ledger['deltas'][number];
+
+  it('counts a mutual pair once, ignoring the mirrored ledger', () => {
+    const own: Ledger = { ...ledger('tg01', 'a', 'b'), deltas: [delta(), delta()] };
+    const mirror: Ledger = { ...ledger('tg01', 'b', 'a'), deltas: [delta(true), delta(true)] };
+    const tabs = buildTabs({ library, ledgers: [own, mirror], invalid: [] });
+    expect(tabs.find((t) => t.trackId === 'tg01')?.count).toBe(1);
+  });
+
+  it('counts a ledger that mixes own and mirrored deltas', () => {
+    const mixed: Ledger = { ...ledger('tg01'), deltas: [delta(true), delta()] };
+    const tabs = buildTabs({ library, ledgers: [mixed], invalid: [] });
+    expect(tabs.find((t) => t.trackId === 'tg01')?.count).toBe(1);
+  });
+
+  it('leaves numeric counts unchanged', () => {
+    const numeric = (holder: string): Ledger => ({
+      ...ledger('rp01', holder),
+      deltas: [delta(), delta()],
+    });
+    const tabs = buildTabs({ library, ledgers: [numeric('a'), numeric('b')], invalid: [] });
+    expect(tabs.find((t) => t.trackId === 'rp01')?.count).toBe(2);
+  });
+});
+
 describe('tabs', () => {
   it('tabs follow track order and count relationships', () => {
     const tabs = buildTabs({

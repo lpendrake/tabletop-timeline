@@ -11,13 +11,18 @@ export interface TrackTab {
   trackId: string;
   name: string;
   kind: TrackKind;
-  /** Number of relationships (ledgers) on the track. */
+  /** Number of relationships on the track; a mutual pair counts once. */
   count: number;
 }
 
 /** Structural subset of `InvalidDirectiveEntry`; `trackId` is optional. */
 export interface InvalidEntryLike {
   trackId?: string;
+}
+
+/** True for the other side of a mutual relationship: every delta was mirrored from the first side. */
+function isMirroredLedger(ledger: Ledger): boolean {
+  return ledger.deltas.length > 0 && ledger.deltas.every((d) => d.mirrored === true);
 }
 
 /**
@@ -33,7 +38,10 @@ export function buildTabs(input: {
 }): TrackTab[] {
   const disabled = new Set(input.disabledTrackIds ?? []);
   const counts = new Map<string, number>();
-  for (const l of input.ledgers) counts.set(l.track, (counts.get(l.track) ?? 0) + 1);
+  for (const l of input.ledgers) {
+    if (isMirroredLedger(l)) continue;
+    counts.set(l.track, (counts.get(l.track) ?? 0) + 1);
+  }
   const invalidTracks = new Set<string>();
   for (const e of input.invalid) if (e.trackId) invalidTracks.add(e.trackId);
 

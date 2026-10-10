@@ -86,10 +86,12 @@ export function TagPopover({
       style={style ?? { visibility: 'hidden' }}
     >
       <div id={headerId} className="rel-tag-popover-header">
-        <EntityLink id={holderId} label={holderLabel} onOpenById={onOpenById} />
-        <OptionChipView chip={chip} />
-        <span className="rel-tag-popover-of">{mutual ? '⇄' : 'of'}</span>
-        <EntityLink id={observerId} label={observerLabel} onOpenById={onOpenById} />
+        <span className="rel-tag-popover-title-parts">
+          <EntityLink id={holderId} label={holderLabel} onOpenById={onOpenById} />
+          <OptionChipView chip={chip} />
+          <span className="rel-tag-popover-of">{mutual ? '⇄' : 'of'}</span>
+          <EntityLink id={observerId} label={observerLabel} onOpenById={onOpenById} />
+        </span>
         <button
           type="button"
           className="rel-tag-popover-close"
