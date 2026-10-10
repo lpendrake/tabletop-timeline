@@ -7,7 +7,7 @@
  *   └ envelope ──┘└ wording ─┘└delim┘│  └┘ …                           │     └┘
  *                                    value                      empty value (a point)
  *
- * No CodeMirror, no React, no IO — `relationship-directives.ts` turns this
+ * No CodeMirror, no React, no IO — `editor/directives.ts` turns this
  * into decorations, atomic ranges and a transaction filter.
  */
 import {
@@ -16,7 +16,7 @@ import {
   type ParsedDirective,
   type ResolvedTrack,
   type Role,
-} from '../../../../shared/relationships';
+} from '../../../shared/relationships';
 
 export interface Span {
   from: number;

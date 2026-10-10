@@ -6,7 +6,7 @@
  * index, for the conflict message.
  */
 import type { ExternalUndatedSet } from '../../../shared/relationships';
-import type { ExternalSetConflictEntry } from '../../shared/markdown-editor';
+import type { ExternalSetConflictEntry } from '../editor/directives';
 import type { EntityIndexEntry } from '../../../types/global';
 
 export function externalSetConflictEntries(

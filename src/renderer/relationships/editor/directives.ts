@@ -8,7 +8,7 @@
  * transaction filter so no keystroke can break the syntax.
  *
  * Choices for a blank (notes, tags, rungs) come from
- * `relationship-directive-completions.ts` through the editor's shared
+ * `directive-completions.ts` through the editor's shared
  * autocompletion; this file only opens that list when the caret arrives in
  * a blank. See `AGENTS.md` in this directory.
  */
@@ -58,9 +58,12 @@ import {
   type ResolvedTrack,
   type SetConflict,
   type TrackLibrary,
-} from '../../../../shared/relationships';
-import { UNKNOWN_ENTITY_LABEL } from '../../../../shared/entity-labels';
-import { entityLabelMapField, setEntityLabels } from './wiki-links';
+} from '../../../shared/relationships';
+import { UNKNOWN_ENTITY_LABEL } from '../../../shared/entity-labels';
+import {
+  entityLabelMapField,
+  setEntityLabels,
+} from '../../shared/markdown-editor/extensions/wiki-links';
 import { parsedDirectivesField, directivesIn } from './parsed-directives';
 import {
   adjacentSlot,
@@ -75,14 +78,14 @@ import {
   type SlotHit,
   type ValueDisplay,
   type ValueSlot,
-} from './relationship-directive-layout';
+} from '../domain/directive-layout';
 import {
   isNumericInputText,
   isNumericRole,
   stepAmount,
   stepNumericValue,
   stepRung,
-} from './relationship-value-logic';
+} from '../domain/directive-values';
 
 export interface RelationshipDirectivesConfig {
   readOnly?: boolean;

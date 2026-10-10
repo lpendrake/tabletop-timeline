@@ -14,7 +14,7 @@
 import { syntaxTree } from '@codemirror/language';
 import type { EditorState } from '@codemirror/state';
 import { isInWikiLinkQuery } from './wiki-link-query';
-import { directiveRanges } from './parsed-directives';
+import { directiveRanges } from '../../../relationships/editor/parsed-directives';
 
 const BLOCKED_NODE_NAMES = new Set([
   'InlineCode',

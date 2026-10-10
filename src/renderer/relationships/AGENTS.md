@@ -59,4 +59,4 @@ The view is full-bleed: `.rel-view` has no padding, and the top bar's tabs, the 
 
 ## Editor integration
 
-Files `editor-menu.ts`, `editor-host-config.ts`, `hooks/use-relationship-editor-config.ts` belong to directive editing, not this view. The held-tags and track-usage completions are fed by the `heldTags` and `trackUsage` resolvers in `editor-host-config.ts`, whose pure folds live in `domain/held-options.ts` and `domain/track-usage.ts`. Both resolvers read saved ledgers from one `ledger-snapshot.ts` snapshot per editor, refreshed when the relationship index changes.
+Files in `editor/` (see `editor/AGENTS.md`) and `hooks/use-relationship-editor-config.ts` belong to directive editing, not this view. The held-tags and track-usage completions are fed by the `heldTags` and `trackUsage` resolvers in `editor/host-config.ts`, whose pure folds live in `domain/held-options.ts` and `domain/track-usage.ts`. Both resolvers read saved ledgers from one `editor/ledger-snapshot.ts` snapshot per editor, refreshed when the relationship index changes.

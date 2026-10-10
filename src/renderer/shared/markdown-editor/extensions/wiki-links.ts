@@ -22,7 +22,10 @@ import {
   type DecorationSet,
 } from '@codemirror/view';
 import { makePointerGuard } from './pointer-guard';
-import { parsedDirectivesField, directiveRanges } from './parsed-directives';
+import {
+  parsedDirectivesField,
+  directiveRanges,
+} from '../../../relationships/editor/parsed-directives';
 import { showContextMenu, type ContextMenuItem } from '../../context-menu';
 import '../../context-menu/context-menu.css';
 import { copyToClipboard } from '../../clipboard';

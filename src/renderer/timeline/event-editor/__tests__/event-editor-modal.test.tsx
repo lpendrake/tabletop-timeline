@@ -98,7 +98,7 @@ vi.mock('../../../relationships/data', () => ({
   },
 }));
 
-vi.mock('../../../relationships/editor-menu', () => ({
+vi.mock('../../../relationships/editor/menu', () => ({
   buildRelationshipMenuItems: () => [],
 }));
 

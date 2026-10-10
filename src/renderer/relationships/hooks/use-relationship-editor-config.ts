@@ -8,17 +8,17 @@ import { composeExtraItems } from '../../shared/markdown-editor';
 import type { EntityIndexEntry } from '../../../types/global';
 import type { ExternalUndatedSet } from '../../../shared/relationships';
 import { relationshipsData } from '../data';
-import { createLedgerSnapshot } from '../ledger-snapshot';
+import { createLedgerSnapshot } from '../editor/ledger-snapshot';
 import { useRelationshipLibraryContext } from '../library-context';
 import { notesToPickerOptions } from '../domain/entity-picker-options';
 import { externalSetConflictEntries } from '../domain/external-set-conflicts';
 import { notePath, findEntityIdByNotePath } from '../../notes/domain/link-resolution';
-import { buildRelationshipMenuItems } from '../editor-menu';
+import { buildRelationshipMenuItems } from '../editor/menu';
 import {
   buildRelationshipEditorConfig,
   makeHeldTagsResolver,
   makeTrackUsageResolver,
-} from '../editor-host-config';
+} from '../editor/host-config';
 
 export interface UseRelationshipEditorConfigOptions {
   entityIndex: readonly EntityIndexEntry[];
@@ -61,7 +61,7 @@ export interface UseRelationshipEditorConfigResult {
  * host (the notes editor or the event editor): loads the track library from
  * context, keeps a ledger snapshot and the default holder fresh, and wires
  * the data/callbacks a directive's blanks need. All the actual logic lives in
- * `editor-host-config.ts`, `editor-menu.ts`, `domain/held-options.ts` and
+ * `editor/host-config.ts`, `editor/menu.ts`, `domain/held-options.ts` and
  * `domain/track-usage.ts` — this hook only wires refs and effects.
  */
 export function useRelationshipEditorConfig(

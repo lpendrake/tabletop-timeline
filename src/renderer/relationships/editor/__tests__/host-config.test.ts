@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const setDefaultHolder = vi.fn().mockResolvedValue(undefined);
-vi.mock('../data', () => ({
+vi.mock('../../data', () => ({
   relationshipsData: {
     setDefaultHolder: (...args: unknown[]) => setDefaultHolder(...args),
     addOption: vi.fn(),
@@ -12,12 +12,12 @@ import {
   buildRelationshipEditorConfig,
   makeHeldTagsResolver,
   makeTrackUsageResolver,
-} from '../editor-host-config';
+} from '../host-config';
 import {
   relationshipTagsSpec,
   type Ledger,
   type TrackLibrary,
-} from '../../../shared/relationships';
+} from '../../../../shared/relationships';
 
 const LIBRARY: TrackLibrary = { custom: [], optionAdditions: {} };
 

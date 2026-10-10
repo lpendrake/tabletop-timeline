@@ -3,8 +3,8 @@ import { describe, it, expect } from 'vitest';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { parsedDirectivesField, directivesIn, directiveRanges } from '../parsed-directives';
-import { serialiseTemplate } from '../../../../../shared/relationships/directives/index';
-import { pf2eReputationSpec } from '../../../../../shared/relationships/system/index';
+import { serialiseTemplate } from '../../../../shared/relationships/directives/index';
+import { pf2eReputationSpec } from '../../../../shared/relationships/system/index';
 
 const CHANGE_TEMPLATE = pf2eReputationSpec.actions.find((a) => a.key === 'change')!.template;
 

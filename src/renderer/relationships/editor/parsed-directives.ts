@@ -1,8 +1,8 @@
 /**
  * Parses relationship directives (`{{trackId.action ...}}`) once per document
  * change and shares the result across every extension that would otherwise
- * call `parseDirectives` on the whole buffer itself: `relationship-directives.ts`
- * (its model, guard and keymaps), `relationship-directive-completions.ts`,
+ * call `parseDirectives` on the whole buffer itself: `directives.ts`
+ * (its model, guard and keymaps), `directive-completions.ts`,
  * `wiki-links.ts` (`directiveRanges`, to skip `[[id]]` occurrences inside a
  * directive's role tokens) and `slash-trigger.ts` (no `/` menu inside one).
  *
@@ -14,7 +14,7 @@
  * isolation) — see this module's own tests.
  */
 import { StateField, type EditorState } from '@codemirror/state';
-import { parseDirectives, type ParsedDirective } from '../../../../shared/relationships';
+import { parseDirectives, type ParsedDirective } from '../../../shared/relationships';
 
 export const parsedDirectivesField = StateField.define<ParsedDirective[]>({
   create: (state) => parseDirectives(state.doc.toString()).directives,

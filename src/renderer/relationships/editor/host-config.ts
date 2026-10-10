@@ -4,20 +4,18 @@
  * inline in a hook or component body) keeps the wiring — and its IO — named
  * and testable in isolation from React.
  */
-import type {
-  ExternalSetConflictEntry,
-  RelationshipDirectivesHostConfig,
-} from '../shared/markdown-editor';
-import type { PickerOption } from '../shared/searchable-picker';
+import type { RelationshipDirectivesHostConfig } from '../../shared/markdown-editor';
+import type { ExternalSetConflictEntry } from './directives';
+import type { PickerOption } from '../../shared/searchable-picker';
 import {
   parseDirectives,
   resolveTrack,
   type Ledger,
   type TrackLibrary,
-} from '../../shared/relationships';
-import { relationshipsData } from './data';
-import { heldTagsByObserver } from './domain/held-options';
-import { trackUsageProximity } from './domain/track-usage';
+} from '../../../shared/relationships';
+import { relationshipsData } from '../data';
+import { heldTagsByObserver } from '../domain/held-options';
+import { trackUsageProximity } from '../domain/track-usage';
 
 export interface HeldTagsDeps {
   library: TrackLibrary;

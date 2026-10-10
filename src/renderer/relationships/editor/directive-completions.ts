@@ -7,7 +7,7 @@
  * next blank, whose choices then open by themselves.
  *
  * Ranking, filtering and create rules are pure and live in
- * `relationship-value-logic.ts`; this file only wires them to CodeMirror and
+ * `domain/directive-values.ts`; this file only wires them to CodeMirror and
  * the host's (possibly async) lookups.
  */
 import {
@@ -30,16 +30,16 @@ import {
   type ActionKind,
   type ParsedDirective,
   type Role,
-} from '../../../../shared/relationships';
-import type { PickerOption } from '../../searchable-picker';
+} from '../../../shared/relationships';
+import type { PickerOption } from '../../shared/searchable-picker';
 import {
   completionReactivates,
   completionSources,
   editorAutocompletion,
-} from './editor-completions';
+} from '../../shared/markdown-editor/extensions/editor-completions';
 import { directivesIn } from './parsed-directives';
-import { adjacentSlot, roleHasChoices } from './relationship-directive-layout';
-import { displayFor, liveSlotAt, moveToAdjacentBlank } from './relationship-directives';
+import { adjacentSlot, roleHasChoices } from '../domain/directive-layout';
+import { displayFor, liveSlotAt, moveToAdjacentBlank } from './directives';
 import {
   allowsCreateOption,
   filterHeldOptions,
@@ -52,7 +52,7 @@ import {
   unionHeldTags,
   type NoteUsage,
   type SectionedNote,
-} from './relationship-value-logic';
+} from '../domain/directive-values';
 
 /** Which holder a Remove blank's tags should be fetched for, plus the directive's position and the buffer's text so the host can exclude this directive's own delta. */
 export interface HeldTagsQuery {

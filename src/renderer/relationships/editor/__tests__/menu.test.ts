@@ -3,10 +3,10 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { history } from '@codemirror/commands';
-import { filterMenu, pickAutoTarget } from '../../shared/context-menu';
-import type { EditorMenuContext } from '../../shared/markdown-editor';
-import { buildRelationshipMenuItems } from '../editor-menu';
-import type { TrackLibrary } from '../../../shared/relationships';
+import { filterMenu, pickAutoTarget } from '../../../shared/context-menu';
+import type { EditorMenuContext } from '../../../shared/markdown-editor';
+import { buildRelationshipMenuItems } from '../menu';
+import type { TrackLibrary } from '../../../../shared/relationships';
 
 const LIBRARY: TrackLibrary = { custom: [], optionAdditions: {} };
 

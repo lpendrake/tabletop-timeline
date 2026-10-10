@@ -20,18 +20,18 @@ import {
   directiveGuardBypass,
   insertDirective,
   type RelationshipDirectivesConfig,
-} from '../relationship-directives';
+} from '../directives';
 import {
   relationshipDirectiveCompletions,
   type RelationshipCompletionOptions,
-} from '../relationship-directive-completions';
-import { isEditorPopupOpen } from '../editor-completions';
-import { wikiLinks, setEntityLabels } from '../wiki-links';
-import { serialiseTemplate } from '../../../../../shared/relationships/directives/index';
+} from '../directive-completions';
+import { isEditorPopupOpen } from '../../../shared/markdown-editor/extensions/editor-completions';
+import { wikiLinks, setEntityLabels } from '../../../shared/markdown-editor/extensions/wiki-links';
+import { serialiseTemplate } from '../../../../shared/relationships/directives/index';
 import {
   pf2eReputationSpec,
   relationshipTagsSpec,
-} from '../../../../../shared/relationships/system/index';
+} from '../../../../shared/relationships/system/index';
 
 const CHANGE_TEMPLATE = pf2eReputationSpec.actions.find((a) => a.key === 'change')!.template;
 const GAINS_TEMPLATE = relationshipTagsSpec.actions.find((a) => a.key === 'gains')!.template;

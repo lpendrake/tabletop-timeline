@@ -1,13 +1,13 @@
 /**
  * Pure value logic for relationship directive blanks: validation, stepping,
  * ranking and filtering of choices. No IO, no React, no CodeMirror —
- * `relationship-directives.ts` and `relationship-directive-completions.ts`
+ * `editor/directives.ts` and `editor/directive-completions.ts`
  * wire these into the editor.
  */
-import type { ActionKind, Role, ResolvedTrack } from '../../../../shared/relationships';
-import type { PickerOption } from '../../searchable-picker';
-import { compareRanked, rankEntityMatch, type MatchRank } from '../../entity-match';
-import { rankMatch } from '../../search/rank';
+import type { ActionKind, Role, ResolvedTrack } from '../../../shared/relationships';
+import type { PickerOption } from '../../shared/searchable-picker';
+import { compareRanked, rankEntityMatch, type MatchRank } from '../../shared/entity-match';
+import { rankMatch } from '../../shared/search/rank';
 
 function numericStep(track: ResolvedTrack): number {
   return track.kind === 'numeric' ? track.step || 1 : 1;

@@ -41,11 +41,11 @@ import {
   setDirectiveContext,
   setExternalSetConflicts,
   type ExternalSetConflictEntry,
-} from './extensions/relationship-directives';
+} from '../../relationships/editor/directives';
 import {
   relationshipDirectiveCompletions,
   type RelationshipCompletionOptions,
-} from './extensions/relationship-directive-completions';
+} from '../../relationships/editor/directive-completions';
 import { formattingKeymap } from './commands';
 import { EMPTY_TRACK_LIBRARY, NOTE_DEFAULT_REASON } from '../../../shared/relationships';
 import type { TrackLibrary } from '../../../shared/relationships';
@@ -91,7 +91,7 @@ export interface RelationshipDirectivesHostConfig {
    * Every undated Set declared in another saved note — used to flag a
    * cross-file conflict (only one note may Set a relationship). The host
    * excludes this buffer's own path; omit for an event editor, where it's
-   * meaningless. See `extensions/relationship-directives.ts`.
+   * meaningless. See `relationships/editor/directives.ts`.
    */
   externalSetConflicts?: ExternalSetConflictEntry[];
 }
