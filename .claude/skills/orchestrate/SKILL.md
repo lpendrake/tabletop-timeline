@@ -97,10 +97,39 @@ Rules:
 
 ### Present the plan
 
-Before executing, tell the user:
-- The batch structure (which tasks, which batch, which model)
-- Which files each task will touch
-- Any risks or judgment calls
+Before executing, show the user the plan in exactly this structure
+(replace the placeholders, keep the headings and table columns):
+
+```
+## Batch 1
+### Task 1 — <title>
+**Description.** What the task delivers, in user/product terms.
+**Technical details.** Files to create/modify, functions/types with signatures, existing helpers to reuse, model (sonnet/haiku).
+**Tests**
+| # | Test title | Intended coverage |
+|---|---|---|
+| 1 | "..." | ... |
+### Task 2 — ...
+## Batch 2 (needs batch 1)
+...
+## Issue acceptance criteria → tasks
+| Issue AC | Delivered by |
+|---|---|
+## Risks
+## Verification
+```
+
+Rules for the plan:
+- The **Tests** table is mandatory for every task that produces testable
+  code. It is the main way the user checks that their intent carries
+  through to the code, so test titles must describe behaviour, not
+  implementation.
+- Docs/config-only tasks replace **Tests** with a short **Checks** table
+  (same columns).
+- Every issue acceptance criterion maps to at least one task, or is
+  marked as dropped with the user's agreement.
+- Each task's model, files and risks go inside the template above (the
+  **Technical details** line and **Risks**), not in a separate list.
 
 Don't ask "is this plan OK?" — just present it clearly and proceed
 unless the user intervenes. They asked you to orchestrate, not to
@@ -147,22 +176,12 @@ Agent({
 - An instruction to stop and report, not work around it, if the task
   turns out to fight the framework
 
-**For tasks that produce testable code**, include a test scenario
-table. The orchestrator has cross-cutting context that the agent
-lacks — use it to specify meaningful edge cases upfront:
-
-```markdown
-| # | Test title | Intended coverage |
-|---|---|---|
-| 1 | "returns override when present" | verifies override ?? default fallback |
-| 2 | "handles missing frontmatter gracefully" | empty file doesn't crash the scanner |
-| 3 | "preserves custom tags during sync" | syncEntityTags only touches id:* tags |
-```
-
-The agent implements these as real test cases. This prevents the
-common failure mode where agents write tests that mirror the
-implementation instead of testing behavior. Skip the table for
-docs-only or config-only tasks.
+**Tests** — copy the task's **Tests** table from the approved plan
+verbatim into the agent prompt. The agent implements these as real test
+cases. This prevents the common failure mode where agents write tests
+that mirror the implementation instead of testing behavior. For
+docs-only or config-only tasks, copy the **Checks** table instead. The
+table format is defined in Phase 2 (*Present the plan*).
 
 **Don't include**:
 - Instructions about other tasks (the agent doesn't need to know)
