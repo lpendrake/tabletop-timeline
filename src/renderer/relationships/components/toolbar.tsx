@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { RelationshipsViewState } from '../hooks/use-relationships';
 import { HolderPicker } from './holder-picker';
 import { SearchBox } from './search-box';
@@ -17,9 +18,12 @@ export type ToolbarProps = Pick<
   | 'sortModes'
   | 'sortMode'
   | 'setSortMode'
->;
+> & {
+  /** Extra controls rendered after the sort control. */
+  children?: ReactNode;
+};
 
-/** Holder picker, search and sort on one row. */
+/** Holder picker, search and sort on one row, then any extra controls. */
 export function Toolbar(props: ToolbarProps) {
   return (
     <div className="rel-toolbar">
@@ -36,6 +40,7 @@ export function Toolbar(props: ToolbarProps) {
         onToggleScope={props.toggleScope}
       />
       <SortControl modes={props.sortModes} active={props.sortMode} onChange={props.setSortMode} />
+      {props.children}
     </div>
   );
 }

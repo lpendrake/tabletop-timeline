@@ -3,6 +3,7 @@ import {
   MUTUAL_LIMIT,
   NAME_LIMIT,
   deriveCategoricalView,
+  groupByChoiceKey,
   parseGroupBy,
   visibleNames,
   type CategoricalGroupBy,
@@ -72,6 +73,19 @@ describe('parseGroupBy', () => {
     expect(parseGroupBy('tag')).toBe('tag');
     expect(parseGroupBy(undefined)).toBe('tag');
     expect(parseGroupBy('nonsense')).toBe('tag');
+  });
+});
+
+describe('groupByChoiceKey', () => {
+  it('differs by campaign and by track', () => {
+    const key = groupByChoiceKey('/camp-a', 'tg01');
+    expect(groupByChoiceKey('/camp-b', 'tg01')).not.toBe(key);
+    expect(groupByChoiceKey('/camp-a', 'tg02')).not.toBe(key);
+    expect(groupByChoiceKey('/camp-a', 'tg01')).toBe(key);
+  });
+
+  it('does not collide when path and track id are split differently', () => {
+    expect(groupByChoiceKey('/a:b', 'c')).not.toBe(groupByChoiceKey('/a', 'b:c'));
   });
 });
 

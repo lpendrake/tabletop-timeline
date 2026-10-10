@@ -21,6 +21,11 @@ export function parseGroupBy(x: unknown): CategoricalGroupBy {
   return x === 'entity' ? 'entity' : 'tag';
 }
 
+/** Key of one track's in-memory group-by choice; scoped by campaign because track ids repeat across campaigns. */
+export function groupByChoiceKey(campaignPath: string, trackId: string): string {
+  return JSON.stringify([campaignPath, trackId]);
+}
+
 /** One held direction: `holderId` has `option` toward `observerId`. */
 export interface CategoricalEntry {
   key: string;

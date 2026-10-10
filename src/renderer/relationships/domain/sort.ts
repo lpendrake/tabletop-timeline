@@ -9,7 +9,7 @@ import type { TrackKind } from '../../../shared/relationships/spec';
 import { compareDeltas } from '../../../shared/relationships/current-value';
 import type { NumericColumn } from './numeric-columns';
 
-export type SortMode = 'mine' | 'value' | 'recent' | 'alpha';
+export type SortMode = 'mine' | 'recent' | 'alpha';
 
 /** A column a row list can be sorted by: the clickable column titles of a numeric tab. */
 export type SortColumn = NumericColumn;
@@ -62,13 +62,11 @@ export function columnTitleLabel(title: string, dir: SortDir | null): string {
   return `${title}, sorted ${dir === 'asc' ? 'ascending' : 'descending'}`;
 }
 
-/** Display label: My order / By value / Recently changed / A–Z. */
+/** Display label: My order / Recently changed / A–Z. */
 export function sortLabel(mode: SortMode): string {
   switch (mode) {
     case 'mine':
       return 'My order';
-    case 'value':
-      return 'By value';
     case 'recent':
       return 'Recently changed';
     case 'alpha':
@@ -207,7 +205,6 @@ export function sortRows(
   orderedKeys: readonly string[] = [],
 ): SortableRow[] {
   if (isColumnSort(mode)) return [...rows].sort(compareByColumn(mode));
-  if (mode === 'value') return [...rows].sort(compareByValueDesc);
   if (mode === 'recent') return [...rows].sort(compareByRecentDesc);
   if (mode === 'alpha') return [...rows].sort(compareByLabel);
 

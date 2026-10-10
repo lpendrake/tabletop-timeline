@@ -17,7 +17,19 @@ const state = vi.hoisted(() => ({
   titles: {} as Record<string, string>,
   onChangedCb: null as ((data: { paths: string[] }) => void) | null,
   saveSpy: vi.fn(),
+  buildEntriesSpy: vi.fn(),
 }));
+
+vi.mock('../../domain', async () => {
+  const actual = await vi.importActual<typeof import('../../domain')>('../../domain');
+  return {
+    ...actual,
+    buildCategoricalEntries: (...args: Parameters<typeof actual.buildCategoricalEntries>) => {
+      state.buildEntriesSpy();
+      return actual.buildCategoricalEntries(...args);
+    },
+  };
+});
 
 vi.mock('../../data', () => ({
   relationshipsData: {
@@ -52,6 +64,7 @@ vi.mock('../../../timeline/data/ports', () => ({
   timelinePort: { getState: vi.fn().mockResolvedValue({ in_game_now_seconds: 1000 }) },
 }));
 
+import { loadGroupBy } from '../../view-state-persistence';
 import { useRelationships, type RelationshipsViewState } from '../use-relationships';
 
 const labels = new Map(
@@ -69,12 +82,15 @@ let container: HTMLDivElement;
 let root: Root;
 let latest: RelationshipsViewState;
 
+// Stable identity, as in the app: a fresh function each render would rebuild labelFor.
+const getEntityIndex = () => [];
+
 function Host({ campaignPath }: { campaignPath: string }) {
   latest = useRelationships({
     campaignPath,
     library: EMPTY_TRACK_LIBRARY,
     entityLabelMap: labels,
-    getEntityIndex: () => [],
+    getEntityIndex,
   });
   return null;
 }
@@ -104,6 +120,7 @@ beforeEach(() => {
   state.invalid = [];
   state.titles = { 'timeline/battle.md': 'Battle of the docks' };
   state.saveSpy.mockClear();
+  state.buildEntriesSpy.mockClear();
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -228,5 +245,119 @@ describe('use-relationships', () => {
     act(() => latest.selectTab('at01'));
     act(() => latest.selectTab('rp01'));
     expect(latest.sortMode).toBe('mine');
+  });
+
+  it('titleByPath is exposed', async () => {
+    await mount();
+    expect(latest.titleByPath.get('timeline/battle.md')).toBe('Battle of the docks');
+  });
+
+  describe('categorical track', () => {
+    function tagLedger(holder: string, observer: string, key: string): Ledger {
+      return {
+        holder,
+        observer,
+        track: 'tg01',
+        deltas: [{ op: 'add', key, at: null, declaredIn: { path: 'notes/x.md', ordinal: 0 } }],
+      } as unknown as Ledger;
+    }
+
+    async function mountCategorical(campaignPath = '/camp-a') {
+      state.ledgers = [
+        ...state.ledgers,
+        tagLedger('aaaa', 'bbbb', 'hates'),
+        tagLedger('aaaa', 'cccc', 'member'),
+        tagLedger('dddd', 'cccc', 'member'),
+      ];
+      await mount(campaignPath);
+      act(() => latest.selectTab('tg01'));
+    }
+
+    it('a categorical track exposes a categorical view, empty groups and no picker', async () => {
+      await mountCategorical();
+      expect(latest.activeTrack?.kind).toBe('categorical');
+      expect(latest.categorical).not.toBeNull();
+      expect(latest.categorical?.groupBy).toBe('tag');
+      expect(latest.categorical?.total).toBe(3);
+      expect(latest.groups).toEqual([]);
+      expect(latest.holderPicker.show).toBe(false);
+    });
+
+    it('a numeric track still exposes groups and no categorical view', async () => {
+      await mountCategorical();
+      act(() => latest.selectTab('rp01'));
+      expect(latest.categorical).toBeNull();
+      expect(latest.groups.length).toBeGreaterThan(0);
+    });
+
+    it('N of M and the empty message come from the categorical counts', async () => {
+      await mountCategorical();
+      act(() => latest.setQuery('dax'));
+      expect(latest.categorical?.matched).toBe(1);
+      expect(latest.emptyMessage).toBeNull();
+      act(() => latest.setQuery('nothing-like-this'));
+      expect(latest.countLabel).toBe('0 of 3');
+      expect(latest.emptyMessage).toContain('nothing-like-this');
+    });
+
+    it('changing group-by updates the view and is restored after remount', async () => {
+      await mountCategorical();
+      act(() => latest.setGroupBy('entity'));
+      expect(latest.groupBy).toBe('entity');
+      expect(latest.categorical?.groupBy).toBe('entity');
+
+      act(() => latest.selectTab('rp01'));
+      act(() => latest.selectTab('tg01'));
+      expect(latest.groupBy).toBe('entity');
+
+      act(() => root.unmount());
+      root = createRoot(container);
+      await mount('/camp-a');
+      expect(latest.activeTrackId).toBe('tg01');
+      expect(latest.groupBy).toBe('entity');
+      expect(latest.categorical?.groupBy).toBe('entity');
+    });
+
+    it('categorical entries are not rebuilt on query keystrokes', async () => {
+      await mountCategorical();
+      expect(state.buildEntriesSpy).toHaveBeenCalledTimes(1);
+      act(() => latest.setQuery('d'));
+      act(() => latest.setQuery('da'));
+      expect(state.buildEntriesSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('switching campaign does not carry over the group-by choice', async () => {
+      await mountCategorical('/camp-a');
+      act(() => latest.setGroupBy('entity'));
+      expect(latest.groupBy).toBe('entity');
+
+      await mount('/camp-b');
+      expect(latest.activeTrackId).toBe('rp01');
+      act(() => latest.selectTab('tg01'));
+      expect(latest.groupBy).toBe('tag');
+      act(() => latest.selectTab('rp01'));
+      act(() => latest.selectTab('tg01'));
+      expect(latest.groupBy).toBe('tag');
+      expect(loadGroupBy('/camp-b', 'tg01')).toBe('tag');
+      expect(loadGroupBy('/camp-a', 'tg01')).toBe('entity');
+    });
+
+    it('moving an entity card saves the new order to view-order', async () => {
+      await mountCategorical();
+      act(() => latest.setGroupBy('entity'));
+      const listKey = latest.categorical?.listKey;
+      expect(listKey).toBe('tg01:entity-cards');
+      const ids = latest.categorical!.cards.map((c) => c.id);
+      expect(ids.length).toBeGreaterThan(1);
+      const last = ids[ids.length - 1];
+      act(() => latest.moveRow(listKey!, last, 'top'));
+      const expected = [last, ...ids.slice(0, -1)];
+      expect(latest.categorical!.cards.map((c) => c.id)).toEqual(expected);
+
+      act(() => root.unmount()); // flushes the debounced save
+      const saved = state.saveSpy.mock.calls.at(-1)?.[1] as { order: Record<string, string[]> };
+      expect(saved.order['tg01:entity-cards']).toEqual(expected);
+      root = createRoot(container);
+    });
   });
 });

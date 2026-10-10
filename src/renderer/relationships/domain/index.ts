@@ -48,6 +48,7 @@ export {
   NAME_LIMIT,
   MUTUAL_LIMIT,
   parseGroupBy,
+  groupByChoiceKey,
   buildCategoricalEntries,
   deriveCategoricalView,
   visibleNames,

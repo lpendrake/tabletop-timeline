@@ -1,10 +1,7 @@
+import { parseGroupBy, type CategoricalGroupBy } from './domain/categorical';
 import { parseColumnWidths, type ColumnWidths } from './domain/numeric-columns';
 
-/** How a categorical tab groups its cards. */
-export type CategoricalGroupBy = 'tag' | 'entity';
-
 /** Per-campaign selected tab, per-track selected holder and group-by, and numeric column widths for the Relationships view (localStorage). */
-
 interface Stored {
   tab?: string;
   holders?: Record<string, string>;
@@ -68,7 +65,7 @@ export function saveColumnWidths(campaignPath: string, widths: ColumnWidths): vo
 export function loadGroupBy(campaignPath: string, trackId: string): CategoricalGroupBy {
   const groupBy = read(campaignPath).groupBy;
   const v = groupBy && typeof groupBy === 'object' ? groupBy[trackId] : undefined;
-  return v === 'entity' ? 'entity' : 'tag';
+  return parseGroupBy(v);
 }
 
 export function saveGroupBy(

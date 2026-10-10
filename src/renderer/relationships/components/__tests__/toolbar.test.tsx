@@ -8,6 +8,7 @@ import { fireEvent } from '@testing-library/react';
 import { HolderPicker } from '../holder-picker';
 import { SearchBox } from '../search-box';
 import { SortControl } from '../sort-control';
+import { Toolbar, type ToolbarProps } from '../toolbar';
 import type { HolderPickerModel } from '../../domain/view-state';
 
 let container: HTMLDivElement;
@@ -196,10 +197,10 @@ describe('SortControl', () => {
       <SortControl
         modes={[
           { mode: 'mine', label: 'My order' },
-          { mode: 'value', label: 'By value' },
+          { mode: 'alpha', label: 'A–Z' },
           { mode: 'recent', label: 'Recently changed' },
         ]}
-        active="value"
+        active="alpha"
         onChange={onChange}
       />,
     );
@@ -215,5 +216,47 @@ describe('SortControl', () => {
     render(<SortControl modes={[]} active="mine" onChange={vi.fn()} />);
     expect(container.querySelector('.rel-sort')).toBeNull();
     expect(container.querySelector('button')).toBeNull();
+  });
+});
+
+describe('Toolbar', () => {
+  const props = (): ToolbarProps => ({
+    holderPicker: makePicker(),
+    selectHolder: vi.fn(),
+    labelFor,
+    scopes: [],
+    toggleScope: vi.fn(),
+    query: '',
+    setQuery: vi.fn(),
+    countLabel: null,
+    sortModes: [
+      { mode: 'recent', label: 'Recently changed' },
+      { mode: 'alpha', label: 'A–Z' },
+    ],
+    sortMode: 'recent',
+    setSortMode: vi.fn(),
+  });
+
+  it('the toolbar renders children after the sort control', () => {
+    render(
+      <Toolbar {...props()}>
+        <button className="extra-control">Group</button>
+      </Toolbar>,
+    );
+    const bar = container.querySelector('.rel-toolbar')!;
+    const sort = bar.querySelector('.rel-sort')!;
+    const extra = bar.querySelector('.extra-control')!;
+    expect(bar.lastElementChild).toBe(extra);
+    expect(sort.compareDocumentPosition(extra) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('the toolbar without children is unchanged', () => {
+    render(<Toolbar {...props()} />);
+    const bar = container.querySelector('.rel-toolbar')!;
+    expect(Array.from(bar.children).map((c) => c.className)).toEqual([
+      expect.stringContaining('rel-holder'),
+      expect.stringContaining('rel-search'),
+      expect.stringContaining('rel-sort'),
+    ]);
   });
 });

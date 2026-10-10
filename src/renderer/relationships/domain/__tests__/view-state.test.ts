@@ -85,13 +85,13 @@ describe('resolveSortMode', () => {
   it('other kinds keep an offered mode and default to their first', () => {
     expect(resolveSortMode('ordinal', null)).toBe('recent');
     expect(resolveSortMode('ordinal', 'alpha')).toBe('alpha');
-    expect(resolveSortMode('ordinal', 'value')).toBe('recent');
+    expect(resolveSortMode('ordinal', 'mine')).toBe('recent');
   });
 
   it('categorical offers no sort modes and resolves to My order', () => {
     expect(sortModesForKind('categorical')).toEqual([]);
     expect(resolveSortMode('categorical', null)).toBe('mine');
-    expect(resolveSortMode('categorical', 'value')).toBe('mine');
+    expect(resolveSortMode('categorical', 'recent')).toBe('mine');
     expect(resolveSortMode('categorical', 'mine')).toBe('mine');
   });
 

@@ -50,9 +50,6 @@ describe('sort', () => {
       '5:a.md:1',
       '5:b.md:0',
     ]);
-    expect(
-      sortRows([row('a', 0, 1), row('b', 0, 9), row('c', 0, null)], 'value').map((r) => r.key),
-    ).toEqual(['b', 'a', 'c']);
     expect(sortRows([row('b', 0), row('a', 0)], 'alpha').map((r) => r.key)).toEqual(['a', 'b']);
     expect(sortLabel('alpha')).toBe('A–Z');
   });
