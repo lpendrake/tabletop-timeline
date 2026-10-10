@@ -3,6 +3,7 @@ import type { ViewGroup, ViewRow } from '../view-rows';
 import type { Ledger } from '../../../../shared/relationships/model';
 import { EMPTY_TRACK_LIBRARY } from '../../../../shared/relationships/registry';
 import {
+  bodyNotice,
   buildTabs,
   emptyStateText,
   nextTabIndex,
@@ -108,5 +109,37 @@ describe('tabBodyNotice', () => {
   it('tabBodyNotice: any group with rows shows no notice', () => {
     expect(tabBodyNotice([group(0), group(2)], '', null)).toBeNull();
     expect(tabBodyNotice([group(1)], 'zzz', 'No matches')).toBeNull();
+  });
+});
+
+describe('bodyNotice', () => {
+  it('bodyNotice gives the empty-track notice when there are no rows and no query', () => {
+    expect(bodyNotice(false, '', 'No matches')).toEqual({ kind: 'empty-track' });
+    expect(bodyNotice(false, '  ', null)).toEqual({ kind: 'empty-track' });
+  });
+
+  it('bodyNotice gives the no-match notice when a query matches nothing', () => {
+    expect(bodyNotice(false, 'zzz', 'No matches')).toEqual({
+      kind: 'no-match',
+      message: 'No matches',
+    });
+    expect(bodyNotice(false, 'zzz', null)).toEqual({ kind: 'no-match', message: '' });
+  });
+
+  it('bodyNotice gives no notice when there are rows', () => {
+    expect(bodyNotice(true, 'zzz', 'No matches')).toBeNull();
+  });
+
+  it('tabBodyNotice behaves as before', () => {
+    const group = (rows: number): ViewGroup => ({
+      holderId: 'h',
+      label: 'Holder',
+      listKey: 'rp01:h',
+      collapsed: false,
+      rows: Array.from({ length: rows }, () => ({}) as ViewRow),
+    });
+    expect(tabBodyNotice([], '', 'x')).toEqual({ kind: 'empty-track' });
+    expect(tabBodyNotice([group(0)], 'zzz', 'x')).toEqual({ kind: 'no-match', message: 'x' });
+    expect(tabBodyNotice([group(0), group(1)], '', null)).toBeNull();
   });
 });

@@ -25,10 +25,10 @@ export type RowSort = SortMode | ColumnSort;
 /**
  * Sort modes offered as buttons for a kind; the first is the default. Numeric
  * tracks offer none: they sort by column title and default to My order.
+ * Categorical tabs offer none either: they have no sort control.
  */
 export function sortModesForKind(kind: TrackKind): SortMode[] {
-  if (kind === 'numeric') return [];
-  return kind === 'ordinal' ? ['recent', 'alpha'] : ['mine', 'value', 'recent'];
+  return kind === 'ordinal' ? ['recent', 'alpha'] : [];
 }
 
 export function isColumnSort(sort: RowSort): sort is ColumnSort {

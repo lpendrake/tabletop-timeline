@@ -8,7 +8,7 @@ The Relationships view shows relationship values derived from directives, one ta
 
 - `components/top-bar.tsx` — tabs, as-of date, problems badge
 
-The toolbar (`components/toolbar.tsx`) holds the Holder/Toward picker built on `shared/searchable-picker`, scoped search, and sort buttons. The sort buttons serve ordinal and categorical tabs only; numeric tabs have none and sort by clicking column titles (below). The numeric tab places the toolbar in its sticky header; the placeholder layout renders it above the body.
+The toolbar (`components/toolbar.tsx`) holds the Holder/Toward picker built on `shared/searchable-picker`, scoped search, and sort buttons. The sort buttons serve ordinal tabs only; numeric tabs sort by clicking column titles (below) and categorical tabs have no sort control. The holder picker is hidden on categorical tabs, which show every holder. The numeric tab places the toolbar in its sticky header; the placeholder layout renders it above the body.
 
 State comes from `hooks/use-relationships.ts`, which only wires pure `domain/` functions to React.
 

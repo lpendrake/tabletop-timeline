@@ -71,18 +71,30 @@ export function emptyStateText(trackName: string): string {
 export type TabBodyNotice = { kind: 'empty-track' } | { kind: 'no-match'; message: string } | null;
 
 /**
- * What a tab body shows in place of rows: the empty-track hint when no row exists
- * and nothing is searched, the no-match message when a search matches nothing, or
- * nothing when any group has rows.
+ * What a tab body shows in place of rows: nothing when there are rows, else the
+ * empty-track hint when nothing is searched, else the no-match message.
  */
+export function bodyNotice(
+  hasRows: boolean,
+  query: string,
+  emptyMessage: string | null,
+): TabBodyNotice {
+  if (hasRows) return null;
+  if (tokenise(query).length === 0) return { kind: 'empty-track' };
+  return { kind: 'no-match', message: emptyMessage ?? '' };
+}
+
+/** `bodyNotice` for a tab whose rows live in groups: it has rows when any group does. */
 export function tabBodyNotice(
   groups: readonly ViewGroup[],
   query: string,
   emptyMessage: string | null,
 ): TabBodyNotice {
-  if (groups.some((g) => g.rows.length > 0)) return null;
-  if (tokenise(query).length === 0) return { kind: 'empty-track' };
-  return { kind: 'no-match', message: emptyMessage ?? '' };
+  return bodyNotice(
+    groups.some((g) => g.rows.length > 0),
+    query,
+    emptyMessage,
+  );
 }
 
 /** The saved tab if still present, else the first tab, else null. */

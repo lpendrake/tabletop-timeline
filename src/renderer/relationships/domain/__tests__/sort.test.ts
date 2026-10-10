@@ -57,10 +57,9 @@ describe('sort', () => {
     expect(sortLabel('alpha')).toBe('A–Z');
   });
 
-  it('numeric tracks offer no sort buttons; ordinal and categorical keep theirs', () => {
+  it('numeric and ordinal sort modes are unchanged', () => {
     expect(sortModesForKind('numeric')).toEqual([]);
     expect(sortModesForKind('ordinal')).toEqual(['recent', 'alpha']);
-    expect(sortModesForKind('categorical')).toEqual(['mine', 'value', 'recent']);
   });
 
   it('nextColumnSort cycles natural → flipped → My order', () => {

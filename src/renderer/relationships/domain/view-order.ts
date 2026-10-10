@@ -30,7 +30,7 @@ export function groupListKey(trackId: string): string {
   return `${trackId}:*`;
 }
 
-/** Reserved for the categorical entity-cards ticket. */
+/** Key for the order of entity cards on a categorical track's by-entity view (`<track>:entity-cards`). */
 export function entityCardsKey(trackId: string): string {
   return `${trackId}:entity-cards`;
 }
