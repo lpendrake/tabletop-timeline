@@ -7,9 +7,14 @@ import { createRef, ReactElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
 import { EditorView } from '@codemirror/view';
+import { undo } from '@codemirror/commands';
 import { MarkdownEditor } from '../markdown-editor';
 import { FormatToolbar } from '../format-toolbar';
 import type { EditorMenuExtraItems } from '../extensions/editor-context-menu';
+
+/** A detectable extension: stamps a data attribute on the content element. */
+const probe = (name: string) => EditorView.contentAttributes.of({ 'data-probe': name });
+const probeOf = (view: EditorView | null) => view?.contentDOM.getAttribute('data-probe') ?? null;
 
 const showContextMenuMock = vi.fn();
 
@@ -294,5 +299,88 @@ describe('MarkdownEditor', () => {
     // EditorState.readOnly blocks user-initiated mutations (keyboard/paste), not
     // programmatic dispatch — so just confirm the readOnly facet is set.
     expect(viewRef.current?.state.readOnly).toBe(true);
+  });
+});
+
+describe('MarkdownEditor liveExtensions', () => {
+  afterEach(teardown);
+
+  const newViewRef = () =>
+    createRef<EditorView | null>() as React.MutableRefObject<EditorView | null>;
+
+  it('liveExtensions are active in live mode and absent in source mode', () => {
+    setup();
+    const ext = probe('a');
+    const viewRef = newViewRef();
+    renderEl(<MarkdownEditor content="x" viewRef={viewRef} liveExtensions={ext} />);
+    expect(probeOf(viewRef.current)).toBe('a');
+    renderEl(<MarkdownEditor content="x" viewRef={viewRef} liveExtensions={ext} isSourceMode />);
+    expect(probeOf(viewRef.current)).toBeNull();
+  });
+
+  it('a new liveExtensions value reconfigures in place, keeping view, doc, selection and undo history', () => {
+    setup();
+    const viewRef = newViewRef();
+    renderEl(<MarkdownEditor content="abc" viewRef={viewRef} liveExtensions={probe('a')} />);
+    const view = viewRef.current!;
+    act(() => {
+      view.dispatch({ changes: { from: 3, insert: 'd' }, selection: { anchor: 2 } });
+    });
+
+    renderEl(<MarkdownEditor content="abcd" viewRef={viewRef} liveExtensions={probe('b')} />);
+
+    expect(viewRef.current).toBe(view);
+    expect(probeOf(view)).toBe('b');
+    expect(view.state.doc.toString()).toBe('abcd');
+    expect(view.state.selection.main.head).toBe(2);
+    act(() => {
+      undo(view);
+    });
+    expect(view.state.doc.toString()).toBe('abc');
+  });
+
+  it('a value set while in source mode applies on switching to live', () => {
+    setup();
+    const viewRef = newViewRef();
+    renderEl(
+      <MarkdownEditor content="x" viewRef={viewRef} liveExtensions={probe('a')} isSourceMode />,
+    );
+    renderEl(
+      <MarkdownEditor content="x" viewRef={viewRef} liveExtensions={probe('b')} isSourceMode />,
+    );
+    expect(probeOf(viewRef.current)).toBeNull();
+    renderEl(<MarkdownEditor content="x" viewRef={viewRef} liveExtensions={probe('b')} />);
+    expect(probeOf(viewRef.current)).toBe('b');
+  });
+
+  it('after restoring a savedInstance, changing liveExtensions applies', () => {
+    setup();
+    const onSaveInstance = vi.fn();
+    renderEl(
+      <MarkdownEditor content="x" onSaveInstance={onSaveInstance} liveExtensions={probe('old')} />,
+    );
+    teardown();
+    const savedInstance = onSaveInstance.mock.calls[0][0];
+
+    setup();
+    const viewRef = newViewRef();
+    renderEl(
+      <MarkdownEditor
+        content="x"
+        savedInstance={savedInstance}
+        viewRef={viewRef}
+        liveExtensions={probe('a')}
+      />,
+    );
+    expect(probeOf(viewRef.current)).toBe('a');
+    renderEl(
+      <MarkdownEditor
+        content="x"
+        savedInstance={savedInstance}
+        viewRef={viewRef}
+        liveExtensions={probe('b')}
+      />,
+    );
+    expect(probeOf(viewRef.current)).toBe('b');
   });
 });

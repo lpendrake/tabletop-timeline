@@ -13,7 +13,6 @@
  * a blank. See `AGENTS.md` in this directory.
  */
 import {
-  Annotation,
   EditorSelection,
   EditorState,
   Facet,
@@ -524,19 +523,8 @@ const modelStateField = StateField.define<DirectiveModelState>({
 // the directive it would have broken.
 // ---------------------------------------------------------------------------
 
-/**
- * Marks a change as the host's own — e.g. replacing the whole buffer when
- * the file is reloaded from disk — so the guard lets it through untouched.
- */
-export const directiveGuardBypass = Annotation.define<boolean>();
-
 function isGuarded(tr: Transaction): boolean {
-  return (
-    tr.docChanged &&
-    !tr.isUserEvent('undo') &&
-    !tr.isUserEvent('redo') &&
-    !tr.annotation(directiveGuardBypass)
-  );
+  return tr.docChanged && !tr.isUserEvent('undo') && !tr.isUserEvent('redo');
 }
 
 /**

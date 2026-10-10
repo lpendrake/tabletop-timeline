@@ -17,7 +17,6 @@ import {
   setDirectiveContext,
   setExternalSetConflicts,
   directiveBorderClass,
-  directiveGuardBypass,
   insertDirective,
   type RelationshipDirectivesConfig,
 } from '../directives';
@@ -385,15 +384,10 @@ describe('editing is typing into the document', () => {
     await vi.waitFor(() => expect(view.dom.querySelector('.cm-directive-blocked')).toBeNull());
   });
 
-  it('whole-buffer reloads pass, and the host bypass lets anything through', () => {
+  it('whole-buffer reload that rewrites a directive passes the guard', () => {
     const view = makeView(FULL_CHANGE);
     view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: EMPTY_CHANGE } });
     expect(doc(view)).toBe(EMPTY_CHANGE);
-    view.dispatch({
-      changes: { from: 0, to: 2, insert: '[[' },
-      annotations: directiveGuardBypass.of(true),
-    });
-    expect(doc(view).startsWith('[[rp01')).toBe(true);
   });
 
   it('undo steps back through edits normally', () => {

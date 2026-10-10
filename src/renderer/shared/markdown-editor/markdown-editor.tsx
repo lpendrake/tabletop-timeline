@@ -36,7 +36,6 @@ import { imageDecorations, type ImageDecorationsOptions } from './extensions/ima
 import { dropLink, type DropLinkConfig } from './extensions/drop-link';
 import { editorContextMenu, type EditorMenuExtraItems } from './extensions/editor-context-menu';
 import {
-  directiveGuardBypass,
   relationshipDirectives,
   setDirectiveContext,
   setExternalSetConflicts,
@@ -142,6 +141,13 @@ export interface MarkdownEditorProps {
    * Omit (or pass `undefined`) to keep the default behaviour of caret at 0.
    */
   initialCursor?: number;
+
+  /**
+   * Host-supplied extensions active only in live (non-source) mode. A new
+   * value reconfigures them in place without rebuilding the rest of the
+   * editor, so hosts should memoize it.
+   */
+  liveExtensions?: Extension;
 }
 
 function makeCompletionOptions(
@@ -175,6 +181,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   contextMenu: contextMenuConfig,
   relationshipDirectives: relationshipDirectivesConfig,
   initialCursor,
+  liveExtensions,
 }) => {
   const editorRef = useRef<HTMLDivElement>(null);
   const internalViewRef = useRef<EditorView | null>(null);
@@ -189,6 +196,9 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   const mdLinksRef = useRef(mdLinksConfig);
   const contextMenuRef = useRef(contextMenuConfig);
   const relationshipDirectivesRef = useRef(relationshipDirectivesConfig);
+  const liveExtensionsRef = useRef(liveExtensions);
+  // Nested in the mode compartment's live branch; one per component instance.
+  const liveCompartmentRef = useRef(new Compartment());
   onChangeRef.current = onChange;
   onSaveInstanceRef.current = onSaveInstance;
   isSourceModeRef.current = isSourceMode;
@@ -198,6 +208,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   mdLinksRef.current = mdLinksConfig;
   contextMenuRef.current = contextMenuConfig;
   relationshipDirectivesRef.current = relationshipDirectivesConfig;
+  liveExtensionsRef.current = liveExtensions;
 
   const modeCompartmentRef = useRef<Compartment>(
     savedInstance?.modeCompartment ?? new Compartment(),
@@ -231,6 +242,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         // give `place` explicitly — it's a required field there.
         place: relationshipDirectivesRef.current?.place ?? 'event',
       }),
+      liveCompartmentRef.current.of(liveExtensionsRef.current ?? []),
     ];
     if (!readOnlyRef.current) {
       exts.push(
@@ -346,14 +358,21 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     view.focus();
   }, [isSourceMode]);
 
+  // Host live-mode extensions — swapped in place while the live branch is installed.
+  // In source mode the new value is picked up from the ref on the next toggle to live.
+  useEffect(() => {
+    const view = internalViewRef.current;
+    const live = liveCompartmentRef.current;
+    if (!view || live.get(view.state) === undefined) return;
+    view.dispatch({ effects: live.reconfigure(liveExtensions ?? []) });
+  }, [liveExtensions]);
+
   // External content update (e.g. file reloaded from disk).
   useEffect(() => {
     const view = internalViewRef.current;
     if (view && content !== view.state.doc.toString()) {
       view.dispatch({
         changes: { from: 0, to: view.state.doc.length, insert: content },
-        // The file on disk is the truth; never let the directive guard edit it.
-        annotations: directiveGuardBypass.of(true),
       });
     }
   }, [content]);

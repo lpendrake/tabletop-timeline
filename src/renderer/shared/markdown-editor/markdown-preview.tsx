@@ -1,3 +1,4 @@
+import type { Extension } from '@codemirror/state';
 import { MarkdownEditor } from './markdown-editor';
 import type { WikiLinksHostConfig, RelationshipDirectivesHostConfig } from './markdown-editor';
 import type { ImageDecorationsOptions } from './extensions/image-decorations';
@@ -13,6 +14,8 @@ export interface MarkdownPreviewProps {
   baseDir?: string;
   /** Renders relationship directives read-only (no cross, no choices). */
   relationshipDirectives?: RelationshipDirectivesHostConfig;
+  /** Host-supplied extensions active in the preview; memoize to avoid reconfiguring. */
+  liveExtensions?: Extension;
 }
 
 export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
@@ -22,6 +25,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
   className,
   baseDir,
   relationshipDirectives,
+  liveExtensions,
 }) => (
   <div className={className} data-base-dir={baseDir}>
     <MarkdownEditor
@@ -30,6 +34,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
       images={images}
       wikiLinks={wikiLinks ? { ...wikiLinks, readOnly: true } : wikiLinks}
       relationshipDirectives={relationshipDirectives}
+      liveExtensions={liveExtensions}
     />
   </div>
 );
