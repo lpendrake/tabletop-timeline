@@ -15,7 +15,13 @@ land in sub-issue 2; this module only covers data resolution and rendering.
 ## Layer rules
 
 - May import `../shared/markdown-editor/markdown-preview` — the only allowed
-  cross-module import from outside `peek/`.
+  cross-module import from outside `peek/` — plus the `Extension` type from
+  `@codemirror/state` (type import only).
+- Imports no module under `src/renderer/relationships/` or `src/shared/relationships/` (enforced by lint). Extensions a preview
+  needs (e.g. relationship directives) come from the app through the injected
+  `getPreviewExtensions({ path, title })`, threaded `initPeek` → `showPeek` →
+  `<PeekWindow>` and passed to `<MarkdownPreview liveExtensions>`. The app
+  wires it in `app.tsx`.
 - Receives file content via an injected `fetcher(path, signal)` callback.
   Does NOT import `window.fsApi` directly.
 - Fetcher contract: resolve to raw markdown, or reject with

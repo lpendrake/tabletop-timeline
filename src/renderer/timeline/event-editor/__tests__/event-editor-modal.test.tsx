@@ -63,7 +63,8 @@ vi.mock('../../../notes/new-note-from-editor', () => ({
 // mounting a real CodeMirror view — set `popupOpenTarget` to the element an
 // Escape keydown should be treated as originating from.
 let popupOpenTarget: EventTarget | null = null;
-vi.mock('../../../shared/markdown-editor', () => ({
+vi.mock('../../../shared/markdown-editor', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../shared/markdown-editor')>()),
   isEditorPopupOpen: (target: EventTarget | null) =>
     popupOpenTarget !== null && target === popupOpenTarget,
   MarkdownEditor: (props: { onChange: (s: string) => void; content: string }) => {
@@ -98,7 +99,7 @@ vi.mock('../../../relationships/data', () => ({
   },
 }));
 
-vi.mock('../../../relationships/editor-menu', () => ({
+vi.mock('../../../relationships/editor/menu', () => ({
   buildRelationshipMenuItems: () => [],
 }));
 
@@ -138,6 +139,8 @@ vi.mock('../../../theme', () => ({
           sunday: '#bb0007',
         },
       },
+      // Read at import by the real markdown-editor theme (the editor mock spreads the original module).
+      editor: { foldPlaceholder: 'inherit', invalid: 'inherit' },
     }),
   },
 }));

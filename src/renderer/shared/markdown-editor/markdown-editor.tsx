@@ -35,20 +35,7 @@ import { imagePaste, type ImagePasteConfig } from './extensions/image-paste';
 import { imageDecorations, type ImageDecorationsOptions } from './extensions/image-decorations';
 import { dropLink, type DropLinkConfig } from './extensions/drop-link';
 import { editorContextMenu, type EditorMenuExtraItems } from './extensions/editor-context-menu';
-import {
-  directiveGuardBypass,
-  relationshipDirectives,
-  setDirectiveContext,
-  setExternalSetConflicts,
-  type ExternalSetConflictEntry,
-} from './extensions/relationship-directives';
-import {
-  relationshipDirectiveCompletions,
-  type RelationshipCompletionOptions,
-} from './extensions/relationship-directive-completions';
 import { formattingKeymap } from './commands';
-import { EMPTY_TRACK_LIBRARY, NOTE_DEFAULT_REASON } from '../../../shared/relationships';
-import type { TrackLibrary } from '../../../shared/relationships';
 
 /**
  * Pairs an EditorState with the Compartment instance embedded in it.
@@ -70,30 +57,6 @@ export interface WikiLinksHostConfig {
   onHoverEnd?: (relatedTarget: Element | null) => void;
   /** Hides local-label-editing context-menu items even when the editor itself is editable. */
   readOnly?: boolean;
-}
-
-export interface RelationshipDirectivesHostConfig {
-  library: TrackLibrary;
-  defaultReason: string;
-  onOpenNote?: (id: string) => void;
-  /**
-   * Whether this document is a note (undated) or an event. Passed through
-   * to `interpretDirective` as `undated: place === 'note'` — a note may only
-   * Set/Add, never Change/Shift/Remove (see `src/shared/relationships/AGENTS.md`).
-   * Required — every host must say which it is explicitly; there is no
-   * default, since silently defaulting to the permissive `'event'` context
-   * is exactly what let a note wrongly accept Change/Shift/Remove before.
-   */
-  place: 'note' | 'event';
-  /** Data and callbacks the blanks' choices need (notes, held tags, creating a tag). Omit for blanks with no note list. */
-  choices?: RelationshipCompletionOptions;
-  /**
-   * Every undated Set declared in another saved note — used to flag a
-   * cross-file conflict (only one note may Set a relationship). The host
-   * excludes this buffer's own path; omit for an event editor, where it's
-   * meaningless. See `extensions/relationship-directives.ts`.
-   */
-  externalSetConflicts?: ExternalSetConflictEntry[];
 }
 
 export interface MarkdownEditorProps {
@@ -130,33 +93,18 @@ export interface MarkdownEditorProps {
   contextMenu?: { extraItems?: EditorMenuExtraItems };
 
   /**
-   * Renders relationship directives (`{{trackId.action ...}}`) as readable
-   * blocks in live mode. Omit to render blocks with built-in tracks only and
-   * `Unspecified` as the default reason (no field-editing callbacks).
-   */
-  relationshipDirectives?: RelationshipDirectivesHostConfig;
-
-  /**
    * Document offset at which to place the caret when the editor first mounts
    * with fresh content (i.e. no `savedInstance`). Clamped to [0, doc.length].
    * Omit (or pass `undefined`) to keep the default behaviour of caret at 0.
    */
   initialCursor?: number;
-}
 
-function makeCompletionOptions(
-  config: RelationshipDirectivesHostConfig | undefined,
-): RelationshipCompletionOptions {
-  const choices = config?.choices;
-  return {
-    noteOptions: () => choices?.noteOptions() ?? [],
-    defaultHolderId: () => choices?.defaultHolderId?.() ?? null,
-    currentNoteId: () => choices?.currentNoteId?.() ?? null,
-    setDefaultHolder: choices?.setDefaultHolder,
-    createOption: choices?.createOption,
-    heldTags: choices?.heldTags,
-    trackUsage: choices?.trackUsage,
-  };
+  /**
+   * Host-supplied extensions active only in live (non-source) mode. A new
+   * value reconfigures them in place without rebuilding the rest of the
+   * editor, so hosts should memoize it.
+   */
+  liveExtensions?: Extension;
 }
 
 export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
@@ -173,8 +121,8 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   dropLink: dropLinkConfig,
   mdLinks: mdLinksConfig,
   contextMenu: contextMenuConfig,
-  relationshipDirectives: relationshipDirectivesConfig,
   initialCursor,
+  liveExtensions,
 }) => {
   const editorRef = useRef<HTMLDivElement>(null);
   const internalViewRef = useRef<EditorView | null>(null);
@@ -188,7 +136,9 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   const imagesRef = useRef(imagesConfig);
   const mdLinksRef = useRef(mdLinksConfig);
   const contextMenuRef = useRef(contextMenuConfig);
-  const relationshipDirectivesRef = useRef(relationshipDirectivesConfig);
+  const liveExtensionsRef = useRef(liveExtensions);
+  // Nested in the mode compartment's live branch; one per component instance.
+  const liveCompartmentRef = useRef(new Compartment());
   onChangeRef.current = onChange;
   onSaveInstanceRef.current = onSaveInstance;
   isSourceModeRef.current = isSourceMode;
@@ -197,7 +147,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   imagesRef.current = imagesConfig;
   mdLinksRef.current = mdLinksConfig;
   contextMenuRef.current = contextMenuConfig;
-  relationshipDirectivesRef.current = relationshipDirectivesConfig;
+  liveExtensionsRef.current = liveExtensions;
 
   const modeCompartmentRef = useRef<Compartment>(
     savedInstance?.modeCompartment ?? new Compartment(),
@@ -206,7 +156,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   /** Extensions that differ between live and source mode. */
   function buildModeExtensions(sourceMode: boolean): Extension[] {
     if (sourceMode) return [];
-    const exts: Extension[] = [
+    return [
       markdownDecorations(),
       imageDecorations(imagesRef.current),
       wikiLinks({
@@ -220,26 +170,8 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         onOpenExternal: (u) => mdLinksRef.current?.onOpenExternal?.(u),
         onOpenInternal: (u) => mdLinksRef.current?.onOpenInternal?.(u),
       }),
-      relationshipDirectives({
-        readOnly: readOnlyRef.current,
-        onOpenNote: (id) => relationshipDirectivesRef.current?.onOpenNote?.(id),
-        // `relationshipDirectives` prop is itself optional — when the host
-        // supplies no config at all (built-in tracks, no field-editing),
-        // there is no `place` to be explicit about, so this is the one
-        // spot that still defaults to the permissive 'event' context. Any
-        // host that DOES supply `RelationshipDirectivesHostConfig` must
-        // give `place` explicitly — it's a required field there.
-        place: relationshipDirectivesRef.current?.place ?? 'event',
-      }),
+      liveCompartmentRef.current.of(liveExtensionsRef.current ?? []),
     ];
-    if (!readOnlyRef.current) {
-      exts.push(
-        relationshipDirectiveCompletions(() =>
-          makeCompletionOptions(relationshipDirectivesRef.current),
-        ),
-      );
-    }
-    return exts;
   }
 
   // Mount / unmount — runs exactly once per component instance.
@@ -346,14 +278,21 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     view.focus();
   }, [isSourceMode]);
 
+  // Host live-mode extensions — swapped in place while the live branch is installed.
+  // In source mode the new value is picked up from the ref on the next toggle to live.
+  useEffect(() => {
+    const view = internalViewRef.current;
+    const live = liveCompartmentRef.current;
+    if (!view || live.get(view.state) === undefined) return;
+    view.dispatch({ effects: live.reconfigure(liveExtensions ?? []) });
+  }, [liveExtensions]);
+
   // External content update (e.g. file reloaded from disk).
   useEffect(() => {
     const view = internalViewRef.current;
     if (view && content !== view.state.doc.toString()) {
       view.dispatch({
         changes: { from: 0, to: view.state.doc.length, insert: content },
-        // The file on disk is the truth; never let the directive guard edit it.
-        annotations: directiveGuardBypass.of(true),
       });
     }
   }, [content]);
@@ -373,36 +312,6 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       view.dispatch({ effects: setEntityLabels.of(wikiLinksConfig.entityLabels) });
     }
   }, [wikiLinksConfig?.entityLabels, isSourceMode]);
-
-  // Keep relationship-directive blocks aware of the current track library and default reason.
-  useEffect(() => {
-    const view = internalViewRef.current;
-    if (view && !isSourceMode) {
-      view.dispatch({
-        effects: setDirectiveContext.of({
-          library: relationshipDirectivesConfig?.library ?? EMPTY_TRACK_LIBRARY,
-          defaultReason: relationshipDirectivesConfig?.defaultReason ?? NOTE_DEFAULT_REASON,
-        }),
-      });
-    }
-  }, [
-    relationshipDirectivesConfig?.library,
-    relationshipDirectivesConfig?.defaultReason,
-    isSourceMode,
-  ]);
-
-  // Keep relationship-directive blocks aware of every undated Set declared
-  // in another saved note, so a cross-file conflict flags live.
-  useEffect(() => {
-    const view = internalViewRef.current;
-    if (view && !isSourceMode) {
-      view.dispatch({
-        effects: setExternalSetConflicts.of(
-          relationshipDirectivesConfig?.externalSetConflicts ?? [],
-        ),
-      });
-    }
-  }, [relationshipDirectivesConfig?.externalSetConflicts, isSourceMode]);
 
   return <div ref={editorRef} className="markdown-editor-container" />;
 };

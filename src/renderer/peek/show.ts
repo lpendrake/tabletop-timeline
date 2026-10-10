@@ -24,7 +24,7 @@ export interface ShowPeekOptions {
   stackDepth?: number;
   onPin?: () => void;
   onClose?: () => void;
-  relationshipDirectives?: PeekWindowProps['relationshipDirectives'];
+  getPreviewExtensions?: PeekWindowProps['getPreviewExtensions'];
 }
 
 export function showPeek(opts: ShowPeekOptions): PeekHandle {
@@ -36,7 +36,7 @@ export function showPeek(opts: ShowPeekOptions): PeekHandle {
     stackDepth = 0,
     onPin,
     onClose,
-    relationshipDirectives,
+    getPreviewExtensions,
   } = opts;
 
   let currentEntityLabels = opts.entityLabels;
@@ -65,7 +65,7 @@ export function showPeek(opts: ShowPeekOptions): PeekHandle {
         fetcher,
         onOpenById,
         entityLabels: currentEntityLabels,
-        relationshipDirectives,
+        getPreviewExtensions,
         onPin,
         onClose: () => {
           onClose?.();

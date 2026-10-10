@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { parseDirectives, resolveTrackSpec } from '../../../../../shared/relationships';
+import { parseDirectives, resolveTrackSpec } from '../../../../shared/relationships';
 import {
   pf2eReputationSpec,
   relationshipTagsSpec,
   attitudeSpec,
-} from '../../../../../shared/relationships/system/index';
+} from '../../../../shared/relationships/system/index';
 import {
   adjacentSlot,
   classifyChange,
@@ -13,7 +13,7 @@ import {
   nearestSlot,
   roleHasChoices,
   valueDisplay,
-} from '../relationship-directive-layout';
+} from '../directive-layout';
 
 //            0         1         2         3         4
 //            0123456789012345678901234567890123456789012345678

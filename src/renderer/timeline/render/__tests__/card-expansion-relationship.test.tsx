@@ -41,11 +41,8 @@ describe('CardExpansion — relationship directives (read-only)', () => {
           centerX={100}
           onSizeChange={() => {}}
           onResizeDragChange={() => {}}
-          relationshipDirectives={{
-            library: { custom: [], optionAdditions: {} },
-            defaultReason: 'Unspecified',
-            place: 'event',
-          }}
+          relationshipLibrary={{ custom: [], optionAdditions: {} }}
+          title="Ambush"
         />,
       );
     });

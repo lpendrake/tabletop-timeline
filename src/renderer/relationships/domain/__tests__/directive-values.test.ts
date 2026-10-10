@@ -13,9 +13,9 @@ import {
   sectionNotes,
   pinnedDefaultHolder,
   rankLabelled,
-} from '../relationship-value-logic';
-import { resolveTrackSpec, sanitiseValue } from '../../../../../shared/relationships';
-import { pf2eReputationSpec, attitudeSpec } from '../../../../../shared/relationships/system/index';
+} from '../directive-values';
+import { resolveTrackSpec, sanitiseValue } from '../../../../shared/relationships';
+import { pf2eReputationSpec, attitudeSpec } from '../../../../shared/relationships/system/index';
 
 describe('stepping (pure)', () => {
   it('steps amount by the track step, unclamped', () => {

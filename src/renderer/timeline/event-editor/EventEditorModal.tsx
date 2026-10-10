@@ -180,7 +180,7 @@ export function EventEditorModal({
   const viewRef = useRef<EditorView | null>(null);
   const autoSaveTimerRef = useRef<number | null>(null);
 
-  const { relationshipDirectives: relationshipDirectivesConfig, contextMenu: editorContextMenu } =
+  const { liveExtensions: relationshipExtensions, contextMenu: editorContextMenu } =
     useRelationshipEditorConfig({
       entityIndex,
       defaultReason: eventRelationshipDefaultReason(buffer),
@@ -580,7 +580,7 @@ export function EventEditorModal({
                     entityLabels: entityLabelMap,
                   }}
                   contextMenu={editorContextMenu}
-                  relationshipDirectives={relationshipDirectivesConfig}
+                  liveExtensions={relationshipExtensions}
                 />
               </div>
 

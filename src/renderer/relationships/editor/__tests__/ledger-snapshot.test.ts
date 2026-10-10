@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Ledger } from '../../../shared/relationships';
+import type { Ledger } from '../../../../shared/relationships';
 
 const state = vi.hoisted(() => ({
   onChangedCbs: [] as Array<() => void>,
 }));
 const getAllLedgers = vi.hoisted(() => vi.fn<() => Promise<Ledger[]>>());
 
-vi.mock('../data', () => ({
+vi.mock('../../data', () => ({
   relationshipsData: {
     getAllLedgers: () => getAllLedgers(),
     onChanged: (cb: () => void) => {

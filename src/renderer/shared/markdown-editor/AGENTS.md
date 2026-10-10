@@ -4,24 +4,23 @@ A CodeMirror 6 wrapper for editing and previewing markdown. Used by notes and th
 
 ## Boundary rules
 
-- **No imports from `../notes/` or any other host module.** This directory must be reusable from any surface. If you find yourself wanting to import notes-specific code, add a callback prop instead.
+- **No imports from `../notes/` or any other host module — and never from `src/renderer/relationships/` or `src/shared/relationships/`.** This directory must be reusable from any surface. If you find yourself wanting to import notes- or relationships-specific code, add a callback prop or inject an extension through `liveExtensions` instead. ESLint enforces the relationships rule (`eslint.config.js`, `no-restricted-imports`).
 - **All file names are kebab-case.**
 - **Host-specific behavior is injected, not detected.** No `if (isNotes)` branches. Add an optional config prop and have the host supply it.
 
 ## Module shape
 
 - `markdown-editor.tsx` — `<MarkdownEditor>` React wrapper around CodeMirror 6.
-- `markdown-preview.tsx` — `<MarkdownPreview>` thin read-only wrapper around `<MarkdownEditor>`. Use for non-editing surfaces (timeline card expansion, future peek windows). No `onChange` required.
+- `markdown-preview.tsx` — `<MarkdownPreview>` thin read-only wrapper around `<MarkdownEditor>`. Use for non-editing surfaces (timeline card expansion, peek windows). No `onChange` required. Forwards its host's `liveExtensions`.
 - `format-toolbar.tsx` — `<FormatToolbar>` markdown-formatting buttons. Renders a host-supplied `footerSlot` in the right side of the toolbar.
 - `commands.ts` — pure CodeMirror commands (bold/italic/heading/list/etc). Safe to import standalone for custom toolbars.
 - `theme.ts` — `lastGaspThemeExtensions` styling + syntax highlighting.
 - `extensions/wiki-links.ts` — `[[name|id]]` parsing, completion, click handler. Activated via `props.wikiLinks`.
-- `extensions/parsed-directives.ts` — `parsedDirectivesField`, a `StateField<ParsedDirective[]>` that reparses the document only on `docChanged` (never on a selection-only transaction), and `directivesIn(state)`/`directiveRanges(state)` to read it. Every extension that needs "every directive in the document" reads this field instead of calling `parseDirectives` on the whole buffer itself.
-- `extensions/relationship-directives.ts` — renders `{{trackId.action ...}}` directives (parsed by `src/shared/relationships/`) as live blanks: the values stay real document text, everything around them is decorated, atomic and protected by a transaction filter. Activated via `props.relationshipDirectives`; live mode only. With `relationship-directive-layout.ts`, `relationship-value-logic.ts` and `relationship-directive-completions.ts` — see `extensions/AGENTS.md`'s "Relationship directives" section.
-- `extensions/editor-completions.ts` — the one autocompletion host every completion source registers on (`completionSources`).
+- `extensions/editor-completions.ts` — the one autocompletion host every completion source registers on (`completionSources`, with `editorAutocompletion` and `completionReactivates`).
+- `extensions/embedded-ranges.ts` — the `embeddedRanges` facet; see "Embedded ranges and host extensions" below.
 - `extensions/wiki-link-query.ts` — pure `WIKI_LINK_QUERY_RE` / `isInWikiLinkQuery(textBeforeCaret)`: detects an open `[[...` or `@...` link query. Shared by `wiki-links.ts` (completion source) and `slash-trigger.ts` (to suppress the `/` menu mid-query) so the two definitions can't drift.
 - `extensions/editor-context-menu.ts` — the editor's own menu (Copy / Paste / Delete / Formatting, plus any host `contextMenu.extraItems`) on plain editor text. Opens on right-click, on typing `/` at the caret (see `extensions/slash-trigger.ts`), and on Shift+F10 / the ContextMenu key. Registered unconditionally, after the mode compartment so the wiki-link contextmenu handler (live mode only) gets first refusal on `.cm-note-link` clicks.
-- `extensions/slash-trigger.ts` — pure `shouldOpenSlashMenu(state, pos)`: decides whether a typed `/` should open the menu instead of inserting a character.
+- `extensions/slash-trigger.ts` — pure `shouldOpenSlashMenu(state, pos)`: decides whether a typed `/` should open the menu instead of inserting a character. Never opens inside an embedded range.
 - `extensions/decorations.ts` — markdown visual decorations (headings, bold, etc).
 - `extensions/image-decorations.ts` — renders `![alt](url)` as an inline image widget. Accepts `resolveSrc` to transform raw image paths (e.g. relative paths → `notes-asset://`).
 - `extensions/image-paste.ts` — clipboard paste. Calls `props.imagePaste.onImagePaste(blob, mime)` and inserts the returned URL.
@@ -37,12 +36,12 @@ A CodeMirror 6 wrapper for editing and previewing markdown. Used by notes and th
 - `savedInstance` / `onSaveInstance` — preserve doc + selection + undo history across host-level remounts (e.g., tab switching). The compartment is part of the saved instance and must round-trip.
 - `viewRef` — imperative access for toolbars and focus management.
 - `wikiLinks`, `imagePaste`, `dropLink` — optional host-supplied behaviors. Each is its own config object; omit to disable that feature entirely.
-- `relationshipDirectives` — `{ library, defaultReason, onOpenNote?, place, choices? }`. Omit to still render directives (built-in tracks only, `defaultReason: 'Unspecified'`) with no note-opening callback. `place` (`'note' | 'event'`) says whether this document is undated — passed to `interpretDirective` as `undated: place === 'note'`, which rejects Change/Shift/Remove on a note (see `src/shared/relationships/AGENTS.md`). `choices` supplies what a blank's list needs (`RelationshipCompletionOptions`: `noteOptions`, `defaultHolderId`, `currentNoteId`, `setDefaultHolder`, `createOption`, `heldTags`, `trackUsage`) — see `extensions/AGENTS.md`.
+- `liveExtensions` — optional host-supplied `Extension`, active in live mode only (source mode shows plain text). Installed in a nested `Compartment` inside the mode compartment's live branch and reconfigured in place when the value changes, so fields, plugins and in-flight picks survive. Hosts must memoize it: a new object reconfigures, so building one per render reconfigures on every render. This is how a host adds its own syntax (the relationships directives are one such host extension); the editor knows nothing about what it contains.
 - `contextMenu.extraItems` — optional `EditorMenuExtraItems` (`(ctx: EditorMenuContext) => ContextMenuItem[]`) appended, after a separator, to the editor's own menu — both the right-click menu and the `/`-triggered one. `EditorMenuContext` gives the host the acted-on range (`from`/`to`), `selectedText`, and `replaceRange(text)` to replace it and refocus the editor. Read lazily each time a menu opens (via a ref), so changing the callback after mount takes effect on the next open without rebuilding the base extension layer.
 
 ## How to add a new read-only preview surface
 
-Use `<MarkdownPreview>` — it accepts `content`, `images`, `wikiLinks`, and `className`. Do not reach for a separate markdown library.
+Use `<MarkdownPreview>` — it accepts `content`, `images`, `wikiLinks`, `baseDir`, `className` and `liveExtensions`. A preview that must render host syntax receives that host's preview extensions through `liveExtensions` (for peek windows, the app injects them; see `src/renderer/peek/AGENTS.md`). Do not reach for a separate markdown library.
 
 ## How to add a new host
 
@@ -76,7 +75,7 @@ CodeMirror standard extensions (history, keymaps, bracket matching, closeBracket
 - **Shift+F10 / the ContextMenu key** — opens the same menu anchored at the caret, acting on the current selection, without the `/` bookkeeping (no re-insertion on Escape, Backspace doesn't close it).
 
 **Mode compartment (hot-swappable via `Compartment`):**
-`markdownDecorations()`, `imageDecorations(imagesConfig)`, `wikiLinks(...)`, `markdownLinkClick(...)`, and `relationshipDirectives(...)` are all bundled inside a single `Compartment`. In source mode the compartment holds an empty array; in live mode it holds these five. Switching mode calls `compartment.reconfigure(...)` — no editor recreation. The compartment instance is part of the `SavedEditorInstance` and must always round-trip with the state it belongs to.
+`markdownDecorations()`, `imageDecorations(imagesConfig)`, `wikiLinks(...)`, `markdownLinkClick(...)`, and the nested live-extensions compartment (holding the host's `liveExtensions`) are all bundled inside a single `Compartment`. In source mode the compartment holds an empty array; in live mode it holds these. Switching mode calls `compartment.reconfigure(...)` — no editor recreation. The compartment instance is part of the `SavedEditorInstance` and must always round-trip with the state it belongs to.
 
 ### Read vs write mode
 
@@ -106,6 +105,12 @@ view.dispatch({ effects: setEntityLabels.of(wikiLinksConfig.entityLabels) });
 Inside the wiki-links extension, `knownIdsField` and `entityLabelMapField` are `StateField`s that update in response to those effects. The decoration `StateField` rebuilds whenever either effect arrives (`e.is(setKnownIds) || e.is(setEntityLabels)`). This means decoration rebuilds are O(doc) but happen only when the index actually changes — not on every keystroke.
 
 The same dispatch-based pattern applies to external content updates (file reloaded from disk) and mode toggles: all use `view.dispatch(...)` rather than remounting.
+
+### Embedded ranges and host extensions
+
+Some hosts embed their own syntax in the markdown (the relationships directives are one). `embeddedRanges` (`extensions/embedded-ranges.ts`) is a facet of `(state) => {from, to}[]` — the same shape as `EditorView.atomicRanges` — through which a host extension declares those spans. Generic features read it and stay out of them: `wiki-links.ts` neither decorates a link inside a range nor handles keys there, and `slash-trigger.ts` never opens the `/` menu inside one. Two helpers read the ranges: `isInsideEmbeddedRange(ranges, pos)` is strict-interior (a position on either edge is outside, so typing at the edge still behaves normally) and `isRangeWithinEmbedded(ranges, range)` is inclusive (a range whose edges touch the embedded range's edges still counts as within). Contributing a range needs only `embeddedRanges.of(...)`; the editor never learns what the range means.
+
+Public exports (`index.ts`) that host extensions build on: `entityLabelMapField` and `setEntityLabels` (id-to-label lookup the host's own widgets read), `completionSources`, `editorAutocompletion` and `completionReactivates` (register choices on the shared autocompletion), and `embeddedRanges`.
 
 ### Key distinction
 

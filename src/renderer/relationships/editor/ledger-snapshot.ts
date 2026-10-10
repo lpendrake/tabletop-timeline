@@ -1,5 +1,5 @@
-import type { Ledger } from '../../shared/relationships';
-import { relationshipsData } from './data';
+import type { Ledger } from '../../../shared/relationships';
+import { relationshipsData } from '../data';
 
 export interface LedgerSnapshot {
   /** The saved ledgers. Fetched on first call, then reused until the relationship index changes. */

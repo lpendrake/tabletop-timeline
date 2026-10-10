@@ -1,6 +1,7 @@
-import { useRef, useCallback, type CSSProperties, type ReactElement } from 'react';
+import { useRef, useCallback, useMemo, type CSSProperties, type ReactElement } from 'react';
 import { MarkdownPreview } from '../../shared/markdown-editor';
-import type { RelationshipDirectivesHostConfig } from '../../shared/markdown-editor';
+import { relationshipPreviewExtensions } from '../../relationships/editor/extensions';
+import type { TrackLibrary } from '../../../shared/relationships';
 import type { PreviewSize } from '../interactions/usePreviewSize';
 import type { CardExpansionState } from '../interactions/useCardExpansion';
 
@@ -22,7 +23,10 @@ interface CardExpansionProps {
   onResizeDragChange: (active: boolean) => void;
   onOpenById?: (id: string) => void;
   entityLabelMap?: Map<string, string>;
-  relationshipDirectives?: RelationshipDirectivesHostConfig;
+  /** Renders the body's relationship directives read-only against this library. */
+  relationshipLibrary?: TrackLibrary;
+  /** The event's title: an empty directive reason reads as this. */
+  title: string;
 }
 
 export function CardExpansion({
@@ -35,7 +39,8 @@ export function CardExpansion({
   onResizeDragChange,
   onOpenById,
   entityLabelMap,
-  relationshipDirectives,
+  relationshipLibrary,
+  title,
 }: CardExpansionProps): ReactElement {
   // Ref to the expansion container element (owns the height we resize)
   const expRef = useRef<HTMLDivElement>(null);
@@ -109,6 +114,19 @@ export function CardExpansion({
     [centerX, expandsDown, onResizeDragChange, onSizeChange, size.expandedHeight],
   );
 
+  const relationshipExtensions = useMemo(
+    () =>
+      relationshipLibrary
+        ? relationshipPreviewExtensions({
+            library: relationshipLibrary,
+            title,
+            place: 'event',
+            onOpenNote: onOpenById,
+          })
+        : undefined,
+    [relationshipLibrary, title, onOpenById],
+  );
+
   const dirs = expandsDown ? (['sw', 'se'] as const) : (['nw', 'ne'] as const);
 
   return (
@@ -128,7 +146,7 @@ export function CardExpansion({
               ? { onOpen: onOpenById, entityLabels: entityLabelMap }
               : undefined
           }
-          relationshipDirectives={relationshipDirectives}
+          liveExtensions={relationshipExtensions}
         />
       ) : status === 'error' ? (
         <div className="exp-body">

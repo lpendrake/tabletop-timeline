@@ -1,23 +1,22 @@
 /**
- * Builds the `relationshipDirectives` config passed to `MarkdownEditor` by
- * the notes and event editors. Assembling the host config here (rather than
- * inline in a hook or component body) keeps the wiring — and its IO — named
- * and testable in isolation from React.
+ * Builds the directive settings the notes and event editors pass to
+ * `relationshipEditorExtensions`. Assembling them here (rather than inline
+ * in a hook or component body) keeps the wiring — and its IO — named and
+ * testable in isolation from React.
  */
-import type {
-  ExternalSetConflictEntry,
-  RelationshipDirectivesHostConfig,
-} from '../shared/markdown-editor';
-import type { PickerOption } from '../shared/searchable-picker';
+import type { DirectivePlace, HeldTagsQuery, TrackUsageQuery } from './config';
+import type { ExternalSetConflictEntry } from '../domain/external-set-conflicts';
+import type { RelationshipEditorSettings } from './extensions';
+import type { PickerOption } from '../../shared/searchable-picker';
 import {
   parseDirectives,
   resolveTrack,
   type Ledger,
   type TrackLibrary,
-} from '../../shared/relationships';
-import { relationshipsData } from './data';
-import { heldTagsByObserver } from './domain/held-options';
-import { trackUsageProximity } from './domain/track-usage';
+} from '../../../shared/relationships';
+import { relationshipsData } from '../data';
+import { heldTagsByObserver } from '../domain/held-options';
+import { trackUsageProximity } from '../domain/track-usage';
 
 export interface HeldTagsDeps {
   library: TrackLibrary;
@@ -29,23 +28,14 @@ export interface HeldTagsDeps {
   at: () => number | null;
 }
 
-export type HeldTagsResolver = (q: {
-  trackId: string;
-  holder: string;
-  anchor: number;
-  doc: string;
-}) => Promise<Map<string, string[]>>;
+export type HeldTagsResolver = (q: HeldTagsQuery) => Promise<Map<string, string[]>>;
 
 export interface TrackUsageDeps extends HeldTagsDeps {
-  /** Whether this host is a note (undated) or an event — see `RelationshipDirectivesHostConfig.place`. */
-  place: 'note' | 'event';
+  /** Whether this host is a note (undated) or an event. */
+  place: DirectivePlace;
 }
 
-export type TrackUsageResolver = (q: {
-  trackId: string;
-  anchor: number;
-  doc: string;
-}) => Promise<Map<string, number | null>>;
+export type TrackUsageResolver = (q: TrackUsageQuery) => Promise<Map<string, number | null>>;
 
 /** Finds the buffer directive whose blank at `anchor` is being edited, and its ordinal (used to exclude its own deltas — direct and mirrored — from a fold). */
 function excludeOrdinalFor(doc: string, anchor: number): number | undefined {
@@ -112,8 +102,8 @@ export interface RelationshipEditorConfigDeps {
   library: TrackLibrary;
   defaultReason: string;
   onOpenNote?: (id: string) => void;
-  /** Whether this host is a note (undated) or an event — see `RelationshipDirectivesHostConfig.place`. Required: every host must say which it is explicitly. */
-  place: 'note' | 'event';
+  /** Whether this host is a note (undated) or an event. Required: every host must say which it is explicitly. */
+  place: DirectivePlace;
   noteOptions: () => readonly PickerOption[];
   defaultHolderId: () => string | null;
   currentNoteId: () => string | null;
@@ -123,10 +113,10 @@ export interface RelationshipEditorConfigDeps {
   externalSetConflicts?: ExternalSetConflictEntry[];
 }
 
-/** Assembles the full `relationshipDirectives` host config from its pieces. */
+/** Assembles the full directive settings for an editable editor from their pieces. */
 export function buildRelationshipEditorConfig(
   deps: RelationshipEditorConfigDeps,
-): RelationshipDirectivesHostConfig {
+): RelationshipEditorSettings {
   return {
     library: deps.library,
     defaultReason: deps.defaultReason,
@@ -134,7 +124,7 @@ export function buildRelationshipEditorConfig(
     place: deps.place,
     externalSetConflicts: deps.externalSetConflicts,
     choices: {
-      noteOptions: () => deps.noteOptions() as PickerOption[],
+      noteOptions: deps.noteOptions,
       defaultHolderId: deps.defaultHolderId,
       currentNoteId: deps.currentNoteId,
       setDefaultHolder: (id) => relationshipsData.setDefaultHolder(id),

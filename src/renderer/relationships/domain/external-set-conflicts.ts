@@ -6,8 +6,13 @@
  * index, for the conflict message.
  */
 import type { ExternalUndatedSet } from '../../../shared/relationships';
-import type { ExternalSetConflictEntry } from '../../shared/markdown-editor';
 import type { EntityIndexEntry } from '../../../types/global';
+
+/** One undated Set declared in another saved note. */
+export interface ExternalSetConflictEntry extends ExternalUndatedSet {
+  /** Display title for that note, when known (falls back to its path). */
+  title?: string;
+}
 
 export function externalSetConflictEntries(
   all: readonly ExternalUndatedSet[],

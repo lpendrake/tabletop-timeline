@@ -4,15 +4,15 @@
  * directive at the menu's target range. Pure aside from the `onSelect`
  * closures, which only call back into the editor via `EditorMenuContext`.
  */
-import type { ContextMenuItem } from '../shared/context-menu';
-import type { EditorMenuContext } from '../shared/markdown-editor';
-import { insertDirective } from '../shared/markdown-editor';
+import type { ContextMenuItem } from '../../shared/context-menu';
+import type { EditorMenuContext } from '../../shared/markdown-editor';
+import { insertDirective } from './directives';
 import {
   allowedActions,
   listTracks,
   serialiseTemplate,
   type TrackLibrary,
-} from '../../shared/relationships';
+} from '../../../shared/relationships';
 
 export interface BuildRelationshipMenuItemsOptions {
   library: TrackLibrary;

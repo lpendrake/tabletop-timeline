@@ -3,6 +3,7 @@ import { EditorState } from '@codemirror/state';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { ensureSyntaxTree } from '@codemirror/language';
 import { shouldOpenSlashMenu } from '../slash-trigger';
+import { embeddedRanges } from '../embedded-ranges';
 
 function makeState(doc: string) {
   const state = EditorState.create({ doc, extensions: [markdown({ base: markdownLanguage })] });
@@ -17,13 +18,16 @@ describe('shouldOpenSlashMenu', () => {
     expect(shouldOpenSlashMenu(state, 0)).toBe(true);
   });
 
-  it('never opens inside a relationship directive, even after a space', () => {
-    const directive =
-      '{{rp01.change Rep change: {amount:1} {observer:} rep for {holder:} — {reason:him }}}';
-    const state = makeState(directive);
-    expect(shouldOpenSlashMenu(state, directive.indexOf('him ') + 4)).toBe(false);
-    const after = makeState(`${directive} `);
-    expect(shouldOpenSlashMenu(after, after.doc.length)).toBe(true);
+  it('slash menu is blocked inside an embedded range and opens just after it', () => {
+    const embedded = '<<block with a space >>';
+    const extensions = [
+      markdown({ base: markdownLanguage }),
+      embeddedRanges.of(() => [{ from: 0, to: embedded.length }]),
+    ];
+    const inside = EditorState.create({ doc: `${embedded} `, extensions });
+    ensureSyntaxTree(inside, inside.doc.length);
+    expect(shouldOpenSlashMenu(inside, embedded.indexOf('space ') + 6)).toBe(false);
+    expect(shouldOpenSlashMenu(inside, inside.doc.length)).toBe(true);
   });
 
   it('opens after a space', () => {
