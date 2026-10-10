@@ -33,6 +33,29 @@ export type {
 } from './view-rows';
 export { buildBaseRows, deriveView, deriveViewRows, canDragRows, historyKey } from './view-rows';
 
+export type {
+  CategoricalGroupBy,
+  CategoricalEntry,
+  OptionChip,
+  HolderName,
+  MutualPair,
+  CardRow,
+  CategoricalCard,
+  CategoricalView,
+  CategoricalViewInput,
+} from './categorical';
+export {
+  NAME_LIMIT,
+  MUTUAL_LIMIT,
+  parseGroupBy,
+  buildCategoricalEntries,
+  deriveCategoricalView,
+  visibleNames,
+} from './categorical';
+
+export type { TagChange, TagHistoryEntry, TagStatus, TagHistory } from './categorical-history';
+export { tagHistory, tagStatusText } from './categorical-history';
+
 export type { PlotRange, BandSpan, PlotTick, PlotScale, TickAlign } from './plot-scale';
 export {
   niceStep,
