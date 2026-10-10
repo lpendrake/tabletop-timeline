@@ -92,7 +92,9 @@
 .rel-row-wrap.drop-before::before,
 .rel-row-wrap.drop-after::after,
 .rel-group-header.drop-before::before,
-.rel-group-header.drop-after::after {
+.rel-group-header.drop-after::after,
+.rel-cat-card.drop-before::before,
+.rel-cat-card.drop-after::after {
   content: '';
   position: absolute;
   left: 0;

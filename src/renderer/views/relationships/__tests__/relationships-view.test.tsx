@@ -320,6 +320,18 @@ describe('RelationshipsView', () => {
     expect(activeTabName()).toContain('PF2E Reputation');
   });
 
+  it('a categorical track renders the categorical tab; ordinal keeps the placeholder', async () => {
+    await mount();
+    await selectTab('Relationship tags');
+    expect($('.rel-cat-tab')).not.toBeNull();
+    expect($('.rel-placeholder-body')).toBeNull();
+    expect($('.rel-num-tab')).toBeNull();
+
+    await selectTab('Attitude');
+    expect($('.rel-cat-tab')).toBeNull();
+    expect($('.rel-placeholder-body')).not.toBeNull();
+  });
+
   it("a track with no relationships shows the '/' empty state", async () => {
     await mount();
     await selectTab('Relationship tags');

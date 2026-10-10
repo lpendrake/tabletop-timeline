@@ -127,14 +127,14 @@
   background: color-mix(in srgb, var(--theme-accent) 22%, transparent);
 }
 
-.rel-sort {
+.rel-segmented {
   display: inline-flex;
   border: 1px solid var(--theme-border);
   border-radius: 6px;
   overflow: hidden;
 }
 
-.rel-sort-option {
+.rel-segmented-option {
   padding: 5px 12px;
   background: transparent;
   color: var(--theme-text-muted);
@@ -143,11 +143,11 @@
   cursor: pointer;
 }
 
-.rel-sort-option + .rel-sort-option {
+.rel-segmented-option + .rel-segmented-option {
   border-left: 1px solid var(--theme-border);
 }
 
-.rel-sort-option.is-active {
+.rel-segmented-option.is-active {
   background: var(--theme-accent);
   color: var(--theme-background);
 }

@@ -7,7 +7,7 @@ import { act } from 'react';
 import { fireEvent } from '@testing-library/react';
 import { HolderPicker } from '../holder-picker';
 import { SearchBox } from '../search-box';
-import { SortControl } from '../sort-control';
+import { SegmentedControl } from '../segmented-control';
 import { Toolbar, type ToolbarProps } from '../toolbar';
 import type { HolderPickerModel } from '../../domain/view-state';
 
@@ -190,15 +190,16 @@ describe('SearchBox', () => {
   });
 });
 
-describe('SortControl', () => {
-  it('sort control marks the active mode', () => {
+describe('SegmentedControl', () => {
+  it('marks the active option and reports a click', () => {
     const onChange = vi.fn();
     render(
-      <SortControl
-        modes={[
-          { mode: 'mine', label: 'My order' },
-          { mode: 'alpha', label: 'A–Z' },
-          { mode: 'recent', label: 'Recently changed' },
+      <SegmentedControl
+        label="Sort"
+        options={[
+          { value: 'mine', label: 'My order' },
+          { value: 'alpha', label: 'A–Z' },
+          { value: 'recent', label: 'Recently changed' },
         ]}
         active="alpha"
         onChange={onChange}
@@ -212,9 +213,32 @@ describe('SortControl', () => {
     expect(onChange).toHaveBeenCalledWith('recent');
   });
 
-  it('no sort control when the track offers no modes', () => {
-    render(<SortControl modes={[]} active="mine" onChange={vi.fn()} />);
-    expect(container.querySelector('.rel-sort')).toBeNull();
+  it('names the group by its own label or by a caption id', () => {
+    render(
+      <SegmentedControl
+        label="Sort"
+        options={[{ value: 'a', label: 'A' }]}
+        active="a"
+        onChange={vi.fn()}
+      />,
+    );
+    expect(container.querySelector('[role="group"]')!.getAttribute('aria-label')).toBe('Sort');
+    render(
+      <SegmentedControl
+        labelledBy="cap"
+        options={[{ value: 'a', label: 'A' }]}
+        active="a"
+        onChange={vi.fn()}
+      />,
+    );
+    const group = container.querySelector('[role="group"]')!;
+    expect(group.getAttribute('aria-labelledby')).toBe('cap');
+    expect(group.hasAttribute('aria-label')).toBe(false);
+  });
+
+  it('renders nothing when there are no options', () => {
+    render(<SegmentedControl label="Sort" options={[]} active="mine" onChange={vi.fn()} />);
+    expect(container.querySelector('.rel-segmented')).toBeNull();
     expect(container.querySelector('button')).toBeNull();
   });
 });
@@ -244,7 +268,7 @@ describe('Toolbar', () => {
       </Toolbar>,
     );
     const bar = container.querySelector('.rel-toolbar')!;
-    const sort = bar.querySelector('.rel-sort')!;
+    const sort = bar.querySelector('.rel-segmented')!;
     const extra = bar.querySelector('.extra-control')!;
     expect(bar.lastElementChild).toBe(extra);
     expect(sort.compareDocumentPosition(extra) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -256,7 +280,7 @@ describe('Toolbar', () => {
     expect(Array.from(bar.children).map((c) => c.className)).toEqual([
       expect.stringContaining('rel-holder'),
       expect.stringContaining('rel-search'),
-      expect.stringContaining('rel-sort'),
+      expect.stringContaining('rel-segmented'),
     ]);
   });
 });

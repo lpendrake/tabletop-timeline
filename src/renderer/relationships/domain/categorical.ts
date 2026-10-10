@@ -95,7 +95,7 @@ export interface CategoricalView {
   /** Relationships matching the query; equals `total` when the query is blank. */
   matched: number;
   canDrag: boolean;
-  /** The view-order list the cards are reordered in; null when they are not reorderable. */
+  /** The view-order list the cards are reordered in; null unless they can be dragged. */
   listKey: string | null;
 }
 
@@ -156,6 +156,14 @@ function chipFor(track: TagTrack, option: string): OptionChip {
     key: option,
     label: track.optionFor(option)?.label ?? option,
     colour: scaleColourCss(optionColour()),
+  };
+}
+
+/** The chip and mutuality of the tag `name` holds. */
+export function nameTag(track: TagTrack, name: HolderName): { chip: OptionChip; mutual: boolean } {
+  return {
+    chip: chipFor(track, name.option),
+    mutual: track.optionFor(name.option)?.mutual === true,
   };
 }
 
@@ -307,6 +315,7 @@ export function deriveCategoricalView(
 ): CategoricalView {
   const { groupBy, trackId, track, labelFor, query } = input;
   const visible = visibleEntries(entries, input);
+  const canDrag = groupBy === 'entity' && !isSearching(query);
   const cards =
     groupBy === 'tag' ? cardsByTag(visible, track, labelFor) : cardsByEntity(visible, input);
   return {
@@ -314,9 +323,26 @@ export function deriveCategoricalView(
     cards,
     total: new Set(entries.map(relationshipKey)).size,
     matched: new Set(visible.map(relationshipKey)).size,
-    canDrag: groupBy === 'entity' && query.trim() === '',
-    listKey: groupBy === 'entity' ? entityCardsKey(trackId) : null,
+    canDrag,
+    listKey: canDrag ? entityCardsKey(trackId) : null,
   };
+}
+
+/** Whether a query is active; a search lists every name instead of truncating. */
+export function isSearching(query: string): boolean {
+  return query.trim() !== '';
+}
+
+/** Names shown in one list before "+N more"; a mutual list is shorter. */
+export function listLimit(mutual: boolean): number {
+  return mutual ? MUTUAL_LIMIT : NAME_LIMIT;
+}
+
+/** What decides how much of a name list is shown. */
+export interface ShownState {
+  /** Ids (`nameListId`) of the lists shown in full. */
+  expanded: ReadonlySet<string>;
+  searching: boolean;
 }
 
 /** The names to render under `limit`, and how many are hidden. Expanded or searching shows everything. */
@@ -327,4 +353,67 @@ export function visibleNames<T>(
 ): { shown: T[]; hidden: number } {
   if (state.expanded || state.searching) return { shown: [...items], hidden: 0 };
   return { shown: items.slice(0, limit), hidden: Math.max(0, items.length - limit) };
+}
+
+/** Id of one name list (a card row, or a mutual card's pairs when `rowId` is null) for its expanded state. */
+export function nameListId(
+  groupBy: CategoricalGroupBy,
+  cardId: string,
+  rowId: string | null,
+): string {
+  return JSON.stringify([groupBy, cardId, rowId]);
+}
+
+/** The names a list renders under `shownState`. */
+function shownIn<T>(
+  items: readonly T[],
+  limit: number,
+  listId: string,
+  shownState: ShownState,
+): T[] {
+  return visibleNames(items, limit, {
+    expanded: shownState.expanded.has(listId),
+    searching: shownState.searching,
+  }).shown;
+}
+
+/**
+ * The current name for `entryKey` if the view renders it, else null. Truncated names are not
+ * rendered, so they are not found; this uses the same `visibleNames` inputs as the lists do.
+ */
+export function findShownName(
+  view: CategoricalView,
+  entryKey: string,
+  shownState: ShownState,
+): HolderName | null {
+  for (const card of view.cards) {
+    const pairs = shownIn(
+      card.pairs ?? [],
+      MUTUAL_LIMIT,
+      nameListId(card.kind, card.id, null),
+      shownState,
+    );
+    for (const pair of pairs) {
+      const found = [pair.a, pair.b].find((n) => n.entryKey === entryKey);
+      if (found) return found;
+    }
+    for (const row of card.rows) {
+      const rowNames = shownIn(
+        row.names,
+        listLimit(row.mutual),
+        nameListId(card.kind, card.id, row.id),
+        shownState,
+      );
+      const found = rowNames.find((n) => n.entryKey === entryKey);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+/** A copy of `ids` with `id` removed if present, else added. */
+export function toggledId(ids: ReadonlySet<string>, id: string): Set<string> {
+  const next = new Set(ids);
+  if (!next.delete(id)) next.add(id);
+  return next;
 }

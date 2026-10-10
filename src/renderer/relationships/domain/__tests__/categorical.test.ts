@@ -4,7 +4,13 @@ import {
   NAME_LIMIT,
   deriveCategoricalView,
   groupByChoiceKey,
+  nameListId,
+  findShownName,
+  isSearching,
+  listLimit,
+  nameTag,
   parseGroupBy,
+  toggledId,
   visibleNames,
   type CategoricalGroupBy,
   type CategoricalView,
@@ -206,6 +212,8 @@ describe('deriveCategoricalView search', () => {
     expect(view(sample(), { groupBy: 'entity', query: 'zara' }).canDrag).toBe(false);
     expect(view(sample(), { groupBy: 'tag' }).canDrag).toBe(false);
     expect(view(sample(), { groupBy: 'entity' }).listKey).toBe(entityCardsKey(tags.id));
+    expect(view(sample(), { groupBy: 'entity', query: ' ' }).listKey).toBe(entityCardsKey(tags.id));
+    expect(view(sample(), { groupBy: 'entity', query: 'zara' }).listKey).toBeNull();
     expect(view(sample(), { groupBy: 'tag' }).listKey).toBeNull();
   });
 });
@@ -242,5 +250,113 @@ describe('visibleNames', () => {
       shown: items,
       hidden: 0,
     });
+  });
+});
+
+describe('nameListId', () => {
+  it('differs by grouping, card and row', () => {
+    const ids = [
+      nameListId('tag', 'member', 'guild'),
+      nameListId('entity', 'member', 'guild'),
+      nameListId('tag', 'guild', 'member'),
+      nameListId('tag', 'married', null),
+    ];
+    expect(new Set(ids).size).toBe(4);
+  });
+});
+
+describe('findShownName', () => {
+  const collapsed = { expanded: new Set<string>(), searching: false };
+  const members = (count: number) =>
+    Array.from({ length: count }, (_, i) =>
+      holds(`p${String(i + 1).padStart(2, '0')}`, 'guild', 'member'),
+    );
+  const keyOf = (v: CategoricalView, holderId: string) =>
+    v.cards
+      .flatMap((c) => [
+        ...c.rows.flatMap((r) => r.names),
+        ...(c.pairs ?? []).flatMap((p) => [p.a, p.b]),
+      ])
+      .find((n) => n.holderId === holderId)!.entryKey;
+
+  it('finds a listed name, including both sides of a mutual pair', () => {
+    const v = view(sample());
+    const zara = findShownName(v, keyOf(v, 'zara'), collapsed);
+    expect(zara?.holderId).toBe('zara');
+    const pair = v.cards.find((c) => c.pairs)!.pairs![0];
+    expect(findShownName(v, pair.a.entryKey, collapsed)).toBe(pair.a);
+    expect(findShownName(v, pair.b.entryKey, collapsed)).toBe(pair.b);
+    expect(findShownName(v, 'nope', collapsed)).toBeNull();
+  });
+
+  it('returns the current name from the view it is given', () => {
+    const before = view(sample());
+    const key = keyOf(before, 'zara');
+    const after = view([...sample(), holds('zara', 'guild', 'member', { at: 5 })]);
+    expect(findShownName(after, key, collapsed)).toBe(
+      after.cards.flatMap((c) => c.rows.flatMap((r) => r.names)).find((n) => n.entryKey === key),
+    );
+    expect(findShownName(after, key, collapsed)).not.toBe(findShownName(before, key, collapsed));
+  });
+
+  it('does not find a name hidden by truncation until the list is expanded or searched', () => {
+    const v = view(members(NAME_LIMIT + 2));
+    const [card] = v.cards;
+    const row = card.rows[0];
+    const last = row.names[row.names.length - 1];
+    const first = row.names[0];
+    expect(findShownName(v, last.entryKey, collapsed)).toBeNull();
+    expect(findShownName(v, first.entryKey, collapsed)).toBe(first);
+    const expanded = new Set([nameListId('tag', card.id, row.id)]);
+    expect(findShownName(v, last.entryKey, { expanded, searching: false })).toBe(last);
+    expect(findShownName(v, last.entryKey, { expanded: new Set(), searching: true })).toBe(last);
+    expect(
+      findShownName(v, last.entryKey, { expanded: new Set(['other']), searching: false }),
+    ).toBeNull();
+  });
+
+  it('truncates a mutual card at the mutual limit', () => {
+    const couples = Array.from({ length: MUTUAL_LIMIT + 1 }, (_, i) =>
+      mutualPair(`m${i + 1}`, `n${i + 1}`, 'married'),
+    ).flat();
+    const v = view(couples);
+    const card = v.cards[0];
+    expect(findShownName(v, card.pairs![MUTUAL_LIMIT].a.entryKey, collapsed)).toBeNull();
+    expect(findShownName(v, card.pairs![MUTUAL_LIMIT - 1].b.entryKey, collapsed)).not.toBeNull();
+    const expanded = new Set([nameListId('tag', card.id, null)]);
+    expect(
+      findShownName(v, card.pairs![MUTUAL_LIMIT].a.entryKey, { expanded, searching: false }),
+    ).not.toBeNull();
+  });
+});
+
+describe('isSearching, listLimit and nameTag', () => {
+  it('a blank query is not a search', () => {
+    expect(isSearching('')).toBe(false);
+    expect(isSearching('  ')).toBe(false);
+    expect(isSearching('a')).toBe(true);
+  });
+
+  it('mutual lists are shorter', () => {
+    expect(listLimit(false)).toBe(NAME_LIMIT);
+    expect(listLimit(true)).toBe(MUTUAL_LIMIT);
+  });
+
+  it("nameTag gives the chip and mutuality of the name's option", () => {
+    const v = view(sample());
+    const names = v.cards.flatMap((c) => c.rows.flatMap((r) => r.names));
+    const member = names.find((n) => n.option === 'member')!;
+    const married = v.cards.find((c) => c.pairs)!.pairs![0].a;
+    expect(nameTag(tags, member)).toMatchObject({ chip: { key: 'member' }, mutual: false });
+    expect(nameTag(tags, married)).toMatchObject({ chip: { key: 'married' }, mutual: true });
+  });
+});
+
+describe('toggledId', () => {
+  it('adds a missing id, removes a present one, and leaves the input alone', () => {
+    const ids = new Set(['a']);
+    expect([...toggledId(ids, 'b')]).toEqual(['a', 'b']);
+    expect([...toggledId(ids, 'a')]).toEqual([]);
+    expect([...ids]).toEqual(['a']);
   });
 });

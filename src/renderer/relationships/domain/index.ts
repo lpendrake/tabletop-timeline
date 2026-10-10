@@ -43,6 +43,7 @@ export type {
   CategoricalCard,
   CategoricalView,
   CategoricalViewInput,
+  ShownState,
 } from './categorical';
 export {
   NAME_LIMIT,
@@ -52,6 +53,12 @@ export {
   buildCategoricalEntries,
   deriveCategoricalView,
   visibleNames,
+  nameListId,
+  isSearching,
+  listLimit,
+  findShownName,
+  nameTag,
+  toggledId,
 } from './categorical';
 
 export type { TagChange, TagHistoryEntry, TagStatus, TagHistory } from './categorical-history';

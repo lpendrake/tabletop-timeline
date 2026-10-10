@@ -1,0 +1,143 @@
+.rel-cat-tab {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 16px;
+}
+
+.rel-groupby {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rel-groupby-caption,
+.rel-cat-muted {
+  color: var(--theme-text-muted);
+}
+
+.rel-cat-hint {
+  margin-left: auto;
+  color: var(--theme-text-muted);
+  font-size: 12px;
+}
+
+.rel-cat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 12px;
+  align-items: start;
+  padding: 8px var(--rel-inner-pad);
+}
+
+.rel-cat-card {
+  position: relative;
+  background: var(--theme-surface);
+  border: 1px solid var(--theme-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.rel-cat-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--theme-border);
+}
+
+.rel-cat-entity {
+  color: var(--theme-accent-gold);
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rel-cat-count {
+  margin-left: auto;
+  color: var(--theme-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.rel-cat-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 10px;
+}
+
+.rel-cat-row + .rel-cat-row {
+  border-top: 1px solid var(--theme-border);
+}
+
+.rel-cat-row-label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: none;
+  max-width: 45%;
+  min-width: 0;
+}
+
+.rel-cat-observer {
+  color: var(--theme-text-muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rel-cat-row-label .rel-cat-count {
+  margin-left: 0;
+}
+
+.rel-cat-names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.rel-cat-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.rel-cat-mutual-mark {
+  color: var(--theme-text-muted);
+}
+
+.rel-cat-name,
+.rel-cat-more {
+  background: transparent;
+  border: none;
+  padding: 0 3px;
+  border-radius: 3px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.rel-cat-name {
+  color: var(--theme-link);
+}
+
+.rel-cat-name:hover {
+  text-decoration: underline;
+}
+
+.rel-cat-name.is-open {
+  background: rgb(var(--theme-accent-gold-rgb) / 0.15);
+}
+
+.rel-cat-more {
+  color: var(--theme-text-muted);
+  font-size: 12px;
+}
+
+.rel-cat-more:hover {
+  color: var(--theme-text-primary);
+}
