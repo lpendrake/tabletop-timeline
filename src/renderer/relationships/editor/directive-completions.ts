@@ -36,8 +36,9 @@ import {
   completionReactivates,
   completionSources,
   editorAutocompletion,
-} from '../../shared/markdown-editor/extensions/editor-completions';
+} from '../../shared/markdown-editor';
 import { directivesIn } from './parsed-directives';
+import { directiveSettings, type RelationshipCompletionOptions } from './config';
 import { adjacentSlot, roleHasChoices } from '../domain/directive-layout';
 import { displayFor, liveSlotAt, moveToAdjacentBlank } from './directives';
 import {
@@ -53,44 +54,6 @@ import {
   type NoteUsage,
   type SectionedNote,
 } from '../domain/directive-values';
-
-/** Which holder a Remove blank's tags should be fetched for, plus the directive's position and the buffer's text so the host can exclude this directive's own delta. */
-export interface HeldTagsQuery {
-  trackId: string;
-  holder: string;
-  anchor: number;
-  doc: string;
-}
-
-/** Which track's usage a holder/observer blank should be sectioned by, plus the directive's position and the buffer's text so the host can exclude this directive's own delta. */
-export interface TrackUsageQuery {
-  trackId: string;
-  anchor: number;
-  doc: string;
-}
-
-/** Host data and callbacks the blanks' choices need. */
-export interface RelationshipCompletionOptions {
-  noteOptions: () => readonly PickerOption[];
-  defaultHolderId?: () => string | null;
-  currentNoteId?: () => string | null;
-  /** Sets the default reputation holder (e.g. from the holder blank's "…and make it the default holder" row). */
-  setDefaultHolder?: (id: string) => void | Promise<void>;
-  createOption?: (
-    trackId: string,
-    label: string,
-    mutual: boolean,
-  ) => Promise<{ key: string } | null>;
-  /** The holder's held tags, by observer, at the declaring event's date. A rejection shows every tag/note, unfiltered. */
-  heldTags?: (q: HeldTagsQuery) => Promise<Map<string, string[]>>;
-  /**
-   * The notes the track already uses: note id to the absolute distance in
-   * seconds to that note's nearest entry on the track, or `null` for a used
-   * note with no dated proximity. Ids absent from the map are not used. A
-   * missing callback or a rejection lists every note as not used.
-   */
-  trackUsage?: (q: TrackUsageQuery) => Promise<Map<string, number | null>>;
-}
 
 /** At most this many notes are listed; typing narrows the rest. */
 const NOTE_LIMIT = 50;
@@ -374,16 +337,13 @@ function trackUsage(
   return cachedLookup(state.doc, `usage:${directive.from}:${directive.trackId}`, run);
 }
 
-async function completeBlank(
-  context: CompletionContext,
-  getOptions: () => RelationshipCompletionOptions,
-): Promise<CompletionResult | null> {
+async function completeBlank(context: CompletionContext): Promise<CompletionResult | null> {
   const { state } = context;
   const hit = liveSlotAt(state, context.pos);
   const track = hit?.model.track;
   if (!hit || !track || !roleHasChoices(hit.slot.role, track)) return null;
   const { directive, slot } = hit;
-  const opts = getOptions();
+  const opts = state.facet(directiveSettings).choices;
   const action = track.action(directive.actionKey);
   const { query, choices } = baseChoices(state, hit, opts);
   const narrowed = filterHeldOptions(
@@ -433,70 +393,64 @@ async function completeBlank(
  * nothing matches, the key isn't taken, so the directive keymap moves on to
  * the next blank as usual, leaving the typed text (shown as a problem).
  */
-function makeAcceptTypedQuery(getOptions: () => RelationshipCompletionOptions): Command {
-  return (view) => {
-    const { state } = view;
-    const sel = state.selection.main;
-    const hit = sel.empty ? liveSlotAt(state, sel.head) : null;
-    if (!hit || !roleHasChoices(hit.slot.role, hit.model.track)) return false;
-    const opts = getOptions();
-    const { query, choices } = baseChoices(state, hit, opts);
-    // An empty holder blank with a default holder pinned first picks it; a
-    // blank already holding a note (empty query) moves on.
-    const pinned =
-      hit.slot.value === ''
-        ? pinnedDefaultHolder({
-            role: hit.slot.role,
-            query,
-            defaultHolderId: opts.defaultHolderId?.() ?? null,
-            options: choices,
-          })
-        : null;
-    if (!pinned && (hit.slot.value === '' || !query)) return false;
+const acceptTypedQuery: Command = (view) => {
+  const { state } = view;
+  const sel = state.selection.main;
+  const hit = sel.empty ? liveSlotAt(state, sel.head) : null;
+  if (!hit || !roleHasChoices(hit.slot.role, hit.model.track)) return false;
+  const opts = state.facet(directiveSettings).choices;
+  const { query, choices } = baseChoices(state, hit, opts);
+  // An empty holder blank with a default holder pinned first picks it; a
+  // blank already holding a note (empty query) moves on.
+  const pinned =
+    hit.slot.value === ''
+      ? pinnedDefaultHolder({
+          role: hit.slot.role,
+          query,
+          defaultHolderId: opts.defaultHolderId?.() ?? null,
+          options: choices,
+        })
+      : null;
+  if (!pinned && (hit.slot.value === '' || !query)) return false;
 
-    if (completionStatus(state) === 'active') {
-      const selected = selectedCompletion(state);
-      const explicitCreate = selected && createRows.has(selected) && steered.has(view);
-      if (selected && (!createRows.has(selected) || explicitCreate) && acceptCompletion(view)) {
-        return true;
-      }
+  if (completionStatus(state) === 'active') {
+    const selected = selectedCompletion(state);
+    const explicitCreate = selected && createRows.has(selected) && steered.has(view);
+    if (selected && (!createRows.has(selected) || explicitCreate) && acceptCompletion(view)) {
+      return true;
     }
-    if (choices.length === 0) return false;
+  }
+  if (choices.length === 0) return false;
 
-    const doc = state.doc;
-    void completeBlank(new Context(state, sel.head, true), getOptions).then((result) => {
-      // Drop the answer if the buffer changed while it was being worked out.
-      if (view.state.doc !== doc) return;
-      const top = result?.options.find((o) => !createRows.has(o));
-      if (result && top && typeof top.apply === 'function') {
-        top.apply(view, top, result.from, result.to ?? result.from);
-      } else {
-        moveToAdjacentBlank(view, 1);
-      }
-    });
-    return true;
-  };
-}
+  const doc = state.doc;
+  void completeBlank(new Context(state, sel.head, true)).then((result) => {
+    // Drop the answer if the buffer changed while it was being worked out.
+    if (view.state.doc !== doc) return;
+    const top = result?.options.find((o) => !createRows.has(o));
+    if (result && top && typeof top.apply === 'function') {
+      top.apply(view, top, result.from, result.to ?? result.from);
+    } else {
+      moveToAdjacentBlank(view, 1);
+    }
+  });
+  return true;
+};
 
 /**
- * Offers choices inside relationship directive blanks. Registered ahead of
- * the `[[` / `@` link source so a blank always gets its own list.
+ * Offers choices inside relationship directive blanks, read from the
+ * `directiveSettings` facet. Registered ahead of the `[[` / `@` link source
+ * so a blank always gets its own list.
  */
-export function relationshipDirectiveCompletions(
-  getOptions: () => RelationshipCompletionOptions,
-): Extension {
-  const acceptTyped = makeAcceptTypedQuery(getOptions);
-  return [
-    editorAutocompletion,
-    Prec.high(completionSources.of((context) => completeBlank(context, getOptions))),
-    mapTrackedPositions,
-    noteSteering,
-    // Ahead of the directive keymap's own Tab/Enter (which move between blanks).
-    Prec.highest(
-      keymap.of([
-        { key: 'Tab', run: acceptTyped },
-        { key: 'Enter', run: acceptTyped },
-      ]),
-    ),
-  ];
-}
+export const directiveCompletions: Extension = [
+  editorAutocompletion,
+  Prec.high(completionSources.of(completeBlank)),
+  mapTrackedPositions,
+  noteSteering,
+  // Ahead of the directive keymap's own Tab/Enter (which move between blanks).
+  Prec.highest(
+    keymap.of([
+      { key: 'Tab', run: acceptTypedQuery },
+      { key: 'Enter', run: acceptTypedQuery },
+    ]),
+  ),
+];

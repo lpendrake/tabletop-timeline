@@ -1,6 +1,6 @@
 import type { Extension } from '@codemirror/state';
 import { MarkdownEditor } from './markdown-editor';
-import type { WikiLinksHostConfig, RelationshipDirectivesHostConfig } from './markdown-editor';
+import type { WikiLinksHostConfig } from './markdown-editor';
 import type { ImageDecorationsOptions } from './extensions/image-decorations';
 
 export interface MarkdownPreviewProps {
@@ -12,8 +12,6 @@ export interface MarkdownPreviewProps {
   className?: string;
   /** Sets data-base-dir on the wrapper div so the peek stack can resolve plain <a href> links. */
   baseDir?: string;
-  /** Renders relationship directives read-only (no cross, no choices). */
-  relationshipDirectives?: RelationshipDirectivesHostConfig;
   /** Host-supplied extensions active in the preview; memoize to avoid reconfiguring. */
   liveExtensions?: Extension;
 }
@@ -24,7 +22,6 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
   wikiLinks,
   className,
   baseDir,
-  relationshipDirectives,
   liveExtensions,
 }) => (
   <div className={className} data-base-dir={baseDir}>
@@ -33,7 +30,6 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
       readOnly
       images={images}
       wikiLinks={wikiLinks ? { ...wikiLinks, readOnly: true } : wikiLinks}
-      relationshipDirectives={relationshipDirectives}
       liveExtensions={liveExtensions}
     />
   </div>

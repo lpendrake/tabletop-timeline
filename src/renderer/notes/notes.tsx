@@ -80,7 +80,7 @@ export function NotesApp({
 
   const activeTabRef = useRef(ctrl.activeTab);
   activeTabRef.current = ctrl.activeTab;
-  const { relationshipDirectives: relationshipDirectivesConfig, contextMenu: editorContextMenu } =
+  const { liveExtensions: relationshipExtensions, contextMenu: editorContextMenu } =
     useRelationshipEditorConfig({
       entityIndex: ctrl.entityIndex,
       defaultReason: NOTE_DEFAULT_REASON,
@@ -233,7 +233,7 @@ export function NotesApp({
                 imagePaste={imagePasteConfig}
                 dropLink={dropLinkConfig}
                 contextMenu={editorContextMenu}
-                relationshipDirectives={relationshipDirectivesConfig}
+                liveExtensions={relationshipExtensions}
               />
             ) : ctrl.activeTab ? (
               <div className="editor-placeholder">Loading...</div>

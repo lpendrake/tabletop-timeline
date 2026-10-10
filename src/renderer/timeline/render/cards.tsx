@@ -3,7 +3,6 @@ import './cards.css';
 import type { EventListItem } from '../data/types';
 import type { WeekdayColors } from '../../theme';
 import { resolveEntityTagLabel, isValidCustomTag } from '../../../shared/entity-tags';
-import { NOTE_DEFAULT_REASON } from '../../../shared/relationships';
 import type { ViewState, ViewportSize } from '../math/zoom';
 import { formatCardFace } from '../calendar/format';
 import {
@@ -232,16 +231,8 @@ function CardItem({
       onResizeDragChange={onResizeDragChange}
       onOpenById={onOpenById}
       entityLabelMap={entityLabelMap}
-      relationshipDirectives={
-        relationshipLibrary
-          ? {
-              library: relationshipLibrary,
-              defaultReason: card.event.title || NOTE_DEFAULT_REASON,
-              onOpenNote: onOpenById,
-              place: 'event',
-            }
-          : undefined
-      }
+      relationshipLibrary={relationshipLibrary}
+      title={card.event.title}
     />
   ) : null;
 

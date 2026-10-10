@@ -15,7 +15,6 @@
 import {
   EditorSelection,
   EditorState,
-  Facet,
   Prec,
   StateEffect,
   StateField,
@@ -47,23 +46,17 @@ import {
   sanitiseValue,
   findSetConflicts,
   setConflictMessage,
-  EMPTY_TRACK_LIBRARY,
-  NOTE_DEFAULT_REASON,
   type BufferUndatedSet,
   type DirectiveProblem,
-  type ExternalUndatedSet,
   type InterpretedDirective,
   type ParsedDirective,
   type ResolvedTrack,
   type SetConflict,
-  type TrackLibrary,
 } from '../../../shared/relationships';
 import { UNKNOWN_ENTITY_LABEL } from '../../../shared/entity-labels';
-import {
-  entityLabelMapField,
-  setEntityLabels,
-} from '../../shared/markdown-editor/extensions/wiki-links';
+import { entityLabelMapField, setEntityLabels } from '../../shared/markdown-editor';
 import { parsedDirectivesField, directivesIn } from './parsed-directives';
+import { directiveSettings, settingsChanged, type DirectivePlace } from './config';
 import {
   adjacentSlot,
   classifyChange,
@@ -85,65 +78,6 @@ import {
   stepNumericValue,
   stepRung,
 } from '../domain/directive-values';
-
-export interface RelationshipDirectivesConfig {
-  readOnly?: boolean;
-  onOpenNote?: (id: string) => void;
-  /**
-   * Whether this document is a note (undated) or an event. A note has no
-   * order, so Change/Shift (`adjust`) and Remove are rejected there — see
-   * `src/shared/relationships/AGENTS.md`'s notes-vs-events invariant.
-   * Required — every host must say which it is explicitly.
-   */
-  place: 'note' | 'event';
-}
-
-interface DirectiveContext {
-  library: TrackLibrary;
-  defaultReason: string;
-}
-
-const DEFAULT_CONTEXT: DirectiveContext = {
-  library: EMPTY_TRACK_LIBRARY,
-  defaultReason: NOTE_DEFAULT_REASON,
-};
-
-/** Dispatch to push the resolved track library and the host's default reason into the editor. */
-export const setDirectiveContext = StateEffect.define<DirectiveContext>();
-
-export const directiveContextField = StateField.define<DirectiveContext>({
-  create: () => DEFAULT_CONTEXT,
-  update(value, tr) {
-    for (const e of tr.effects) {
-      if (e.is(setDirectiveContext)) return e.value;
-    }
-    return value;
-  },
-});
-
-/** One undated Set declared in another saved note, as pushed in by the host. */
-export interface ExternalSetConflictEntry extends ExternalUndatedSet {
-  /** Display title for that note, when known (falls back to its path). */
-  title?: string;
-}
-
-/**
- * Dispatch to push every undated Set declared in OTHER saved notes (the
- * host excludes this buffer's own path — the buffer is the truth for it).
- * Only meaningful for a note editor (`place: 'note'`); events never
- * conflict. See `src/shared/relationships/set-conflicts.ts`.
- */
-export const setExternalSetConflicts = StateEffect.define<ExternalSetConflictEntry[]>();
-
-export const externalSetConflictsField = StateField.define<ExternalSetConflictEntry[]>({
-  create: () => [],
-  update(value, tr) {
-    for (const e of tr.effects) {
-      if (e.is(setExternalSetConflicts)) return e.value;
-    }
-    return value;
-  },
-});
 
 /**
  * Which outline class (if any) a directive gets from its interpreted status:
@@ -185,12 +119,12 @@ interface DirectiveModelState {
  * Undated Sets, currently valid, may be Set by at most one note directive
  * (see `src/shared/relationships/AGENTS.md`). This buffer-side check finds
  * this buffer's own duplicates plus any conflict with an undated Set the
- * host has pushed in from another saved note (`externalSetConflictsField`).
- * Only meaningful for a note editor — events never conflict.
+ * host declared in another saved note (`externalSetConflicts` in the
+ * settings). Only meaningful for a note editor — events never conflict.
  */
 function bufferSetConflicts(
   state: EditorState,
-  place: 'note' | 'event',
+  place: DirectivePlace,
   interpreted: Array<{ directive: ParsedDirective; result: InterpretedDirective }>,
 ): Map<number, SetConflict> {
   if (place !== 'note') return new Map();
@@ -205,12 +139,12 @@ function bufferSetConflicts(
       });
     }
   }
-  const external = state.field(externalSetConflictsField, false) ?? [];
+  const external = state.facet(directiveSettings).externalSetConflicts;
   return new Map(findSetConflicts(buffer, external).map((c) => [c.ordinal, c]));
 }
 
-function buildModels(state: EditorState, place: 'note' | 'event'): DirectiveModel[] {
-  const { library } = state.field(directiveContextField);
+function buildModels(state: EditorState): DirectiveModel[] {
+  const { library, place, externalSetConflicts } = state.facet(directiveSettings);
   const interpreted = directivesIn(state).map((directive) => ({
     directive,
     result: interpretDirective(directive, {
@@ -219,8 +153,7 @@ function buildModels(state: EditorState, place: 'note' | 'event'): DirectiveMode
     }),
   }));
   const conflicts = bufferSetConflicts(state, place, interpreted);
-  const externalTitles = state.field(externalSetConflictsField, false) ?? [];
-  const titleFor = (path: string) => externalTitles.find((e) => e.path === path)?.title;
+  const titleFor = (path: string) => externalSetConflicts.find((e) => e.path === path)?.title;
 
   return interpreted.map(({ directive, result: interpretedDirective }) => {
     const track = resolveTrack(directive.trackId, library);
@@ -352,30 +285,10 @@ function chipText(model: DirectiveModel): string {
   return `${model.track?.name ?? model.directive.trackId} · ${action?.label ?? model.directive.actionKey}`;
 }
 
-/**
- * The host's per-editor settings. Every piece below reads them from here;
- * `relationshipDirectives()` always provides them, so there's no default —
- * in particular no silent fallback to the permissive `'event'` place.
- */
-const directiveConfig = Facet.define<
-  RelationshipDirectivesConfig,
-  RelationshipDirectivesConfig | null
->({
-  combine: (values) => values[0] ?? null,
-});
-
-const EMPTY_MODEL_STATE: DirectiveModelState = {
-  models: [],
-  decorations: Decoration.none,
-  atomic: Decoration.none,
-};
-
 function buildModelState(state: EditorState): DirectiveModelState {
-  const config = state.facet(directiveConfig);
-  if (!config) return EMPTY_MODEL_STATE;
-  const models = buildModels(state, config.place);
-  const { defaultReason } = state.field(directiveContextField);
-  const editable = !state.readOnly && !config.readOnly;
+  const models = buildModels(state);
+  const { defaultReason, readOnly } = state.facet(directiveSettings);
+  const editable = !state.readOnly && !readOnly;
   const decorations: Range<Decoration>[] = [];
   const atomic: Range<Decoration>[] = [];
 
@@ -506,9 +419,8 @@ const modelStateField = StateField.define<DirectiveModelState>({
   update(value, tr) {
     const rebuild =
       tr.docChanged ||
-      tr.effects.some(
-        (e) => e.is(setDirectiveContext) || e.is(setEntityLabels) || e.is(setExternalSetConflicts),
-      );
+      settingsChanged(tr.startState, tr.state) ||
+      tr.effects.some((e) => e.is(setEntityLabels));
     return rebuild ? buildModelState(tr.state) : value;
   },
   provide: (f) => [
@@ -645,8 +557,7 @@ const clearFlashAfterDelay = ViewPlugin.fromClass(
 // ---------------------------------------------------------------------------
 
 function editable(view: EditorView): boolean {
-  const config = view.state.facet(directiveConfig);
-  return Boolean(config) && !view.state.readOnly && !config?.readOnly;
+  return !view.state.readOnly && !view.state.facet(directiveSettings).readOnly;
 }
 
 /** Selects a blank's whole value (so typing replaces it) and opens its choices. */
@@ -822,7 +733,7 @@ const directivePointer = EditorView.domEventHandlers({
       const noteId = hit ? noteIdOf(hit.slot.value) : null;
       if (!noteId) return false;
       event.preventDefault();
-      view.state.facet(directiveConfig)?.onOpenNote?.(noteId);
+      view.state.facet(directiveSettings).onOpenNote?.(noteId);
       return true;
     }
 
@@ -1016,33 +927,25 @@ const directiveTheme = EditorView.theme({
 });
 
 /**
- * Renders relationship directives as live blanks. Live-mode only — hosts
- * omit this extension in source mode (see `markdown-editor.tsx`).
+ * Rendering and Ctrl/Cmd+click on a note: what every editor showing
+ * directives gets, read-only ones included.
  */
-export function relationshipDirectives(config: RelationshipDirectivesConfig): Extension {
-  const readOnly = Boolean(config.readOnly);
-  return [
-    directiveContextField,
-    externalSetConflictsField,
-    // Read-only here (labels are pushed by the host via `setEntityLabels`);
-    // included so the label lookup resolves even without `wikiLinks()`.
-    entityLabelMapField,
-    parsedDirectivesField,
-    directiveConfig.of(config),
-    modelStateField,
-    directiveTheme,
-    directivePointer,
-    // Which pieces are installed is decided here, once; everything installed
-    // reads the settings themselves from `directiveConfig`.
-    readOnly
-      ? []
-      : [
-          EditorState.transactionFilter.of(guardDirectiveEdit),
-          flashField,
-          clearFlashAfterDelay,
-          directiveKeymap,
-          keepTabInBlanks,
-          openChoicesOnArrival,
-        ],
-  ];
-}
+export const directiveRendering: Extension = [
+  // Read-only here (labels are pushed by the host via `setEntityLabels`);
+  // included so the label lookup resolves even without `wikiLinks()`.
+  entityLabelMapField,
+  parsedDirectivesField,
+  modelStateField,
+  directiveTheme,
+  directivePointer,
+];
+
+/** The guard, keymap and choice-opening an editable editor adds on top of `directiveRendering`. */
+export const directiveEditing: Extension = [
+  EditorState.transactionFilter.of(guardDirectiveEdit),
+  flashField,
+  clearFlashAfterDelay,
+  directiveKeymap,
+  keepTabInBlanks,
+  openChoicesOnArrival,
+];

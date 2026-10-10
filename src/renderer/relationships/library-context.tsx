@@ -3,8 +3,8 @@
  * `useRelationshipLibrary`) and shared by every consumer through context
  * instead of each host loading its own copy — the timeline (cards, card
  * expansion), the notes editor, the event editor, and the Relationships
- * view. Peek gets it through its own injected `getRelationshipLibrary`
- * getter (see `peek/AGENTS.md` — peek may not import from here).
+ * view. Peek previews get it through the app's injected
+ * `getPreviewExtensions` (see `peek/AGENTS.md` — peek may not import from here).
  */
 import { createContext, useContext } from 'react';
 import { EMPTY_TRACK_LIBRARY, type TrackLibrary } from '../../shared/relationships';

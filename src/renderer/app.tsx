@@ -26,6 +26,8 @@ import { resolveDefaultView } from './views/settings/domain/resolve-default-view
 import { useRelationshipLibrary } from './relationships/hooks/use-relationship-library';
 import { RelationshipLibraryProvider } from './relationships/library-context';
 import { viewForKey } from './relationships/domain/view-shortcut';
+import { relationshipPreviewExtensions } from './relationships/editor/extensions';
+import { placeForPath } from './relationships/editor/place-for-path';
 import '../../src/index.css';
 
 export default function App() {
@@ -150,7 +152,12 @@ export default function App() {
       },
       getEntityIndex: () => entityIndexRef.current,
       onOpenById: handleOpenById,
-      getRelationshipLibrary: () => relationshipLibraryRef.current,
+      getPreviewExtensions: ({ path, title }) =>
+        relationshipPreviewExtensions({
+          library: relationshipLibraryRef.current,
+          title,
+          place: placeForPath(path),
+        }),
     });
     return () => teardownPeek();
   }, [activeCampaign?.path]); // eslint-disable-line react-hooks/exhaustive-deps

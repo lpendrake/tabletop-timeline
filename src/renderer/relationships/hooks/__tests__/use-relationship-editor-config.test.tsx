@@ -5,7 +5,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { act, StrictMode, type ReactNode } from 'react';
 import { renderHook } from '@testing-library/react';
+import { EditorState, type Extension } from '@codemirror/state';
 import { relationshipTagsSpec } from '../../../../shared/relationships';
+import { directiveSettings } from '../../editor/config';
+import type { ExternalSetConflictEntry } from '../../domain/external-set-conflicts';
 
 const state = vi.hoisted(() => ({
   defaultHolderId: null as string | null,
@@ -44,12 +47,16 @@ vi.mock('../../data', () => ({
 
 import { useRelationshipEditorConfig } from '../use-relationship-editor-config';
 
+/** The directive settings an editor built from `liveExtensions` reads. */
+const settingsOf = (liveExtensions: Extension) =>
+  EditorState.create({ extensions: liveExtensions }).facet(directiveSettings);
+
 let container: HTMLDivElement;
 let root: Root;
 let lastDefaultHolderId: string | null | undefined;
 
 function Host() {
-  const { relationshipDirectives } = useRelationshipEditorConfig({
+  const { liveExtensions } = useRelationshipEditorConfig({
     entityIndex: [],
     defaultReason: 'Unspecified',
     place: 'event',
@@ -57,7 +64,7 @@ function Host() {
     at: () => 100,
     getDocText: () => '',
   });
-  lastDefaultHolderId = relationshipDirectives.choices?.defaultHolderId?.();
+  lastDefaultHolderId = settingsOf(liveExtensions).choices.defaultHolderId?.();
   return null;
 }
 
@@ -99,16 +106,14 @@ describe('useRelationshipEditorConfig default holder refresh', () => {
   });
 });
 
-let lastExternalSetConflicts:
-  | Array<{ trackId: string; holder: string; observer: string; path: string; title?: string }>
-  | undefined;
+let lastExternalSetConflicts: readonly ExternalSetConflictEntry[] | undefined;
 
 const NOTE_INDEX = [
   { id: 'n1', path: 'notes/other.md', title: 'The Party', type: 'note' as const },
 ];
 
 function NoteHost({ currentPath }: { currentPath: string }) {
-  const { relationshipDirectives } = useRelationshipEditorConfig({
+  const { liveExtensions } = useRelationshipEditorConfig({
     entityIndex: NOTE_INDEX,
     defaultReason: 'Unspecified',
     place: 'note',
@@ -116,7 +121,7 @@ function NoteHost({ currentPath }: { currentPath: string }) {
     at: () => null,
     getDocText: () => '',
   });
-  lastExternalSetConflicts = relationshipDirectives.externalSetConflicts;
+  lastExternalSetConflicts = settingsOf(liveExtensions).externalSetConflicts;
   return null;
 }
 
@@ -213,7 +218,7 @@ describe('useRelationshipEditorConfig ledger snapshot under StrictMode', () => {
       { wrapper },
     );
     const trackUsage = () =>
-      result.current.relationshipDirectives.choices?.trackUsage?.({
+      settingsOf(result.current.liveExtensions).choices.trackUsage?.({
         trackId: relationshipTagsSpec.id,
         anchor: 0,
         doc: '',
@@ -237,5 +242,48 @@ describe('useRelationshipEditorConfig ledger snapshot under StrictMode', () => {
 
     unmount();
     expect(state.onChangedCbs).toHaveLength(0);
+  });
+});
+
+describe('useRelationshipEditorConfig liveExtensions identity', () => {
+  const options = (defaultReason: string, onOpenNote: (id: string) => void) => ({
+    entityIndex: [],
+    defaultReason,
+    onOpenNote,
+    place: 'event' as const,
+    currentPath: () => 'timeline/e.md',
+    at: () => 100,
+    getDocText: () => '',
+  });
+
+  it('keeps the same object for unchanged inputs, even with a new onOpenNote each render', async () => {
+    const opened: string[] = [];
+    const { result, rerender } = renderHook(
+      ({ reason }) => useRelationshipEditorConfig(options(reason, (id) => opened.push(id))),
+      { initialProps: { reason: 'Ambush' } },
+    );
+    await flush();
+    const first = result.current.liveExtensions;
+    rerender({ reason: 'Ambush' });
+    expect(result.current.liveExtensions).toBe(first);
+
+    settingsOf(first).onOpenNote?.('n1');
+    expect(opened).toEqual(['n1']);
+  });
+
+  it('builds a new object when defaultReason changes, carrying the new reason', async () => {
+    const { result, rerender } = renderHook(
+      ({ reason }) => useRelationshipEditorConfig(options(reason, () => {})),
+      { initialProps: { reason: 'Ambush' } },
+    );
+    await flush();
+    const first = result.current.liveExtensions;
+    rerender({ reason: 'Night ambush' });
+    expect(result.current.liveExtensions).not.toBe(first);
+    expect(settingsOf(result.current.liveExtensions)).toMatchObject({
+      defaultReason: 'Night ambush',
+      place: 'event',
+      readOnly: false,
+    });
   });
 });

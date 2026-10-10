@@ -6,14 +6,14 @@ import {
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
+import type { Extension } from '@codemirror/state';
 import { MarkdownPreview } from '../shared/markdown-editor/markdown-preview';
-import type { RelationshipDirectivesHostConfig } from '../shared/markdown-editor/markdown-editor';
 import { parseMd } from './parse-md';
-import { placeForPeekPath } from './place-for-path';
 
 export interface PeekWindowProps {
   path: string;
@@ -30,8 +30,8 @@ export interface PeekWindowProps {
   entityLabels?: Map<string, string>;
   onPin?: () => void;
   onClose?: () => void;
-  /** Read-only relationship-directive rendering, injected by the app (peek can't import from notes/timeline/views). */
-  relationshipDirectives?: Pick<RelationshipDirectivesHostConfig, 'library' | 'defaultReason'>;
+  /** Extensions the loaded file's preview adds (e.g. relationship directives), injected by the app since peek can't import other slices. */
+  getPreviewExtensions?: (file: { path: string; title: string }) => Extension;
 }
 
 export interface PeekWindowHandle {
@@ -89,11 +89,20 @@ export const PeekWindow = forwardRef<PeekWindowHandle, PeekWindowProps>(function
     entityLabels,
     onPin,
     onClose,
-    relationshipDirectives,
+    getPreviewExtensions,
   },
   ref,
 ) {
   const [loadState, setLoadState] = useState<LoadState>({ status: 'loading' });
+  const loadedTitle = loadState.status === 'loaded' ? loadState.title : null;
+  // Memoised: a new value would reconfigure the preview.
+  const previewExtensions = useMemo(
+    () =>
+      getPreviewExtensions && loadedTitle !== null
+        ? getPreviewExtensions({ path, title: loadedTitle })
+        : undefined,
+    [getPreviewExtensions, path, loadedTitle],
+  );
   const [isPinned, setIsPinned] = useState(false);
   const [position, setPosition] = useState(() => computeInitialPosition(anchorRect));
   const [zIndex] = useState(() => nextZ());
@@ -255,21 +264,7 @@ export const PeekWindow = forwardRef<PeekWindowHandle, PeekWindowProps>(function
             wikiLinks={
               onOpenById || entityLabels ? { onOpen: onOpenById, entityLabels } : undefined
             }
-            relationshipDirectives={
-              relationshipDirectives
-                ? {
-                    ...relationshipDirectives,
-                    defaultReason: loadState.title || relationshipDirectives.defaultReason,
-                    // Peek shows both notes and events through the same
-                    // read-only preview — derive which this file is from
-                    // its own campaign-relative path so it validates
-                    // directives the same way the real editor would,
-                    // instead of always assuming the permissive 'event'
-                    // context.
-                    place: placeForPeekPath(path),
-                  }
-                : undefined
-            }
+            liveExtensions={previewExtensions}
           />
         )}
       </div>

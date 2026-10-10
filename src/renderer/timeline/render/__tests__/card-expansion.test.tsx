@@ -7,7 +7,8 @@ import { act } from 'react';
 
 // Render MarkdownPreview as a simple marker so we can assert it is (or isn't) shown,
 // without pulling in the full CodeMirror-based preview.
-vi.mock('../../../shared/markdown-editor', () => ({
+vi.mock('../../../shared/markdown-editor', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../shared/markdown-editor')>()),
   MarkdownPreview: ({ content }: { content: string }) => (
     <div data-testid="markdown-preview">{content}</div>
   ),
@@ -45,6 +46,7 @@ function renderExpansion(body: string | null, status: 'loading' | 'loaded' | 'er
         centerX={100}
         onSizeChange={() => {}}
         onResizeDragChange={() => {}}
+        title="Ambush"
       />,
     );
   });

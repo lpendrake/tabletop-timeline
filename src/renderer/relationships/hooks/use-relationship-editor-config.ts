@@ -1,9 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type {
-  RelationshipDirectivesHostConfig,
-  EditorMenuContext,
-  EditorMenuExtraItems,
-} from '../../shared/markdown-editor';
+import type { Extension } from '@codemirror/state';
+import type { EditorMenuContext, EditorMenuExtraItems } from '../../shared/markdown-editor';
 import { composeExtraItems } from '../../shared/markdown-editor';
 import type { EntityIndexEntry } from '../../../types/global';
 import type { ExternalUndatedSet } from '../../../shared/relationships';
@@ -14,6 +11,8 @@ import { notesToPickerOptions } from '../domain/entity-picker-options';
 import { externalSetConflictEntries } from '../domain/external-set-conflicts';
 import { notePath, findEntityIdByNotePath } from '../../notes/domain/link-resolution';
 import { buildRelationshipMenuItems } from '../editor/menu';
+import { relationshipEditorExtensions } from '../editor/extensions';
+import type { DirectivePlace } from '../editor/config';
 import {
   buildRelationshipEditorConfig,
   makeHeldTagsResolver,
@@ -27,10 +26,9 @@ export interface UseRelationshipEditorConfigOptions {
   onOpenNote?: (id: string) => void;
   /**
    * Whether this host is a note (undated) or an event. Required — every
-   * caller must say which it is explicitly (see
-   * `RelationshipDirectivesHostConfig.place`).
+   * caller must say which it is explicitly (see `editor/config.ts`).
    */
-  place: 'note' | 'event';
+  place: DirectivePlace;
   /**
    * The notes editor's currently open note (folder/path). Used to derive
    * both `currentNoteId` (the "this note" badge) and `currentPath` when
@@ -51,12 +49,13 @@ export interface UseRelationshipEditorConfigOptions {
 }
 
 export interface UseRelationshipEditorConfigResult {
-  relationshipDirectives: RelationshipDirectivesHostConfig;
+  /** Pass to `MarkdownEditor`'s `liveExtensions`. The same object while its inputs are unchanged, so the editor isn't reconfigured on every render. */
+  liveExtensions: Extension;
   contextMenu: { extraItems: EditorMenuExtraItems };
 }
 
 /**
- * Builds both the `relationshipDirectives` config and the composed
+ * Builds both the directive `liveExtensions` and the composed
  * `contextMenu` (host extras + Relationships submenu) for a `MarkdownEditor`
  * host (the notes editor or the event editor): loads the track library from
  * context, keeps a ledger snapshot and the default holder fresh, and wires
@@ -135,8 +134,8 @@ export function useRelationshipEditorConfig(
   };
 
   const activePath = currentPath();
-  // Memoised so the directive config (and the effect it pushes into the
-  // editor) only changes when the sets, the open note or the index do.
+  // Memoised so the directive extensions (and the reconfigure a new value
+  // causes) only change when the sets, the open note or the index do.
   const externalSetConflicts = useMemo(
     () =>
       opts.place === 'note'
@@ -145,7 +144,7 @@ export function useRelationshipEditorConfig(
     [opts.place, undatedSets, activePath, opts.entityIndex],
   );
 
-  const relationshipDirectives = useMemo(() => {
+  const liveExtensions = useMemo(() => {
     const deps = {
       library,
       currentPath,
@@ -155,22 +154,23 @@ export function useRelationshipEditorConfig(
     const heldTags = makeHeldTagsResolver(deps);
     const trackUsage = makeTrackUsageResolver({ ...deps, place: opts.place });
 
-    return buildRelationshipEditorConfig({
-      library,
-      defaultReason: opts.defaultReason,
-      onOpenNote: opts.onOpenNote,
-      place: opts.place,
-      noteOptions: () => notesToPickerOptions(entityIndexRef.current),
-      defaultHolderId: () => defaultHolderId,
-      currentNoteId,
-      heldTags,
-      trackUsage,
-      externalSetConflicts,
-    });
+    return relationshipEditorExtensions(
+      buildRelationshipEditorConfig({
+        library,
+        defaultReason: opts.defaultReason,
+        onOpenNote: (id) => optsRef.current.onOpenNote?.(id),
+        place: opts.place,
+        noteOptions: () => notesToPickerOptions(entityIndexRef.current),
+        defaultHolderId: () => defaultHolderId,
+        currentNoteId,
+        heldTags,
+        trackUsage,
+        externalSetConflicts,
+      }),
+    );
   }, [
     library,
     opts.defaultReason,
-    opts.onOpenNote,
     opts.place,
     defaultHolderId,
     externalSetConflicts,
@@ -186,5 +186,5 @@ export function useRelationshipEditorConfig(
     [library, opts.place, opts.extraMenuItems],
   );
 
-  return { relationshipDirectives, contextMenu };
+  return { liveExtensions, contextMenu };
 }

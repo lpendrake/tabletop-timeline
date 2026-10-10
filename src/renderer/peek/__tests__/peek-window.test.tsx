@@ -4,6 +4,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
+import { EditorView } from '@codemirror/view';
 import { PeekWindow, makeResolveSrc } from '../peek-window';
 
 class StubResizeObserver {
@@ -125,6 +126,29 @@ describe('mounting & states', () => {
     );
     await act(async () => {});
     expect(document.body.querySelector('.markdown-editor-container')).not.toBeNull();
+  });
+
+  it('asks getPreviewExtensions for the loaded file once, and applies what it returns', async () => {
+    setup();
+    const getPreviewExtensions = vi.fn(() =>
+      EditorView.contentAttributes.of({ 'data-probe': 'preview' }),
+    );
+    act(() =>
+      root.render(
+        <PeekWindow
+          path="notes/npcs/bob.md"
+          anchorRect={makeAnchorRect()}
+          stackDepth={0}
+          fetcher={makeResolvedFetcher()}
+          getPreviewExtensions={getPreviewExtensions}
+        />,
+      ),
+    );
+    expect(getPreviewExtensions).not.toHaveBeenCalled();
+    await act(async () => {});
+    expect(getPreviewExtensions).toHaveBeenCalledTimes(1);
+    expect(getPreviewExtensions).toHaveBeenCalledWith({ path: 'notes/npcs/bob.md', title: 'Bob' });
+    expect(document.body.querySelector('[data-probe="preview"]')).not.toBeNull();
   });
 
   it('calls fetcher with the correct path and an AbortSignal', () => {

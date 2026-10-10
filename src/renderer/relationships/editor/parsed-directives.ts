@@ -14,7 +14,7 @@
  * isolation) — see this module's own tests.
  */
 import { StateField, type EditorState } from '@codemirror/state';
-import { embeddedRanges } from '../../shared/markdown-editor/extensions/embedded-ranges';
+import { embeddedRanges } from '../../shared/markdown-editor';
 import { parseDirectives, type ParsedDirective } from '../../../shared/relationships';
 
 export const parsedDirectivesField = StateField.define<ParsedDirective[]>({

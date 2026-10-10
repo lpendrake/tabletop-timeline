@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { EditorSelection, EditorState, type TransactionSpec } from '@codemirror/state';
+import { Compartment, EditorSelection, EditorState, type TransactionSpec } from '@codemirror/state';
 import { EditorView, runScopeHandlers } from '@codemirror/view';
 import {
   history,
@@ -11,21 +11,21 @@ import {
   cursorCharLeft,
 } from '@codemirror/commands';
 import { keymap } from '@codemirror/view';
-import { acceptCompletion, completionStatus, currentCompletions } from '@codemirror/autocomplete';
 import {
-  relationshipDirectives,
-  setDirectiveContext,
-  setExternalSetConflicts,
-  directiveBorderClass,
-  insertDirective,
-  type RelationshipDirectivesConfig,
-} from '../directives';
+  acceptCompletion,
+  completionStatus,
+  currentCompletions,
+  startCompletion,
+} from '@codemirror/autocomplete';
+import { directiveBorderClass, insertDirective } from '../directives';
 import {
-  relationshipDirectiveCompletions,
-  type RelationshipCompletionOptions,
-} from '../directive-completions';
-import { isEditorPopupOpen } from '../../../shared/markdown-editor/extensions/editor-completions';
-import { wikiLinks, setEntityLabels } from '../../../shared/markdown-editor/extensions/wiki-links';
+  relationshipEditorExtensions,
+  relationshipPreviewExtensions,
+  type RelationshipEditorSettings,
+} from '../extensions';
+import type { DirectivePlace, RelationshipCompletionOptions } from '../config';
+import { isEditorPopupOpen, setEntityLabels } from '../../../shared/markdown-editor';
+import { wikiLinks } from '../../../shared/markdown-editor/extensions/wiki-links';
 import { serialiseTemplate } from '../../../../shared/relationships/directives/index';
 import {
   pf2eReputationSpec,
@@ -67,7 +67,7 @@ const NOTES = [
 ];
 
 interface Options {
-  config?: RelationshipDirectivesConfig;
+  config?: { place: DirectivePlace; onOpenNote?: (id: string) => void };
   choices?: Partial<RelationshipCompletionOptions>;
   readOnly?: boolean;
   defaultReason?: string;
@@ -76,21 +76,39 @@ interface Options {
 
 const views: EditorView[] = [];
 
+/** Each editable view's directive compartment and current settings, so a test can swap settings in place. */
+const directiveSlots = new WeakMap<
+  EditorView,
+  { compartment: Compartment; settings: RelationshipEditorSettings }
+>();
+
 function makeView(doc: string, options: Options = {}): EditorView {
-  const config = options.config ?? { place: 'event' };
-  const readOnly = options.readOnly ?? false;
-  const choices: RelationshipCompletionOptions = {
-    noteOptions: () => NOTES,
-    ...options.choices,
+  const { place, onOpenNote } = options.config ?? { place: 'event' };
+  const library = { custom: [], optionAdditions: {} };
+  const compartment = new Compartment();
+  const settings: RelationshipEditorSettings = {
+    library,
+    defaultReason: options.defaultReason ?? 'Unspecified',
+    place,
+    onOpenNote,
+    choices: { noteOptions: () => NOTES, ...options.choices },
   };
+  const directives = options.readOnly
+    ? [
+        relationshipPreviewExtensions({
+          library,
+          title: options.defaultReason ?? '',
+          place,
+          onOpenNote,
+        }),
+        EditorState.readOnly.of(true),
+      ]
+    : compartment.of(relationshipEditorExtensions(settings));
   const extensions = [
     history(),
     keymap.of([...defaultKeymap, ...historyKeymap]),
     wikiLinks({ suggest: async () => [] }),
-    relationshipDirectives({ ...config, readOnly }),
-    ...(readOnly
-      ? [EditorState.readOnly.of(true)]
-      : [relationshipDirectiveCompletions(() => choices)]),
+    directives,
   ];
   const state = EditorState.create({
     doc,
@@ -100,17 +118,19 @@ function makeView(doc: string, options: Options = {}): EditorView {
   const parent = document.createElement('div');
   document.body.appendChild(parent);
   const view = new EditorView({ state, parent });
-  view.dispatch({
-    effects: [
-      setDirectiveContext.of({
-        library: { custom: [], optionAdditions: {} },
-        defaultReason: options.defaultReason ?? 'Unspecified',
-      }),
-      setEntityLabels.of(LABELS),
-    ],
-  });
+  view.dispatch({ effects: setEntityLabels.of(LABELS) });
+  if (!options.readOnly) directiveSlots.set(view, { compartment, settings });
   views.push(view);
   return view;
+}
+
+/** Reconfigures an editable view with new directive settings, as a host's new `liveExtensions` does. */
+function changeSettings(view: EditorView, changes: Partial<RelationshipEditorSettings>): void {
+  const slot = directiveSlots.get(view)!;
+  slot.settings = { ...slot.settings, ...changes };
+  view.dispatch({
+    effects: slot.compartment.reconfigure(relationshipEditorExtensions(slot.settings)),
+  });
 }
 
 afterEach(() => {
@@ -285,6 +305,37 @@ describe('rendering', () => {
     expect(view.dom.querySelector('.cm-note-link')).toBeNull();
   });
 
+  it('a new defaultReason updates the placeholder in place', () => {
+    const view = makeView(`intro ${EMPTY_CHANGE}`, { defaultReason: 'Old title' });
+    caretAt(view, 3);
+    changeSettings(view, { defaultReason: 'New title' });
+    expect(view.dom.querySelector('.cm-directive-placeholder-default')?.textContent).toBe(
+      'New title',
+    );
+    expect(doc(view)).toBe(`intro ${EMPTY_CHANGE}`);
+    expect(head(view)).toBe(3);
+  });
+
+  it('a new library turns an unknown-track directive live; caret and undo kept', () => {
+    const view = makeView(`intro ${UNKNOWN_TRACK}`);
+    caretAt(view, 5);
+    type(view, '!');
+    expect(view.dom.querySelector('.cm-directive-raw')).not.toBeNull();
+
+    changeSettings(view, {
+      library: {
+        custom: [{ ...pf2eReputationSpec, id: 'rp99', name: 'House Rep' }],
+        optionAdditions: {},
+      },
+    });
+    expect(view.dom.querySelector('.cm-directive-raw')).toBeNull();
+    expect(text(view)).toContain('House Rep · Change');
+    expect(head(view)).toBe(6);
+
+    undo(view);
+    expect(doc(view)).toBe(`intro ${UNKNOWN_TRACK}`);
+  });
+
   it('read-only: renders without the delete cross', () => {
     const view = makeView(FULL_CHANGE, { readOnly: true });
     expect(text(view)).toContain('White Tigers');
@@ -388,6 +439,17 @@ describe('editing is typing into the document', () => {
     const view = makeView(FULL_CHANGE);
     view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: EMPTY_CHANGE } });
     expect(doc(view)).toBe(EMPTY_CHANGE);
+  });
+
+  it.each([
+    ['into an empty doc', ''],
+    ['into a doc with no directives', 'just prose now'],
+    ['into a malformed directive mixed with a live one', `{{rp01.change {amount:\n${EMPTY_CHANGE}`],
+    ['into a different directive count', `${EMPTY_CHANGE}\n${FULL_CHANGE}\n${EMPTY_GAINS}`],
+  ])('whole-buffer reload %s passes the guard', (_case, next) => {
+    const view = makeView(`intro ${FULL_CHANGE}\n${EMPTY_GAINS}`);
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: next } });
+    expect(doc(view)).toBe(next);
   });
 
   it('undo steps back through edits normally', () => {
@@ -1021,6 +1083,27 @@ describe('choices', () => {
     expect(doc(view).startsWith(EMPTY_GAINS)).toBe(true);
   });
 
+  it("a 'Create …' pick in flight survives a settings change and writes at the tracked position", async () => {
+    let finish: (v: { key: string }) => void = () => {};
+    const createOption = vi.fn(() => new Promise<{ key: string }>((r) => (finish = r)));
+    const view = makeView(`\n${EMPTY_GAINS}`, { choices: { createOption } });
+    caretAt(view, valueStart(view, 'option'));
+    type(view, 'rival');
+    await openList(view);
+    await settle();
+    keydown(view, 'ArrowDown');
+    keydown(view, 'ArrowUp');
+    press(view, 'Enter');
+    expect(createOption).toHaveBeenCalled();
+    // The host hands in new settings, then the document moves, before the tag exists.
+    changeSettings(view, { defaultReason: 'Renamed event' });
+    view.dispatch({ changes: { from: 0, insert: EMPTY_GAINS } });
+    finish({ key: 'rival' });
+    await vi.waitFor(() => expect(doc(view)).toContain('{option:rival}'));
+    expect(doc(view).indexOf('{option:rival}')).toBeGreaterThan(EMPTY_GAINS.length);
+    expect(doc(view).startsWith(EMPTY_GAINS)).toBe(true);
+  });
+
   it('a Remove tag blank lists only held tags and never offers create', async () => {
     const heldTags = vi.fn(async () => new Map([['e5f6', ['married']]]));
     const view = makeView(LOSES_WITH_HOLDER, {
@@ -1109,7 +1192,7 @@ describe('never nesting', () => {
 });
 
 describe('pointer', () => {
-  function mousedown(el: Element, mods: { ctrlKey?: boolean } = {}): MouseEvent {
+  function mousedown(el: Element, mods: { ctrlKey?: boolean; metaKey?: boolean } = {}): MouseEvent {
     const event = new MouseEvent('mousedown', {
       bubbles: true,
       cancelable: true,
@@ -1129,6 +1212,30 @@ describe('pointer', () => {
     const event = mousedown(note, { ctrlKey: true });
     expect(onOpenNote).toHaveBeenCalledWith('c3d4');
     expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('preview: no delete cross, no completions, Ctrl/Cmd+click opens the note', async () => {
+    const onOpenNote = vi.fn();
+    const view = makeView(FULL_CHANGE, {
+      readOnly: true,
+      config: { place: 'event', onOpenNote },
+    });
+    expect(view.dom.querySelector('.cm-directive-cross')).toBeNull();
+
+    caretAt(view, valueEnd(view, 'holder'));
+    expect(press(view, 'Tab')).toBe(false);
+    startCompletion(view);
+    await settle();
+    expect(completionStatus(view.state)).toBeNull();
+
+    const note = () =>
+      [...view.dom.querySelectorAll('.cm-directive-value-note')].find(
+        (e) => e.textContent === 'The Party',
+      )!;
+    mousedown(note(), { ctrlKey: true });
+    mousedown(note(), { metaKey: true });
+    expect(onOpenNote).toHaveBeenCalledTimes(2);
+    expect(onOpenNote).toHaveBeenCalledWith('c3d4');
   });
 
   it('a click on wording lands the caret in a blank', () => {
@@ -1191,10 +1298,11 @@ describe('undated Set conflicts', () => {
     expect(view.dom.querySelector('.cm-directive-error')).toBeNull();
   });
 
-  it('flags a note Set that conflicts with an undated Set pushed in from another saved file, naming it by title', () => {
+  it('new externalSetConflicts flag the conflict, naming the other note by title', () => {
     const view = makeView(repSet('c3d4', 'a1b2', '-10'), { config: { place: 'note' } });
-    view.dispatch({
-      effects: setExternalSetConflicts.of([
+    expect(view.dom.querySelector('.cm-directive-error')).toBeNull();
+    changeSettings(view, {
+      externalSetConflicts: [
         {
           holder: 'c3d4',
           observer: 'a1b2',
@@ -1202,7 +1310,7 @@ describe('undated Set conflicts', () => {
           path: 'notes/other.md',
           title: 'The Party',
         },
-      ]),
+      ],
     });
 
     const flagged = view.dom.querySelector<HTMLElement>('.cm-directive-error');
