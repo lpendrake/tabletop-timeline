@@ -11,14 +11,10 @@ import {
   type TrackLibrary,
 } from '../../../shared/relationships';
 import type { ExternalSetConflictEntry } from '../domain/external-set-conflicts';
+import type { DirectivePlace } from '../domain/place-for-path';
 import type { PickerOption } from '../../shared/searchable-picker';
 
-/**
- * Whether a document is a note (undated) or an event. Passed to
- * `interpretDirective` as `undated: place === 'note'` — a note may only
- * Set/Add, never Change/Shift/Remove (see `src/shared/relationships/AGENTS.md`).
- */
-export type DirectivePlace = 'note' | 'event';
+export type { DirectivePlace };
 
 /** Which holder a Remove blank's tags should be fetched for, plus the directive's position and the buffer's text so the host can exclude this directive's own delta. */
 export interface HeldTagsQuery {

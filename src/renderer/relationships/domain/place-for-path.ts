@@ -1,4 +1,9 @@
-import type { DirectivePlace } from './config';
+/**
+ * Whether a document is a note (undated) or an event. Passed to
+ * `interpretDirective` as `undated: place === 'note'` — a note may only
+ * Set/Add, never Change/Shift/Remove (see `src/shared/relationships/AGENTS.md`).
+ */
+export type DirectivePlace = 'note' | 'event';
 
 /**
  * The `place` a campaign-relative file path is treated as for relationship

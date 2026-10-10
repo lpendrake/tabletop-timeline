@@ -27,7 +27,7 @@ import { useRelationshipLibrary } from './relationships/hooks/use-relationship-l
 import { RelationshipLibraryProvider } from './relationships/library-context';
 import { viewForKey } from './relationships/domain/view-shortcut';
 import { relationshipPreviewExtensions } from './relationships/editor/extensions';
-import { placeForPath } from './relationships/editor/place-for-path';
+import { placeForPath } from './relationships/domain/place-for-path';
 import '../../src/index.css';
 
 export default function App() {
