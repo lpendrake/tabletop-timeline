@@ -7,7 +7,7 @@
  * (the same extension instance everywhere, so CodeMirror dedupes it).
  *
  * Sources are asked in precedence order and the first non-null result wins,
- * so a more specific source (a relationship directive's blank) can be
+ * so a more specific host source (such as an embedded syntax's fields) can be
  * registered with a higher `Prec` than a general one (`[[` / `@` links).
  */
 import {
@@ -27,7 +27,7 @@ export const completionSources = Facet.define<CompletionSource>();
 /**
  * Completions that set this on themselves (via `completionReactivates`)
  * reopen the list at the caret right after they're picked — used by a
- * directive blank, whose pick moves the caret on to the next blank.
+ * host field that moves the caret on to a next field when picked.
  */
 const reactivating = new WeakSet<Completion>();
 

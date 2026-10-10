@@ -83,7 +83,7 @@ Both StateFields replace their entire value on each matching effect — they do 
 
 ## Completions — `wikiLinkCompletions`
 
-Activated when `config.suggest` is provided. Registered on the shared `completionSources` facet (see `editor-completions.ts`), not its own `autocompletion({ override })`, so it can coexist with relationship directive blanks. Matches the regex `/(?:\[\[|@)[^\]\n|@]*$/` at the cursor — so both `[[query` and `@query` trigger the completion menu (`@` is a shorthand alias).
+Activated when `config.suggest` is provided. Registered on the shared `completionSources` facet (see `editor-completions.ts`), not its own `autocompletion({ override })`, so it can coexist with completion sources a host adds through `liveExtensions`. Matches the regex `/(?:\[\[|@)[^\]\n|@]*$/` at the cursor — so both `[[query` and `@query` trigger the completion menu (`@` is a shorthand alias).
 
 Flow:
 
@@ -133,6 +133,6 @@ The notes editor wires this up via `makePeekWikiLinksConfig()` in `editor-bindin
 - **Decorations do not rebuild on selection change.** Rendering is split (raw text + widget always both shown), so there is nothing selection-dependent left to toggle. Don't reintroduce a `transaction.selection` check into the StateField update guard — it would just cause unnecessary rebuilds.
 - **Never use `Decoration.replace` for a wiki link's `[[…]]` range.** That was the old atomic-swap approach and is what caused the reflow "jump" this design replaced. The raw range only ever gets a `Decoration.mark`; the rendered name is a separate zero-length `Decoration.widget` inserted at `link.to`.
 
-## Relationship directives
+## Embedded host syntax
 
-Live-blank relationship directives are documented in `src/renderer/relationships/editor/AGENTS.md`.
+Wiki links and the `/` menu stay out of text a host declares through the `embeddedRanges` facet (`embedded-ranges.ts`; see the parent `AGENTS.md`). The one current host syntax, relationship directives, is documented in `src/renderer/relationships/editor/AGENTS.md`.

@@ -31,4 +31,37 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    files: ['src/renderer/shared/markdown-editor/**/*.{ts,tsx}', 'src/renderer/peek/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/relationships', '**/relationships/**'],
+              message:
+                'The markdown editor and peek are generic; hosts inject relationship behaviour via liveExtensions / getPreviewExtensions.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/renderer/relationships/domain/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['../editor', '../editor/**', '../../editor', '../../editor/**'],
+              message: 'Pure domain code must not depend on the CodeMirror editor layer.',
+            },
+          ],
+        },
+      ],
+    },
+  },
 );

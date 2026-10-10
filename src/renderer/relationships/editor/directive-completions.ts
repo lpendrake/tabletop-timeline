@@ -1,6 +1,6 @@
 /**
  * Choices for a relationship directive's blank, offered through the editor's
- * shared autocompletion (see `editor-completions.ts`): notes for a holder or
+ * shared autocompletion (the `completionSources` facet in `shared/markdown-editor`): notes for a holder or
  * observer, tags for an option, rungs for an ordinal value. The blank's own
  * text is the query — there is no separate input and no draft; picking
  * writes the chosen key/link into the value and moves the caret on to the

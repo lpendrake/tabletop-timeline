@@ -1,7 +1,7 @@
 /**
  * Pure value logic for relationship directive blanks: validation, stepping,
  * ranking and filtering of choices. No IO, no React, no CodeMirror —
- * `editor/directives.ts` and `editor/directive-completions.ts`
+ * `relationships/editor/directives.ts` and `relationships/editor/directive-completions.ts`
  * wire these into the editor.
  */
 import type { ActionKind, Role, ResolvedTrack } from '../../../shared/relationships';
@@ -141,7 +141,7 @@ function noteLabel(option: PickerOption): string {
 
 /**
  * The note options that match `query` (title/id matching via
- * `shared/entity-match.ts`'s `rankEntityMatch`, like the `@` link search —
+ * `src/renderer/shared/entity-match.ts`'s `rankEntityMatch`, like the `@` link search —
  * not file-path-segment matching, so "The Whispering Claw" is found by its
  * title), each with its match rank. An empty query matches every note with
  * the same rank. Input order is kept for ties.
@@ -223,7 +223,7 @@ export function sectionNotes(input: NoteSectionInput): SectionedNote[] {
 
 /**
  * Ranks labelled choices (tags, rungs) by their label the same way menu
- * search does (`shared/search/rank.ts`): prefix, then word-start, then
+ * search does (`src/renderer/shared/search/rank.ts`): prefix, then word-start, then
  * substring, keeping the given order for ties and for an empty query.
  */
 export function rankLabelled(options: readonly PickerOption[], query: string): PickerOption[] {

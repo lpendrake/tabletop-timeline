@@ -7,7 +7,7 @@
  *   └ envelope ──┘└ wording ─┘└delim┘│  └┘ …                           │     └┘
  *                                    value                      empty value (a point)
  *
- * No CodeMirror, no React, no IO — `editor/directives.ts` turns this
+ * No CodeMirror, no React, no IO — `relationships/editor/directives.ts` turns this
  * into decorations, atomic ranges and a transaction filter.
  */
 import {
