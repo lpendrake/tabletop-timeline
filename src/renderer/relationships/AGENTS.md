@@ -8,7 +8,7 @@ The Relationships view shows relationship values derived from directives, one ta
 
 - `components/top-bar.tsx` — tabs, as-of date, problems badge
 
-The toolbar (`components/toolbar.tsx`) holds the Holder/Toward picker built on `shared/searchable-picker`, scoped search, and sort buttons. The sort buttons serve ordinal and categorical tabs only; numeric tabs have none and sort by clicking column titles (below). The numeric tab places the toolbar in its sticky header; the placeholder layout renders it above the body.
+The toolbar (`components/toolbar.tsx`) holds the Holder/Toward picker built on `shared/searchable-picker`, scoped search, and sort buttons. The sort buttons serve ordinal tabs only; numeric tabs sort by clicking column titles (below) and categorical tabs have no sort control. The holder picker is hidden on categorical tabs, which show every holder. The numeric tab places the toolbar in its sticky header; the placeholder layout renders it above the body.
 
 State comes from `hooks/use-relationships.ts`, which only wires pure `domain/` functions to React.
 
@@ -21,7 +21,10 @@ State comes from `hooks/use-relationships.ts`, which only wires pure `domain/` f
   - Resizing: a grip on each title's right edge (drag, double-click to reset, Left/Right ±8px) wired by `hooks/use-column-resize.ts`. Widths and limits live in `domain/numeric-columns.ts`; `hooks/use-column-widths.ts` remembers them per campaign. The panel is as wide as its columns and the plot takes the rest
   - Every second row of a group is striped across panel and plot, its expanded line included (the stripe is on the row wrapper); bands behind the plot are tinted with their own colour (`color-mix` of theme vars, no new tokens)
   - The axis labels and each row's plot draw into a `.rel-num-layer`, inset by `--rel-inner-pad` on both sides so a dot or label at either end of the range stays inside and nothing overhangs `.rel-view`; a band, line or dot position is a fraction of that inset box
-- Ordinal and categorical tabs: `components/placeholder-tab-body.tsx` is temporary and serves only these until #276–#278 add `components/<kind>-tab/`; it will then be removed
+- Categorical tab: `components/categorical-tab/` — a grid of cards, grouped by tag or by entity with the Group by switch. `categorical-card.tsx` is the one card design for both groupings (header with chip or drag handle plus count, then rows of holder names); `name-list.tsx` truncates lists (`+N more` / `show less`, expanded ids kept in the tab, not persisted)
+  - Clicking a name opens one `TagPopover`, owned by `categorical-tab.tsx` and anchored to that name's button. The anchor must stay mounted: the popover is closed when the grouping or query changes or its entry leaves the view (`openedNameShown`)
+  - Cards come from `domain/categorical.ts` (view, truncation, list ids, move edges) and history from `domain/categorical-history.ts`; entity cards reorder with `useRowReorder` under `entityCardsKey`
+- Ordinal tabs: `components/placeholder-tab-body.tsx` is temporary and serves only these until #276 adds `components/ordinal-tab/`; it will then be removed
 - `relationships-view.tsx` picks the layout from the active track's `kind`
 
 Shared building blocks every tab layout reuses, instead of re-implementing:

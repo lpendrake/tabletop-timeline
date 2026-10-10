@@ -79,6 +79,11 @@ export function rungColour(track: OrdinalTrack, rungKey: string): ScaleColour {
   return scaleColourAt(index, track.rungIndex(track.initial), track.rungs.length);
 }
 
+/** Colour of a categorical option. Options have no order, so every option is accent gold. */
+export function optionColour(): ScaleColour {
+  return ACCENT;
+}
+
 /**
  * A CSS colour expressing intensity: a mix of the tone's variable into the neutral
  * variable (negative/positive), or the plain variable (neutral/accent). CSS vars only.

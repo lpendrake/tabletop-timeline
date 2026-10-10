@@ -12,6 +12,7 @@ export type {
 } from './types';
 export { computeCaretPlacement } from './caret-position';
 export type { CaretPlacement, CaretSide } from './caret-position';
+export { placementStyle } from './placement-style';
 export {
   isContextMenuOpen,
   onContextMenuOpenChange,

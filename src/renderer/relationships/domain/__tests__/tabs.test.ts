@@ -3,6 +3,7 @@ import type { ViewGroup, ViewRow } from '../view-rows';
 import type { Ledger } from '../../../../shared/relationships/model';
 import { EMPTY_TRACK_LIBRARY } from '../../../../shared/relationships/registry';
 import {
+  bodyNotice,
   buildTabs,
   emptyStateText,
   nextTabIndex,
@@ -39,6 +40,32 @@ const ledger = (track: string, holder = 'h', observer = 'o'): Ledger => ({
   deltas: [],
 });
 const library = EMPTY_TRACK_LIBRARY;
+
+describe('tab counts', () => {
+  const delta = (mirrored?: boolean) => ({ mirrored }) as unknown as Ledger['deltas'][number];
+
+  it('counts a mutual pair once, ignoring the mirrored ledger', () => {
+    const own: Ledger = { ...ledger('tg01', 'a', 'b'), deltas: [delta(), delta()] };
+    const mirror: Ledger = { ...ledger('tg01', 'b', 'a'), deltas: [delta(true), delta(true)] };
+    const tabs = buildTabs({ library, ledgers: [own, mirror], invalid: [] });
+    expect(tabs.find((t) => t.trackId === 'tg01')?.count).toBe(1);
+  });
+
+  it('counts a ledger that mixes own and mirrored deltas', () => {
+    const mixed: Ledger = { ...ledger('tg01'), deltas: [delta(true), delta()] };
+    const tabs = buildTabs({ library, ledgers: [mixed], invalid: [] });
+    expect(tabs.find((t) => t.trackId === 'tg01')?.count).toBe(1);
+  });
+
+  it('leaves numeric counts unchanged', () => {
+    const numeric = (holder: string): Ledger => ({
+      ...ledger('rp01', holder),
+      deltas: [delta(), delta()],
+    });
+    const tabs = buildTabs({ library, ledgers: [numeric('a'), numeric('b')], invalid: [] });
+    expect(tabs.find((t) => t.trackId === 'rp01')?.count).toBe(2);
+  });
+});
 
 describe('tabs', () => {
   it('tabs follow track order and count relationships', () => {
@@ -108,5 +135,37 @@ describe('tabBodyNotice', () => {
   it('tabBodyNotice: any group with rows shows no notice', () => {
     expect(tabBodyNotice([group(0), group(2)], '', null)).toBeNull();
     expect(tabBodyNotice([group(1)], 'zzz', 'No matches')).toBeNull();
+  });
+});
+
+describe('bodyNotice', () => {
+  it('bodyNotice gives the empty-track notice when there are no rows and no query', () => {
+    expect(bodyNotice(false, '', 'No matches')).toEqual({ kind: 'empty-track' });
+    expect(bodyNotice(false, '  ', null)).toEqual({ kind: 'empty-track' });
+  });
+
+  it('bodyNotice gives the no-match notice when a query matches nothing', () => {
+    expect(bodyNotice(false, 'zzz', 'No matches')).toEqual({
+      kind: 'no-match',
+      message: 'No matches',
+    });
+    expect(bodyNotice(false, 'zzz', null)).toEqual({ kind: 'no-match', message: '' });
+  });
+
+  it('bodyNotice gives no notice when there are rows', () => {
+    expect(bodyNotice(true, 'zzz', 'No matches')).toBeNull();
+  });
+
+  it('tabBodyNotice behaves as before', () => {
+    const group = (rows: number): ViewGroup => ({
+      holderId: 'h',
+      label: 'Holder',
+      listKey: 'rp01:h',
+      collapsed: false,
+      rows: Array.from({ length: rows }, () => ({}) as ViewRow),
+    });
+    expect(tabBodyNotice([], '', 'x')).toEqual({ kind: 'empty-track' });
+    expect(tabBodyNotice([group(0)], 'zzz', 'x')).toEqual({ kind: 'no-match', message: 'x' });
+    expect(tabBodyNotice([group(0), group(1)], '', null)).toBeNull();
   });
 });
