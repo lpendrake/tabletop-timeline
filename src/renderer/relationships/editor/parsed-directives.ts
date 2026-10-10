@@ -3,8 +3,8 @@
  * change and shares the result across every extension that would otherwise
  * call `parseDirectives` on the whole buffer itself: `directives.ts`
  * (its model, guard and keymaps), `directive-completions.ts`,
- * `wiki-links.ts` (`directiveRanges`, to skip `[[id]]` occurrences inside a
- * directive's role tokens) and `slash-trigger.ts` (no `/` menu inside one).
+ * and the generic editor (via `embeddedRanges`, so wiki links and the `/` menu
+ * stay out of a directive's text).
  *
  * `parsedDirectivesField` recomputes only when `tr.docChanged` — a
  * selection-only transaction (moving the caret between blanks)
@@ -14,6 +14,7 @@
  * isolation) — see this module's own tests.
  */
 import { StateField, type EditorState } from '@codemirror/state';
+import { embeddedRanges } from '../../shared/markdown-editor/extensions/embedded-ranges';
 import { parseDirectives, type ParsedDirective } from '../../../shared/relationships';
 
 export const parsedDirectivesField = StateField.define<ParsedDirective[]>({
@@ -22,6 +23,8 @@ export const parsedDirectivesField = StateField.define<ParsedDirective[]>({
     if (!tr.docChanged) return value;
     return parseDirectives(tr.state.doc.toString()).directives;
   },
+  provide: (f) =>
+    embeddedRanges.of((state) => state.field(f).map((d) => ({ from: d.from, to: d.to }))),
 });
 
 /** Every parsed directive in `state`'s document. */
@@ -29,14 +32,4 @@ export function directivesIn(state: EditorState): ParsedDirective[] {
   return (
     state.field(parsedDirectivesField, false) ?? parseDirectives(state.doc.toString()).directives
   );
-}
-
-/**
- * The source `{from,to}` range of every directive in `state`'s document.
- * Backed by the shared field, not re-implemented per caller — `wiki-links.ts`
- * uses this to skip `[[id]]` occurrences that live inside a directive's role
- * tokens, since those render as part of the directive's own form block.
- */
-export function directiveRanges(state: EditorState): { from: number; to: number }[] {
-  return directivesIn(state).map((d) => ({ from: d.from, to: d.to }));
 }

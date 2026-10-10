@@ -2,7 +2,11 @@
 import { describe, it, expect } from 'vitest';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { parsedDirectivesField, directivesIn, directiveRanges } from '../parsed-directives';
+import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
+import { ensureSyntaxTree } from '@codemirror/language';
+import { embeddedRangesIn } from '../../../shared/markdown-editor/extensions/embedded-ranges';
+import { shouldOpenSlashMenu } from '../../../shared/markdown-editor/extensions/slash-trigger';
+import { parsedDirectivesField, directivesIn } from '../parsed-directives';
 import { serialiseTemplate } from '../../../../shared/relationships/directives/index';
 import { pf2eReputationSpec } from '../../../../shared/relationships/system/index';
 
@@ -54,10 +58,23 @@ describe('parsedDirectivesField', () => {
     expect(directivesIn(state)[0].trackId).toBe('rp01');
   });
 
-  it('directiveRanges reports the source range of every directive', () => {
+  it('parsedDirectivesField contributes directive spans to embeddedRanges', () => {
     const view = makeView(`x ${FULL_CHANGE_DIRECTIVE} y`);
-    const ranges = directiveRanges(view.state);
-    expect(ranges).toEqual([{ from: 2, to: 2 + FULL_CHANGE_DIRECTIVE.length }]);
+    expect(embeddedRangesIn(view.state)).toEqual([
+      { from: 2, to: 2 + FULL_CHANGE_DIRECTIVE.length },
+    ]);
     view.destroy();
+  });
+
+  it('blocks the slash menu inside a directive', () => {
+    const directive =
+      '{{rp01.change Rep change: {amount:1} {observer:} rep for {holder:} — {reason:him }}}';
+    const extensions = [markdown({ base: markdownLanguage }), parsedDirectivesField];
+    const state = EditorState.create({ doc: directive, extensions });
+    ensureSyntaxTree(state, state.doc.length);
+    expect(shouldOpenSlashMenu(state, directive.indexOf('him ') + 4)).toBe(false);
+    const after = EditorState.create({ doc: `${directive} `, extensions });
+    ensureSyntaxTree(after, after.doc.length);
+    expect(shouldOpenSlashMenu(after, after.doc.length)).toBe(true);
   });
 });
