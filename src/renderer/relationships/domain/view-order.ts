@@ -30,11 +30,6 @@ export function groupListKey(trackId: string): string {
   return `${trackId}:*`;
 }
 
-/** Key for the order of entity cards on a categorical track's by-entity view (`<track>:entity-cards`). */
-export function entityCardsKey(trackId: string): string {
-  return `${trackId}:entity-cards`;
-}
-
 export function defaultViewOrder(): ViewOrder {
   return { version: 2, order: {}, expanded: {}, collapsed: {} };
 }

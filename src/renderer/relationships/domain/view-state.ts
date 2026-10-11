@@ -20,7 +20,6 @@ import { scopeLabel, scopesForKind, type SearchScope } from './search';
 import { isColumnSort, sortLabel, sortModesForKind, type RowSort, type SortMode } from './sort';
 import {
   applyRowMove,
-  entityCardsKey,
   groupListKey,
   withListOrder,
   type RowMove,
@@ -145,16 +144,14 @@ export function asOfLabelFor(now: number): string | null {
 }
 
 /**
- * The ids currently shown for `listKey`: the entity ids with a card for the
- * entity-cards list, holder ids for a group list, else that group's observer ids.
+ * The ids currently shown for `listKey`: holder ids for a group list, else
+ * that group's observer ids.
  */
 export function visibleIdsForList(
   groups: readonly ViewGroup[],
   trackId: string,
   listKey: string,
-  entityCardIds: readonly string[] = [],
 ): string[] {
-  if (listKey === entityCardsKey(trackId)) return [...entityCardIds];
   if (listKey === groupListKey(trackId)) return groups.map((g) => g.holderId);
   const group = groups.find((g) => g.listKey === listKey);
   return group ? group.rows.map((r) => r.observerId) : [];
@@ -168,8 +165,7 @@ export function moveInViewOrder(
   listKey: string,
   id: string,
   to: RowMove,
-  entityCardIds?: readonly string[],
 ): ViewOrder {
-  const visible = visibleIdsForList(groups, trackId, listKey, entityCardIds);
+  const visible = visibleIdsForList(groups, trackId, listKey);
   return withListOrder(viewOrder, listKey, applyRowMove(visible, id, to));
 }

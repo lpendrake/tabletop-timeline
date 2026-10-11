@@ -5,7 +5,6 @@ export type { ViewOrder, RowMove, MoveRow, RowDragPayload, DropTarget } from './
 export {
   rowListKey,
   groupListKey,
-  entityCardsKey,
   defaultViewOrder,
   parseViewOrder,
   serialiseViewOrder,

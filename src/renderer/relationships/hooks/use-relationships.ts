@@ -339,10 +339,8 @@ export function useRelationships(options: UseRelationshipsOptions): Relationship
 
   const groupsRef = useRef<ViewGroup[]>(view.groups);
   groupsRef.current = view.groups;
-  const entityCardIdsRef = useRef<string[]>([]);
-  entityCardIdsRef.current = categorical ? categorical.sections.map((c) => c.id) : [];
 
-  // The view is empty for categorical tracks, so counts come from the categorical view.
+  // The view is empty for categorical tracks, so counts come from the categorical table.
   const counts = categorical ?? view;
 
   const hasQuery = query.trim() !== '';
@@ -396,7 +394,7 @@ export function useRelationships(options: UseRelationshipsOptions): Relationship
     categorical,
     grouped: view.grouped,
     groupsListKey: activeTrackId ? groupListKey(activeTrackId) : null,
-    canDrag: categorical ? false : view.canDrag,
+    canDrag: view.canDrag,
     toggleRow: (listKey, observerId) =>
       setViewOrder((prev) => withToggledExpanded(prev, listKey, observerId)),
     toggleGroup: (holderId) => {
@@ -406,15 +404,7 @@ export function useRelationships(options: UseRelationshipsOptions): Relationship
     moveRow: (listKey, id, to) => {
       if (!activeTrackId) return;
       setViewOrder((prev) =>
-        moveInViewOrder(
-          prev,
-          groupsRef.current,
-          activeTrackId,
-          listKey,
-          id,
-          to,
-          entityCardIdsRef.current,
-        ),
+        moveInViewOrder(prev, groupsRef.current, activeTrackId, listKey, id, to),
       );
     },
     labelFor,

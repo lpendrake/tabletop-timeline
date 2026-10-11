@@ -7,7 +7,8 @@ import {
   resolveSortMode,
   visibleIdsForList,
 } from '../view-state';
-import { defaultViewOrder, entityCardsKey, groupListKey, rowListKey } from '../view-order';
+import { defaultViewOrder, groupListKey, rowListKey } from '../view-order';
+import type { ViewGroup, ViewRow } from '../view-rows';
 
 const ledger = (track: string, holder: string, observer: string): Ledger => ({
   holder,
@@ -45,25 +46,42 @@ describe('buildHolderPicker', () => {
   });
 });
 
-describe('entity-cards order', () => {
-  const key = entityCardsKey('t1');
+describe('row and group moves', () => {
+  // Only holderId, listKey and observerId are read by the move helpers.
+  const row = (observerId: string) => ({ observerId }) as ViewRow;
+  const group = (holderId: string, observers: string[]): ViewGroup => ({
+    holderId,
+    label: holderId,
+    listKey: rowListKey('t1', holderId),
+    collapsed: false,
+    rows: observers.map(row),
+  });
+  const groups: ViewGroup[] = [group('a', ['x', 'y', 'z']), group('b', ['p', 'q'])];
 
-  it('moving an entity card rewrites only the entity-cards list', () => {
-    const viewOrder = {
-      ...defaultViewOrder(),
-      order: { [rowListKey('t1', 'a')]: ['x', 'y'], [groupListKey('t1')]: ['a', 'b'] },
-    };
-    const moved = moveInViewOrder(viewOrder, [], 't1', key, 'c', 'top', ['a', 'b', 'c']);
-    expect(moved.order[key]).toEqual(['c', 'a', 'b']);
-    expect(moved.order[rowListKey('t1', 'a')]).toEqual(['x', 'y']);
-    expect(moved.order[groupListKey('t1')]).toEqual(['a', 'b']);
-    expect(visibleIdsForList([], 't1', key, ['a', 'b'])).toEqual(['a', 'b']);
+  it("visible ids are a group's observers or the holders of the group list", () => {
+    expect(visibleIdsForList(groups, 't1', rowListKey('t1', 'a'))).toEqual(['x', 'y', 'z']);
+    expect(visibleIdsForList(groups, 't1', groupListKey('t1'))).toEqual(['a', 'b']);
+    expect(visibleIdsForList(groups, 't1', 't1:unknown')).toEqual([]);
   });
 
-  it('moving an entity card keeps saved positions for entities that have no card right now', () => {
-    const viewOrder = { ...defaultViewOrder(), order: { [key]: ['a', 'gone', 'b'] } };
-    const moved = moveInViewOrder(viewOrder, [], 't1', key, 'b', 'top', ['a', 'b']);
-    expect(moved.order[key]).toEqual(['b', 'a', 'gone']);
+  it('moving a row or a group rewrites only that list', () => {
+    const viewOrder = { ...defaultViewOrder(), order: { [rowListKey('t1', 'b')]: ['q', 'p'] } };
+    const rowMoved = moveInViewOrder(viewOrder, groups, 't1', rowListKey('t1', 'a'), 'z', 'top');
+    expect(rowMoved.order[rowListKey('t1', 'a')]).toEqual(['z', 'x', 'y']);
+    expect(rowMoved.order[rowListKey('t1', 'b')]).toEqual(['q', 'p']);
+
+    const groupMoved = moveInViewOrder(viewOrder, groups, 't1', groupListKey('t1'), 'b', 'top');
+    expect(groupMoved.order[groupListKey('t1')]).toEqual(['b', 'a']);
+    expect(groupMoved.order[rowListKey('t1', 'b')]).toEqual(['q', 'p']);
+  });
+
+  it('a move keeps saved positions of rows that are not visible right now', () => {
+    const viewOrder = {
+      ...defaultViewOrder(),
+      order: { [rowListKey('t1', 'a')]: ['x', 'gone', 'y'] },
+    };
+    const moved = moveInViewOrder(viewOrder, groups, 't1', rowListKey('t1', 'a'), 'y', 'top');
+    expect(moved.order[rowListKey('t1', 'a')]).toEqual(['y', 'x', 'z', 'gone']);
   });
 });
 

@@ -273,7 +273,7 @@ describe('use-relationships', () => {
       act(() => latest.selectTab('tg01'));
     }
 
-    it('a categorical track exposes a categorical view, empty groups and no picker', async () => {
+    it('a categorical track exposes the table, empty groups and no picker', async () => {
       await mountCategorical();
       expect(latest.activeTrack?.kind).toBe('categorical');
       expect(latest.categorical).not.toBeNull();
@@ -281,16 +281,27 @@ describe('use-relationships', () => {
       expect(latest.categorical?.total).toBe(3);
       expect(latest.groups).toEqual([]);
       expect(latest.holderPicker.show).toBe(false);
+      expect(latest.canDrag).toBe(false);
+
+      act(() => latest.setQuery('dax'));
+      expect(latest.canDrag).toBe(false);
+      act(() => latest.setQuery('nothing-like-this'));
+      expect(latest.canDrag).toBe(false);
+      act(() => latest.setQuery(''));
+      act(() => latest.setGroupBy('tag'));
+      expect(latest.canDrag).toBe(false);
     });
 
-    it('a numeric track still exposes groups and no categorical view', async () => {
+    it('numeric tracks are unaffected', async () => {
       await mountCategorical();
       act(() => latest.selectTab('rp01'));
       expect(latest.categorical).toBeNull();
       expect(latest.groups.length).toBeGreaterThan(0);
+      expect(latest.groupBy).toBe('holder');
+      expect(latest.canDrag).toBe(true);
     });
 
-    it('N of M and the empty message come from the categorical counts', async () => {
+    it('N of M and the empty message come from the table counts', async () => {
       await mountCategorical();
       act(() => latest.setQuery('dax'));
       expect(latest.categorical?.matched).toBe(1);
@@ -300,13 +311,16 @@ describe('use-relationships', () => {
       expect(latest.emptyMessage).toContain('nothing-like-this');
     });
 
-    it('changing group-by updates the view and is restored after remount', async () => {
+    it('changing group-by updates the table, persists per campaign and track, and survives a remount', async () => {
       await mountCategorical();
       act(() => latest.setGroupBy('tag'));
       expect(latest.groupBy).toBe('tag');
       expect(latest.categorical?.groupBy).toBe('tag');
 
+      expect(loadGroupBy('/camp-a', 'tg01')).toBe('tag');
+      expect(loadGroupBy('/camp-a', 'rp01')).toBe('holder');
       act(() => latest.selectTab('rp01'));
+      expect(latest.groupBy).toBe('holder');
       act(() => latest.selectTab('tg01'));
       expect(latest.groupBy).toBe('tag');
 
@@ -318,11 +332,13 @@ describe('use-relationships', () => {
       expect(latest.categorical?.groupBy).toBe('tag');
     });
 
-    it('categorical entries are not rebuilt on query keystrokes', async () => {
+    it('entries are not rebuilt on query keystrokes', async () => {
       await mountCategorical();
       expect(state.buildEntriesSpy).toHaveBeenCalledTimes(1);
       act(() => latest.setQuery('d'));
       act(() => latest.setQuery('da'));
+      expect(state.buildEntriesSpy).toHaveBeenCalledTimes(1);
+      act(() => latest.setGroupBy('tag'));
       expect(state.buildEntriesSpy).toHaveBeenCalledTimes(1);
     });
 

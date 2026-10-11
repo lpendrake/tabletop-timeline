@@ -21,7 +21,7 @@ State comes from `hooks/use-relationships.ts`, which only wires pure `domain/` f
   - Resizing: a grip on each title's right edge (drag, double-click to reset, Left/Right ±8px) wired by `hooks/use-column-resize.ts`. Widths and limits live in `domain/numeric-columns.ts`; `hooks/use-column-widths.ts` remembers them per campaign. The panel is as wide as its columns and the plot takes the rest
   - Every second row of a group is striped across panel and plot, its expanded line included (the stripe is on the row wrapper); bands behind the plot are tinted with their own colour (`color-mix` of theme vars, no new tokens)
   - The axis labels and each row's plot draw into a `.rel-num-layer`, inset by `--rel-inner-pad` on both sides so a dot or label at either end of the range stays inside and nothing overhangs `.rel-view`; a band, line or dot position is a fraction of that inset box
-- Categorical tab: `components/categorical-tab/` — the body is a temporary placeholder while the table UI lands. The model is a single table, Holder | Tag | → / ⇄ | Observer | Reason, in sections by holder or by tag (the Group by switch), from `domain/categorical.ts`; row history comes from `domain/categorical-history.ts`
+- Categorical tab: `components/categorical-tab/` — the body is a temporary placeholder while the table UI lands. The model is a single table, Holder | Tag | → / ⇄ | Observer | Reason, in sections by holder (A–Z) or by tag (spec order) via the Group by switch, never reorderable, from `domain/categorical.ts`; row history comes from `domain/categorical-history.ts`
 - Ordinal tabs: `components/placeholder-tab-body.tsx` is temporary and serves only these until #276 adds `components/ordinal-tab/`; it will then be removed
 - `relationships-view.tsx` picks the layout from the active track's `kind`
 
@@ -50,7 +50,7 @@ The view is full-bleed: `.rel-view` has no padding, and the top bar's tabs, the 
 
 - No logic in hooks/components — search tokenising and matching, highlight ranges, sort comparators, tab derivation, picker grouping, scale colour are pure `domain/` functions with tests
 - Colours from the theme ramp by position (`scaleNegative/Neutral/Positive`, accent gold when the initial is at the bottom) — specs store no colours, no hex
-- Persistence split: selected tab, holder and numeric column widths in localStorage keyed by campaign (`view-state-persistence.ts`), order/expanded/collapsed in `relationships/view-order.json` keyed by track + holder (`rp01:<holderId>`, `rp01:*`, `tg01:entity-cards`), sparse and advisory (unlisted rows append alphabetically, stale entries ignored and kept)
+- Persistence split: selected tab, holder and numeric column widths in localStorage keyed by campaign (`view-state-persistence.ts`), order/expanded/collapsed in `relationships/view-order.json` keyed by track + holder (`rp01:<holderId>`, `rp01:*`), sparse and advisory (unlisted rows append alphabetically, stale entries ignored and kept)
 - History steps computed only for expanded or search-opened rows
 - Titles from the relationship index's path → title map
 - Problems badge counts only invalid directives (unfinished drafts never reported)
