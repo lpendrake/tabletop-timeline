@@ -62,11 +62,8 @@ export function RelationshipsView({
           toolbar={
             <Toolbar {...state}>
               <GroupBySwitch groupBy={state.categorical.groupBy} onChange={state.setGroupBy} />
-              <span className="rel-cat-hint">Click a name for its history and source</span>
             </Toolbar>
           }
-          onOpenById={onOpenById}
-          onOpenEvent={onOpenEvent}
         />
       ) : activeTrack ? (
         <>

@@ -56,28 +56,33 @@ describe('relationships view persistence', () => {
     expect(loadColumnWidths('/c1')).toEqual(wide);
   });
 
-  it('group-by defaults to tag', () => {
-    expect(loadGroupBy('/c1', 'tg01')).toBe('tag');
+  it('group-by defaults to holder', () => {
+    expect(loadGroupBy('/c1', 'tg01')).toBe('holder');
   });
 
   it('group-by round-trips per campaign and per track', () => {
     saveSelectedTab('/c1', 'at01');
-    saveGroupBy('/c1', 'tg01', 'entity');
-    saveGroupBy('/c1', 'tg02', 'tag');
-    saveGroupBy('/c2', 'tg02', 'entity');
-    expect(loadGroupBy('/c1', 'tg01')).toBe('entity');
-    expect(loadGroupBy('/c1', 'tg02')).toBe('tag');
-    expect(loadGroupBy('/c2', 'tg02')).toBe('entity');
-    expect(loadGroupBy('/c2', 'tg01')).toBe('tag');
+    saveGroupBy('/c1', 'tg01', 'tag');
+    saveGroupBy('/c1', 'tg02', 'holder');
+    saveGroupBy('/c2', 'tg02', 'tag');
+    expect(loadGroupBy('/c1', 'tg01')).toBe('tag');
+    expect(loadGroupBy('/c1', 'tg02')).toBe('holder');
+    expect(loadGroupBy('/c2', 'tg02')).toBe('tag');
+    expect(loadGroupBy('/c2', 'tg01')).toBe('holder');
     expect(loadSelectedTab('/c1')).toBe('at01');
   });
 
-  it('corrupt group-by storage falls back to tag', () => {
+  it('a stored legacy entity group-by loads as holder', () => {
+    saveGroupBy('/c1', 'tg01', 'entity' as never);
+    expect(loadGroupBy('/c1', 'tg01')).toBe('holder');
+  });
+
+  it('corrupt group-by storage falls back to holder', () => {
     localStorage.setItem('relationships-view:/c1', 'not-json');
-    expect(loadGroupBy('/c1', 'tg01')).toBe('tag');
+    expect(loadGroupBy('/c1', 'tg01')).toBe('holder');
     localStorage.setItem('relationships-view:/c1', JSON.stringify({ groupBy: { tg01: 'bogus' } }));
-    expect(loadGroupBy('/c1', 'tg01')).toBe('tag');
+    expect(loadGroupBy('/c1', 'tg01')).toBe('holder');
     localStorage.setItem('relationships-view:/c1', JSON.stringify({ groupBy: 'junk' }));
-    expect(loadGroupBy('/c1', 'tg01')).toBe('tag');
+    expect(loadGroupBy('/c1', 'tg01')).toBe('holder');
   });
 });

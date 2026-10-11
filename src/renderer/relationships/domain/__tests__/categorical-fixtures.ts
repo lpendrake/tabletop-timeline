@@ -7,7 +7,6 @@ import {
 } from '../../../../shared/relationships';
 import { buildBaseRows } from '../view-rows';
 import { buildCategoricalEntries } from '../categorical';
-import { defaultViewOrder } from '../view-order';
 
 /** The built-in relationship tags: member, employee, customer, hates; mutual married, business-partner. */
 export const tags = resolveTrack('tg01', EMPTY_TRACK_LIBRARY) as TagTrack;
@@ -23,8 +22,6 @@ export const NAMES: Record<string, string> = {
 export const labelFor = (id: string) => NAMES[id] ?? id;
 
 export const NOW = 1000;
-
-export const viewOrder = defaultViewOrder;
 
 /** A tag delta; undated and declared in `notes/x.md` unless overridden. */
 export function tagDelta(
@@ -68,14 +65,18 @@ export function mutualPair(
   ];
 }
 
-export function entriesFor(ledgers: Ledger[], now = NOW) {
+export function entriesFor(
+  ledgers: Ledger[],
+  titleByPath: ReadonlyMap<string, string> = new Map(),
+  now = NOW,
+) {
   const rows = buildBaseRows({
     ledgers,
     track: tags,
     trackId: tags.id,
     now,
-    titleByPath: new Map(),
+    titleByPath,
     labelFor,
   });
-  return buildCategoricalEntries(rows, tags, labelFor);
+  return buildCategoricalEntries(rows, tags, labelFor, now, titleByPath);
 }

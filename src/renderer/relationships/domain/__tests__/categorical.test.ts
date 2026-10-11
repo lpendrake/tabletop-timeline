@@ -1,21 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import type { Ledger } from '../../../../shared/relationships';
+import { CalendarProvider } from '../../../timeline/calendar/provider';
 import {
-  MUTUAL_LIMIT,
-  NAME_LIMIT,
-  deriveCategoricalView,
-  groupByChoiceKey,
-  nameListId,
-  findShownName,
-  isSearching,
-  listLimit,
-  nameTag,
+  deriveCategoricalTable,
   parseGroupBy,
   toggledId,
-  visibleNames,
   type CategoricalGroupBy,
-  type CategoricalView,
+  type CategoricalTable,
 } from '../categorical';
-import { entityCardsKey, type ViewOrder } from '../view-order';
 import type { SearchScope } from '../search';
 import {
   NOW,
@@ -26,334 +18,215 @@ import {
   mutualPair,
   tagDelta,
   tags,
-  viewOrder,
 } from './categorical-fixtures';
 
-const ALL: SearchScope[] = ['name', 'group', 'tag'];
+beforeEach(() => {
+  CalendarProvider._reset();
+});
 
-function view(
-  ledgers: ReturnType<typeof ledger>[],
-  over: {
-    groupBy?: CategoricalGroupBy;
-    query?: string;
-    enabledScopes?: SearchScope[];
-    viewOrder?: ViewOrder;
-  } = {},
-): CategoricalView {
-  return deriveCategoricalView(entriesFor(ledgers), {
+const ALL: SearchScope[] = ['holder', 'tag', 'observer'];
+
+interface Setup {
+  groupBy?: CategoricalGroupBy;
+  query?: string;
+  enabledScopes?: SearchScope[];
+  titles?: Map<string, string>;
+}
+
+function table(ledgers: Ledger[], setup: Setup = {}): CategoricalTable {
+  return deriveCategoricalTable(entriesFor(ledgers, setup.titles), {
     track: tags,
-    trackId: tags.id,
-    groupBy: over.groupBy ?? 'tag',
-    query: over.query ?? '',
-    enabledScopes: over.enabledScopes ?? ALL,
-    viewOrder: over.viewOrder ?? viewOrder(),
+    groupBy: setup.groupBy ?? 'holder',
+    query: setup.query ?? '',
+    enabledScopes: setup.enabledScopes ?? ALL,
     labelFor,
   });
 }
 
-const sample = () => [
-  holds('zara', 'guild', 'member'),
-  holds('anna', 'guild', 'member'),
-  holds('mira', 'inn', 'member'),
-  holds('dax', 'inn', 'customer'),
-  ...mutualPair('zara', 'anna', 'married'),
-];
+/** Member: Zara and Anna at the guild, Mira at the inn; Dax is a customer; Zara and Anna are married. */
+function sample(): Ledger[] {
+  return [
+    holds('zara', 'guild', 'member'),
+    holds('anna', 'guild', 'member'),
+    holds('mira', 'inn', 'member'),
+    holds('dax', 'inn', 'customer'),
+    ...mutualPair('zara', 'anna', 'married'),
+  ];
+}
 
-describe('buildCategoricalEntries', () => {
-  it('only options held at now become entries', () => {
-    const entries = entriesFor([
-      holds('zara', 'guild', 'member', { at: NOW + 1 }),
-      ledger('anna', 'guild', [
-        tagDelta('add', 'member', { declaredIn: { path: 'a.md', ordinal: 0 } }),
-        tagDelta('remove', 'member', { declaredIn: { path: 'a.md', ordinal: 1 } }),
+/** Each row as holder · tag · observer, the order the table's columns read. */
+const allSentences = (t: CategoricalTable) =>
+  t.sections.flatMap((s) =>
+    s.rows.map((r) => `${r.holderLabel} · ${r.chip.label} · ${r.observerLabel}`),
+  );
+
+describe('categorical table rows', () => {
+  it('only tags held at now become rows', () => {
+    const t = table([
+      holds('mira', 'inn', 'member'),
+      ledger('zara', 'guild', [
+        tagDelta('add', 'member', { at: 100, declaredIn: { path: 'events/100.md', ordinal: 0 } }),
+        tagDelta('remove', 'member', {
+          at: 200,
+          declaredIn: { path: 'events/200.md', ordinal: 0 },
+        }),
       ]),
-      holds('mira', 'inn', 'customer'),
+      holds('anna', 'guild', 'member', {
+        at: NOW + 5,
+        declaredIn: { path: 'events/future.md', ordinal: 0 },
+      }),
     ]);
-    expect(entries.map((e) => [e.holderId, e.option])).toEqual([['mira', 'customer']]);
+    expect(allSentences(t)).toEqual(['Mira · member · Rusty Inn']);
+    expect(t.total).toBe(1);
+  });
+
+  it('every row reads holder · tag · observer in both groupings', () => {
+    const ledgers = [holds('zara', 'guild', 'member'), holds('dax', 'inn', 'customer')];
+    const byHolder = allSentences(table(ledgers, { groupBy: 'holder' }));
+    const byTag = allSentences(table(ledgers, { groupBy: 'tag' }));
+    expect(byHolder).toEqual(['Dax · customer · Rusty Inn', 'Zara · member · Thieves Guild']);
+    expect([...byTag].sort()).toEqual(byHolder);
+  });
+
+  it('by holder: one section per holder, A–Z, with rows A–Z by tag then observer', () => {
+    const t = table(sample());
+    expect(t.groupBy).toBe('holder');
+    expect(t.sections.map((s) => [s.kind, s.title, s.rows.length, s.chip])).toEqual([
+      ['holder', 'Anna', 2, null],
+      ['holder', 'Dax', 1, null],
+      ['holder', 'Mira', 1, null],
+      ['holder', 'Zara', 2, null],
+    ]);
+    expect(t.sections[0].rows.map((r) => [r.chip.label, r.observerLabel])).toEqual([
+      ['married', 'Zara'],
+      ['member', 'Thieves Guild'],
+    ]);
+    const twoObservers = table([holds('zara', 'inn', 'member'), holds('zara', 'guild', 'member')]);
+    expect(twoObservers.sections[0].rows.map((r) => r.observerLabel)).toEqual([
+      'Rusty Inn',
+      'Thieves Guild',
+    ]);
+  });
+
+  it('by tag: one section per held option in spec order, flagged mutual', () => {
+    const t = table(sample(), { groupBy: 'tag' });
+    expect(t.sections.map((s) => [s.id, s.title, s.mutual, s.rows.length, s.chip?.label])).toEqual([
+      ['member', 'member', false, 3, 'member'],
+      ['customer', 'customer', false, 1, 'customer'],
+      ['married', 'married', true, 1, 'married'],
+    ]);
+    expect(t.sections[0].rows.map((r) => r.holderLabel)).toEqual(['Anna', 'Mira', 'Zara']);
+  });
+
+  it('by tag: a mutual pair appears once', () => {
+    const married = table(sample(), { groupBy: 'tag' }).sections.find((s) => s.id === 'married')!;
+    expect(married.rows.map((r) => [r.holderLabel, r.observerLabel, r.mutual])).toEqual([
+      ['Anna', 'Zara', true],
+    ]);
+  });
+
+  it('by holder: a mutual pair appears under both holders, each as that holder ⇄ the other', () => {
+    const t = table(sample());
+    const marriedRows = t.sections.flatMap((s) => s.rows.filter((r) => r.option === 'married'));
+    expect(marriedRows.map((r) => [r.holderLabel, r.observerLabel, r.mutual])).toEqual([
+      ['Anna', 'Zara', true],
+      ['Zara', 'Anna', true],
+    ]);
+  });
+
+  it('total and matched count a mutual pair once in both groupings', () => {
+    for (const groupBy of ['holder', 'tag'] as const) {
+      const all = table(sample(), { groupBy });
+      expect([all.total, all.matched]).toEqual([5, 5]);
+      const some = table(sample(), { groupBy, query: 'anna' });
+      expect([some.total, some.matched]).toEqual([5, 2]);
+    }
+  });
+});
+
+describe('categorical table search', () => {
+  it('Holder scope matches holders', () => {
+    const t = table(sample(), { query: 'dax', enabledScopes: ['holder'] });
+    expect(allSentences(t)).toEqual(['Dax · customer · Rusty Inn']);
+    expect(table(sample(), { query: 'inn', enabledScopes: ['holder'] }).matched).toBe(0);
+  });
+
+  it('a scoped search shows a mutual pair in the matched direction under both groupings', () => {
+    const married = (setup: Setup) =>
+      allSentences(table(mutualPair('zara', 'anna', 'married'), { ...setup, query: 'zara' }));
+    const only = (scope: SearchScope) => ({ enabledScopes: [scope] });
+    expect(married({ ...only('holder'), groupBy: 'holder' })).toEqual(['Zara · married · Anna']);
+    expect(married({ ...only('holder'), groupBy: 'tag' })).toEqual(['Zara · married · Anna']);
+    expect(married({ ...only('observer'), groupBy: 'holder' })).toEqual(['Anna · married · Zara']);
+    expect(married({ ...only('observer'), groupBy: 'tag' })).toEqual(['Anna · married · Zara']);
+  });
+
+  it('Tag scope matches option labels', () => {
+    const t = table(sample(), { query: 'cust', enabledScopes: ['tag'] });
+    expect(allSentences(t)).toEqual(['Dax · customer · Rusty Inn']);
+    expect(table(sample(), { query: 'dax', enabledScopes: ['tag'] }).matched).toBe(0);
+  });
+
+  it('Observer scope matches observers', () => {
+    const t = table(sample(), { query: 'inn', enabledScopes: ['observer'] });
+    expect(allSentences(t)).toEqual(['Dax · customer · Rusty Inn', 'Mira · member · Rusty Inn']);
+    expect(table(sample(), { query: 'mira', enabledScopes: ['observer'] }).matched).toBe(0);
+  });
+
+  it('words combine with AND across enabled scopes; a disabled scope never matches', () => {
+    expect(allSentences(table(sample(), { query: 'anna guild' }))).toEqual([
+      'Anna · member · Thieves Guild',
+    ]);
+    expect(table(sample(), { query: 'anna guild', enabledScopes: ['holder'] }).matched).toBe(0);
+    expect(table(sample(), { query: 'guild', enabledScopes: ['holder', 'tag'] }).matched).toBe(0);
+    expect(table(sample(), { query: 'anna member' }).matched).toBe(1);
+  });
+
+  it('sections with no matching rows are hidden', () => {
+    const byTag = table(sample(), { groupBy: 'tag', query: 'customer' });
+    expect(byTag.sections.map((s) => s.id)).toEqual(['customer']);
+    const byHolder = table(sample(), { query: 'customer' });
+    expect(byHolder.sections.map((s) => s.title)).toEqual(['Dax']);
+    expect(table(sample(), { query: 'nothing here' }).sections).toEqual([]);
+  });
+});
+
+describe('categorical table reason', () => {
+  it('the reason column falls back to the latest change’s event title', () => {
+    const dated = (reason?: string) =>
+      holds('zara', 'guild', 'member', {
+        at: 100,
+        declaredIn: { path: 'events/100.md', ordinal: 0 },
+        reason,
+      });
+    const titles = new Map([['events/100.md', 'The Heist']]);
+    expect(table([dated('Sworn in')], { titles }).sections[0].rows[0].reason).toBe('Sworn in');
+    expect(table([dated(' ')], { titles }).sections[0].rows[0].reason).toBe('The Heist');
+    expect(table([dated()]).sections[0].rows[0].reason).toBe('100.md');
+  });
+
+  it('the reason column falls back to the declaring note’s title for an undated baseline', () => {
+    const baseline = holds('zara', 'guild', 'member', {
+      declaredIn: { path: 'notes/guild.md', ordinal: 0 },
+    });
+    const titles = new Map([['notes/guild.md', 'The Thieves Guild']]);
+    expect(table([baseline], { titles }).sections[0].rows[0].reason).toBe('The Thieves Guild');
+    expect(table([baseline]).sections[0].rows[0].reason).toBe('guild.md');
   });
 });
 
 describe('parseGroupBy', () => {
-  it('defaults to tag', () => {
-    expect(parseGroupBy('entity')).toBe('entity');
+  it('parseGroupBy defaults to holder and rejects the old entity value', () => {
+    expect(parseGroupBy('holder')).toBe('holder');
     expect(parseGroupBy('tag')).toBe('tag');
-    expect(parseGroupBy(undefined)).toBe('tag');
-    expect(parseGroupBy('nonsense')).toBe('tag');
-  });
-});
-
-describe('groupByChoiceKey', () => {
-  it('differs by campaign and by track', () => {
-    const key = groupByChoiceKey('/camp-a', 'tg01');
-    expect(groupByChoiceKey('/camp-b', 'tg01')).not.toBe(key);
-    expect(groupByChoiceKey('/camp-a', 'tg02')).not.toBe(key);
-    expect(groupByChoiceKey('/camp-a', 'tg01')).toBe(key);
-  });
-
-  it('does not collide when path and track id are split differently', () => {
-    expect(groupByChoiceKey('/a:b', 'c')).not.toBe(groupByChoiceKey('/a', 'b:c'));
-  });
-});
-
-describe('deriveCategoricalView grouping', () => {
-  it('by tag: one card per held option, in spec order', () => {
-    const v = view([
-      ...mutualPair('zara', 'anna', 'married'),
-      holds('dax', 'inn', 'customer'),
-      holds('mira', 'inn', 'member'),
-    ]);
-    expect(v.cards.map((c) => c.id)).toEqual(['member', 'customer', 'married']);
-    expect(v.cards.map((c) => c.id)).not.toContain('hates');
-  });
-
-  it('by tag: non-mutual card has a row per observer, A–Z, holders A–Z', () => {
-    const member = view(sample()).cards[0];
-    expect(member.count).toBe(3);
-    expect(member.rows.map((r) => r.label)).toEqual(['Rusty Inn', 'Thieves Guild']);
-    expect(member.rows.map((r) => r.names.map((n) => n.label))).toEqual([
-      ['Mira'],
-      ['Anna', 'Zara'],
-    ]);
-    expect(member.rows.map((r) => r.count)).toEqual([1, 2]);
-    expect(member.pairs).toBeNull();
-  });
-
-  it('a mutual pair appears once', () => {
-    const married = view(sample()).cards.find((c) => c.id === 'married');
-    expect(married?.mutual).toBe(true);
-    expect(married?.rows).toEqual([]);
-    expect(married?.count).toBe(1);
-    expect(married?.pairs).toHaveLength(1);
-    expect(married?.pairs?.[0].a.label).toBe('Anna');
-    expect(married?.pairs?.[0].b.label).toBe('Zara');
-  });
-
-  it('by entity: cards follow the saved entity-cards order, unlisted cards appended A–Z', () => {
-    const order = viewOrder();
-    order.order[entityCardsKey(tags.id)] = ['inn', 'gone', 'zara'];
-    const v = view(sample(), { groupBy: 'entity', viewOrder: order });
-    expect(v.cards.map((c) => c.id)).toEqual(['inn', 'zara', 'anna', 'guild']);
-    expect(order.order[entityCardsKey(tags.id)]).toEqual(['inn', 'gone', 'zara']);
-  });
-
-  it('by entity: rows follow spec option order and flag mutual rows', () => {
-    const ledgers = [
-      holds('dax', 'zara', 'customer'),
-      holds('mira', 'zara', 'member'),
-      ...mutualPair('anna', 'zara', 'married'),
-    ];
-    const zara = view(ledgers, { groupBy: 'entity' }).cards.find((c) => c.id === 'zara');
-    expect(zara?.rows.map((r) => r.id)).toEqual(['member', 'customer', 'married']);
-    expect(zara?.rows.map((r) => r.mutual)).toEqual([false, false, true]);
-    expect(zara?.rows[2].chip?.label).toBe('married');
-    expect(zara?.rows[2].names.map((n) => n.label)).toEqual(['Anna']);
-    expect(zara?.pairs).toBeNull();
-  });
-});
-
-describe('deriveCategoricalView search', () => {
-  it('Name scope matches holders, including either side of a pair', () => {
-    const byName = view(sample(), { query: 'mira' });
-    expect(byName.cards.map((c) => c.id)).toEqual(['member']);
-    const zaraSide = view(sample(), { query: 'zara', enabledScopes: ['name'] });
-    expect(zaraSide.cards.find((c) => c.id === 'married')?.pairs).toHaveLength(1);
-    const annaSide = view(sample(), { query: 'anna', enabledScopes: ['name'] });
-    expect(annaSide.cards.find((c) => c.id === 'married')?.pairs).toHaveLength(1);
-  });
-
-  it('Group scope matches observers', () => {
-    const v = view(sample(), { query: 'inn', enabledScopes: ['group'] });
-    expect(v.cards.map((c) => c.id)).toEqual(['member', 'customer']);
-    expect(v.cards[0].rows.map((r) => r.label)).toEqual(['Rusty Inn']);
-  });
-
-  it('Tag scope matches option labels', () => {
-    const v = view(sample(), { query: 'custom', enabledScopes: ['tag'] });
-    expect(v.cards.map((c) => c.id)).toEqual(['customer']);
-  });
-
-  it('words combine with AND across enabled scopes', () => {
-    const v = view(sample(), { query: 'mira member' });
-    expect(v.matched).toBe(1);
-    expect(v.cards.map((c) => c.id)).toEqual(['member']);
-    expect(view(sample(), { query: 'mira customer' }).matched).toBe(0);
-  });
-
-  it('a disabled scope never matches', () => {
-    expect(view(sample(), { query: 'inn', enabledScopes: ['name', 'tag'] }).matched).toBe(0);
-    expect(view(sample(), { query: 'mira', enabledScopes: ['group', 'tag'] }).matched).toBe(0);
-  });
-
-  it('cards and rows with no matches are hidden', () => {
-    const tagged = view(sample(), { query: 'anna', enabledScopes: ['name'] });
-    expect(tagged.cards.map((c) => c.id)).toEqual(['member', 'married']);
-    expect(tagged.cards[0].rows.map((r) => r.label)).toEqual(['Thieves Guild']);
-    expect(tagged.cards[0].rows[0].names.map((n) => n.label)).toEqual(['Anna']);
-    const entity = view(sample(), { groupBy: 'entity', query: 'mira' });
-    expect(entity.cards.map((c) => c.id)).toEqual(['inn']);
-    expect(entity.cards[0].rows.map((r) => r.id)).toEqual(['member']);
-  });
-
-  it('total and matched count a mutual pair once, the same in both groupings', () => {
-    for (const query of ['', 'zara']) {
-      const byTag = view(sample(), { query, groupBy: 'tag' });
-      const byEntity = view(sample(), { query, groupBy: 'entity' });
-      expect(byTag.total).toBe(5);
-      expect(byEntity.total).toBe(5);
-      expect(byEntity.matched).toBe(byTag.matched);
-    }
-    expect(view(sample()).matched).toBe(5);
-    expect(view(sample(), { query: 'zara' }).matched).toBe(2);
-  });
-
-  it('dragging is allowed only by entity with an empty query', () => {
-    expect(view(sample(), { groupBy: 'entity' }).canDrag).toBe(true);
-    expect(view(sample(), { groupBy: 'entity', query: '  ' }).canDrag).toBe(true);
-    expect(view(sample(), { groupBy: 'entity', query: 'zara' }).canDrag).toBe(false);
-    expect(view(sample(), { groupBy: 'tag' }).canDrag).toBe(false);
-    expect(view(sample(), { groupBy: 'entity' }).listKey).toBe(entityCardsKey(tags.id));
-    expect(view(sample(), { groupBy: 'entity', query: ' ' }).listKey).toBe(entityCardsKey(tags.id));
-    expect(view(sample(), { groupBy: 'entity', query: 'zara' }).listKey).toBeNull();
-    expect(view(sample(), { groupBy: 'tag' }).listKey).toBeNull();
-  });
-});
-
-describe('visibleNames', () => {
-  const items = Array.from({ length: 25 }, (_, i) => i);
-  const idle = { expanded: false, searching: false };
-
-  it('shows 10 names then the hidden count', () => {
-    const { shown, hidden } = visibleNames(items, NAME_LIMIT, idle);
-    expect(shown).toEqual(items.slice(0, 10));
-    expect(hidden).toBe(15);
-    expect(visibleNames(items.slice(0, 10), NAME_LIMIT, idle)).toEqual({
-      shown: items.slice(0, 10),
-      hidden: 0,
-    });
-  });
-
-  it('shows 6 for mutual lists', () => {
-    const { shown, hidden } = visibleNames(items, MUTUAL_LIMIT, idle);
-    expect(shown).toHaveLength(6);
-    expect(hidden).toBe(19);
-  });
-
-  it('shows everything when expanded', () => {
-    expect(visibleNames(items, NAME_LIMIT, { expanded: true, searching: false })).toEqual({
-      shown: items,
-      hidden: 0,
-    });
-  });
-
-  it('never truncates while searching', () => {
-    expect(visibleNames(items, NAME_LIMIT, { expanded: false, searching: true })).toEqual({
-      shown: items,
-      hidden: 0,
-    });
-  });
-});
-
-describe('nameListId', () => {
-  it('differs by grouping, card and row', () => {
-    const ids = [
-      nameListId('tag', 'member', 'guild'),
-      nameListId('entity', 'member', 'guild'),
-      nameListId('tag', 'guild', 'member'),
-      nameListId('tag', 'married', null),
-    ];
-    expect(new Set(ids).size).toBe(4);
-  });
-});
-
-describe('findShownName', () => {
-  const collapsed = { expanded: new Set<string>(), searching: false };
-  const members = (count: number) =>
-    Array.from({ length: count }, (_, i) =>
-      holds(`p${String(i + 1).padStart(2, '0')}`, 'guild', 'member'),
-    );
-  const keyOf = (v: CategoricalView, holderId: string) =>
-    v.cards
-      .flatMap((c) => [
-        ...c.rows.flatMap((r) => r.names),
-        ...(c.pairs ?? []).flatMap((p) => [p.a, p.b]),
-      ])
-      .find((n) => n.holderId === holderId)!.entryKey;
-
-  it('finds a listed name, including both sides of a mutual pair', () => {
-    const v = view(sample());
-    const zara = findShownName(v, keyOf(v, 'zara'), collapsed);
-    expect(zara?.holderId).toBe('zara');
-    const pair = v.cards.find((c) => c.pairs)!.pairs![0];
-    expect(findShownName(v, pair.a.entryKey, collapsed)).toBe(pair.a);
-    expect(findShownName(v, pair.b.entryKey, collapsed)).toBe(pair.b);
-    expect(findShownName(v, 'nope', collapsed)).toBeNull();
-  });
-
-  it('returns the current name from the view it is given', () => {
-    const before = view(sample());
-    const key = keyOf(before, 'zara');
-    const after = view([...sample(), holds('zara', 'guild', 'member', { at: 5 })]);
-    expect(findShownName(after, key, collapsed)).toBe(
-      after.cards.flatMap((c) => c.rows.flatMap((r) => r.names)).find((n) => n.entryKey === key),
-    );
-    expect(findShownName(after, key, collapsed)).not.toBe(findShownName(before, key, collapsed));
-  });
-
-  it('does not find a name hidden by truncation until the list is expanded or searched', () => {
-    const v = view(members(NAME_LIMIT + 2));
-    const [card] = v.cards;
-    const row = card.rows[0];
-    const last = row.names[row.names.length - 1];
-    const first = row.names[0];
-    expect(findShownName(v, last.entryKey, collapsed)).toBeNull();
-    expect(findShownName(v, first.entryKey, collapsed)).toBe(first);
-    const expanded = new Set([nameListId('tag', card.id, row.id)]);
-    expect(findShownName(v, last.entryKey, { expanded, searching: false })).toBe(last);
-    expect(findShownName(v, last.entryKey, { expanded: new Set(), searching: true })).toBe(last);
-    expect(
-      findShownName(v, last.entryKey, { expanded: new Set(['other']), searching: false }),
-    ).toBeNull();
-  });
-
-  it('truncates a mutual card at the mutual limit', () => {
-    const couples = Array.from({ length: MUTUAL_LIMIT + 1 }, (_, i) =>
-      mutualPair(`m${i + 1}`, `n${i + 1}`, 'married'),
-    ).flat();
-    const v = view(couples);
-    const card = v.cards[0];
-    expect(findShownName(v, card.pairs![MUTUAL_LIMIT].a.entryKey, collapsed)).toBeNull();
-    expect(findShownName(v, card.pairs![MUTUAL_LIMIT - 1].b.entryKey, collapsed)).not.toBeNull();
-    const expanded = new Set([nameListId('tag', card.id, null)]);
-    expect(
-      findShownName(v, card.pairs![MUTUAL_LIMIT].a.entryKey, { expanded, searching: false }),
-    ).not.toBeNull();
-  });
-});
-
-describe('isSearching, listLimit and nameTag', () => {
-  it('a blank query is not a search', () => {
-    expect(isSearching('')).toBe(false);
-    expect(isSearching('  ')).toBe(false);
-    expect(isSearching('a')).toBe(true);
-  });
-
-  it('mutual lists are shorter', () => {
-    expect(listLimit(false)).toBe(NAME_LIMIT);
-    expect(listLimit(true)).toBe(MUTUAL_LIMIT);
-  });
-
-  it("nameTag gives the chip and mutuality of the name's option", () => {
-    const v = view(sample());
-    const names = v.cards.flatMap((c) => c.rows.flatMap((r) => r.names));
-    const member = names.find((n) => n.option === 'member')!;
-    const married = v.cards.find((c) => c.pairs)!.pairs![0].a;
-    expect(nameTag(tags, member)).toMatchObject({ chip: { key: 'member' }, mutual: false });
-    expect(nameTag(tags, married)).toMatchObject({ chip: { key: 'married' }, mutual: true });
+    expect(parseGroupBy('entity')).toBe('holder');
+    expect(parseGroupBy(null)).toBe('holder');
+    expect(parseGroupBy(undefined)).toBe('holder');
   });
 });
 
 describe('toggledId', () => {
-  it('adds a missing id, removes a present one, and leaves the input alone', () => {
+  it('adds a missing id and removes a present one without mutating', () => {
     const ids = new Set(['a']);
     expect([...toggledId(ids, 'b')]).toEqual(['a', 'b']);
     expect([...toggledId(ids, 'a')]).toEqual([]);

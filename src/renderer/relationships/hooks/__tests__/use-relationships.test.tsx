@@ -277,7 +277,7 @@ describe('use-relationships', () => {
       await mountCategorical();
       expect(latest.activeTrack?.kind).toBe('categorical');
       expect(latest.categorical).not.toBeNull();
-      expect(latest.categorical?.groupBy).toBe('tag');
+      expect(latest.categorical?.groupBy).toBe('holder');
       expect(latest.categorical?.total).toBe(3);
       expect(latest.groups).toEqual([]);
       expect(latest.holderPicker.show).toBe(false);
@@ -302,20 +302,20 @@ describe('use-relationships', () => {
 
     it('changing group-by updates the view and is restored after remount', async () => {
       await mountCategorical();
-      act(() => latest.setGroupBy('entity'));
-      expect(latest.groupBy).toBe('entity');
-      expect(latest.categorical?.groupBy).toBe('entity');
+      act(() => latest.setGroupBy('tag'));
+      expect(latest.groupBy).toBe('tag');
+      expect(latest.categorical?.groupBy).toBe('tag');
 
       act(() => latest.selectTab('rp01'));
       act(() => latest.selectTab('tg01'));
-      expect(latest.groupBy).toBe('entity');
+      expect(latest.groupBy).toBe('tag');
 
       act(() => root.unmount());
       root = createRoot(container);
       await mount('/camp-a');
       expect(latest.activeTrackId).toBe('tg01');
-      expect(latest.groupBy).toBe('entity');
-      expect(latest.categorical?.groupBy).toBe('entity');
+      expect(latest.groupBy).toBe('tag');
+      expect(latest.categorical?.groupBy).toBe('tag');
     });
 
     it('categorical entries are not rebuilt on query keystrokes', async () => {
@@ -328,36 +328,18 @@ describe('use-relationships', () => {
 
     it('switching campaign does not carry over the group-by choice', async () => {
       await mountCategorical('/camp-a');
-      act(() => latest.setGroupBy('entity'));
-      expect(latest.groupBy).toBe('entity');
+      act(() => latest.setGroupBy('tag'));
+      expect(latest.groupBy).toBe('tag');
 
       await mount('/camp-b');
       expect(latest.activeTrackId).toBe('rp01');
       act(() => latest.selectTab('tg01'));
-      expect(latest.groupBy).toBe('tag');
+      expect(latest.groupBy).toBe('holder');
       act(() => latest.selectTab('rp01'));
       act(() => latest.selectTab('tg01'));
-      expect(latest.groupBy).toBe('tag');
-      expect(loadGroupBy('/camp-b', 'tg01')).toBe('tag');
-      expect(loadGroupBy('/camp-a', 'tg01')).toBe('entity');
-    });
-
-    it('moving an entity card saves the new order to view-order', async () => {
-      await mountCategorical();
-      act(() => latest.setGroupBy('entity'));
-      const listKey = latest.categorical?.listKey;
-      expect(listKey).toBe('tg01:entity-cards');
-      const ids = latest.categorical!.cards.map((c) => c.id);
-      expect(ids.length).toBeGreaterThan(1);
-      const last = ids[ids.length - 1];
-      act(() => latest.moveRow(listKey!, last, 'top'));
-      const expected = [last, ...ids.slice(0, -1)];
-      expect(latest.categorical!.cards.map((c) => c.id)).toEqual(expected);
-
-      act(() => root.unmount()); // flushes the debounced save
-      const saved = state.saveSpy.mock.calls.at(-1)?.[1] as { order: Record<string, string[]> };
-      expect(saved.order['tg01:entity-cards']).toEqual(expected);
-      root = createRoot(container);
+      expect(latest.groupBy).toBe('holder');
+      expect(loadGroupBy('/camp-b', 'tg01')).toBe('holder');
+      expect(loadGroupBy('/camp-a', 'tg01')).toBe('tag');
     });
   });
 });

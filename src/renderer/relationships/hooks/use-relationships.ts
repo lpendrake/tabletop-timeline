@@ -29,7 +29,7 @@ import {
   buildTabs,
   countLabel,
   defaultViewOrder,
-  deriveCategoricalView,
+  deriveCategoricalTable,
   deriveView,
   EMPTY_HOLDER_PICKER,
   emptyMessage,
@@ -48,7 +48,7 @@ import {
   groupByChoiceKey,
   groupListKey,
   type CategoricalGroupBy,
-  type CategoricalView,
+  type CategoricalTable,
   type HolderPickerModel,
   type RowMove,
   type RowSort,
@@ -83,7 +83,7 @@ export interface RelationshipsViewState {
   /** Entries whose trackId is the active track. */
   trackProblems: InvalidDirectiveEntry[];
   holderPicker: HolderPickerModel;
-  /** How the active categorical track groups its cards; remembered per track. */
+  /** How the active categorical track groups its table sections; remembered per track. */
   groupBy: CategoricalGroupBy;
   setGroupBy(g: CategoricalGroupBy): void;
   selectHolder(holderId: string): void;
@@ -102,8 +102,8 @@ export interface RelationshipsViewState {
   sortByColumn(column: SortColumn): void;
   /** One group (holderId = selected holder) for a single holder; several for All holders. */
   groups: ViewGroup[];
-  /** The cards of the active categorical track; null for any other kind. */
-  categorical: CategoricalView | null;
+  /** The table of the active categorical track; null for any other kind. */
+  categorical: CategoricalTable | null;
   /** True under All holders (group headers apply), even when search leaves a single group. */
   grouped: boolean;
   /** The list key ordering the All-holders groups (`<track>:*`); null without an active track. */
@@ -260,7 +260,7 @@ export function useRelationships(options: UseRelationshipsOptions): Relationship
       activeTrackId
         ? (groupByChoices[groupByChoiceKey(campaignPath, activeTrackId)] ??
           loadGroupBy(campaignPath, activeTrackId))
-        : 'tag',
+        : 'holder',
     [activeTrackId, campaignPath, groupByChoices],
   );
 
@@ -284,33 +284,25 @@ export function useRelationships(options: UseRelationshipsOptions): Relationship
   const categoricalTrack = activeTrack?.kind === 'categorical' ? activeTrack : null;
 
   const categoricalEntries = useMemo(
-    () => (categoricalTrack ? buildCategoricalEntries(baseRows, categoricalTrack, labelFor) : []),
-    [baseRows, categoricalTrack, labelFor],
+    () =>
+      categoricalTrack
+        ? buildCategoricalEntries(baseRows, categoricalTrack, labelFor, now, titleByPath)
+        : [],
+    [baseRows, categoricalTrack, labelFor, now, titleByPath],
   );
 
   const categorical = useMemo(
     () =>
       categoricalTrack && activeTrackId
-        ? deriveCategoricalView(categoricalEntries, {
+        ? deriveCategoricalTable(categoricalEntries, {
             track: categoricalTrack,
-            trackId: activeTrackId,
             groupBy,
             query,
             enabledScopes: enabledScopesFor(categoricalTrack.kind, disabledScopes),
-            viewOrder,
             labelFor,
           })
         : null,
-    [
-      categoricalEntries,
-      categoricalTrack,
-      activeTrackId,
-      groupBy,
-      query,
-      disabledScopes,
-      viewOrder,
-      labelFor,
-    ],
+    [categoricalEntries, categoricalTrack, activeTrackId, groupBy, query, disabledScopes, labelFor],
   );
 
   const view = useMemo(
@@ -348,7 +340,7 @@ export function useRelationships(options: UseRelationshipsOptions): Relationship
   const groupsRef = useRef<ViewGroup[]>(view.groups);
   groupsRef.current = view.groups;
   const entityCardIdsRef = useRef<string[]>([]);
-  entityCardIdsRef.current = categorical ? categorical.cards.map((c) => c.id) : [];
+  entityCardIdsRef.current = categorical ? categorical.sections.map((c) => c.id) : [];
 
   // The view is empty for categorical tracks, so counts come from the categorical view.
   const counts = categorical ?? view;
@@ -404,7 +396,7 @@ export function useRelationships(options: UseRelationshipsOptions): Relationship
     categorical,
     grouped: view.grouped,
     groupsListKey: activeTrackId ? groupListKey(activeTrackId) : null,
-    canDrag: categorical ? categorical.canDrag : view.canDrag,
+    canDrag: categorical ? false : view.canDrag,
     toggleRow: (listKey, observerId) =>
       setViewOrder((prev) => withToggledExpanded(prev, listKey, observerId)),
     toggleGroup: (holderId) => {

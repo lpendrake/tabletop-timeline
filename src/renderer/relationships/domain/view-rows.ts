@@ -240,12 +240,16 @@ function buildHistory(
   });
 }
 
+/** Orders text case-insensitively. */
+export function compareText(a: string, b: string): number {
+  const la = a.toLowerCase();
+  const lb = b.toLowerCase();
+  return la === lb ? 0 : la < lb ? -1 : 1;
+}
+
 /** Orders entity ids by display label (case-insensitive), then by id. */
 export function compareLabels(labelFor: (id: string) => string, a: string, b: string): number {
-  const la = labelFor(a).toLowerCase();
-  const lb = labelFor(b).toLowerCase();
-  if (la !== lb) return la < lb ? -1 : 1;
-  return a < b ? -1 : a > b ? 1 : 0;
+  return compareText(labelFor(a), labelFor(b)) || (a < b ? -1 : a > b ? 1 : 0);
 }
 
 function sortGroupRows(

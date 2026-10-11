@@ -37,32 +37,21 @@ export type {
   CategoricalGroupBy,
   CategoricalEntry,
   OptionChip,
-  HolderName,
-  MutualPair,
-  CardRow,
-  CategoricalCard,
-  CategoricalView,
-  CategoricalViewInput,
-  ShownState,
+  TableRow,
+  TableSection,
+  CategoricalTable,
+  CategoricalTableInput,
 } from './categorical';
 export {
-  NAME_LIMIT,
-  MUTUAL_LIMIT,
   parseGroupBy,
   groupByChoiceKey,
   buildCategoricalEntries,
-  deriveCategoricalView,
-  visibleNames,
-  nameListId,
-  isSearching,
-  listLimit,
-  findShownName,
-  nameTag,
+  deriveCategoricalTable,
   toggledId,
 } from './categorical';
 
-export type { TagChange, TagHistoryEntry, TagStatus, TagHistory } from './categorical-history';
-export { tagHistory, tagStatusText } from './categorical-history';
+export type { TagChange, TagHistoryEntry } from './categorical-history';
+export { tagHistory, latestReason } from './categorical-history';
 
 export type { PlotRange, BandSpan, PlotTick, PlotScale, TickAlign } from './plot-scale';
 export {

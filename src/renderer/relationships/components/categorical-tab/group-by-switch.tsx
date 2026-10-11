@@ -3,8 +3,8 @@ import type { CategoricalGroupBy } from '../../domain/categorical';
 import { SegmentedControl } from '../segmented-control';
 
 const OPTIONS: Array<{ value: CategoricalGroupBy; label: string }> = [
+  { value: 'holder', label: 'Holder' },
   { value: 'tag', label: 'Tag' },
-  { value: 'entity', label: 'Entity' },
 ];
 
 export interface GroupBySwitchProps {
@@ -12,7 +12,7 @@ export interface GroupBySwitchProps {
   onChange: (groupBy: CategoricalGroupBy) => void;
 }
 
-/** Segmented switch choosing whether cards are grouped by tag or by entity. */
+/** Segmented switch choosing whether table rows are grouped by holder or by tag. */
 export function GroupBySwitch({ groupBy, onChange }: GroupBySwitchProps) {
   const captionId = useId();
   return (
