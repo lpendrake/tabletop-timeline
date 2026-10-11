@@ -32,24 +32,8 @@ export type {
 } from './view-rows';
 export { buildBaseRows, deriveView, deriveViewRows, canDragRows, historyKey } from './view-rows';
 
-export type {
-  CategoricalGroupBy,
-  CategoricalEntry,
-  OptionChip,
-  TableRow,
-  TableSection,
-  CategoricalTable,
-  CategoricalTableInput,
-} from './categorical';
-export {
-  parseGroupBy,
-  buildCategoricalEntries,
-  deriveCategoricalTable,
-  toggledId,
-} from './categorical';
-
-export type { TagChange, TagHistoryEntry } from './categorical-history';
-export { tagHistory, latestReason } from './categorical-history';
+export type { CategoricalGroupBy, CategoricalTable } from './categorical';
+export { buildCategoricalEntries, deriveCategoricalTable } from './categorical';
 
 export type { PlotRange, BandSpan, PlotTick, PlotScale, TickAlign } from './plot-scale';
 export {

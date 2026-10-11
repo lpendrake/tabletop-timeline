@@ -1,5 +1,8 @@
 import { GroupBySwitch } from '../../relationships/components/categorical-tab/group-by-switch';
-import { CategoricalTab } from '../../relationships/components/categorical-tab/categorical-tab';
+import {
+  CategoricalHint,
+  CategoricalTab,
+} from '../../relationships/components/categorical-tab/categorical-tab';
 import { NumericTab } from '../../relationships/components/numeric-tab/numeric-tab';
 import { PlaceholderTabBody } from '../../relationships/components/placeholder-tab-body';
 import { Toolbar } from '../../relationships/components/toolbar';
@@ -56,12 +59,22 @@ export function RelationshipsView({
         />
       ) : activeTrack?.kind === 'categorical' && state.categorical ? (
         <CategoricalTab
-          {...state}
           track={activeTrack}
           view={state.categorical}
+          query={state.query}
+          scopes={state.scopes}
+          emptyMessage={state.emptyMessage}
+          trackProblems={state.trackProblems}
+          now={state.now}
+          titleByPath={state.titleByPath}
+          labelFor={state.labelFor}
+          entityIndex={state.entityIndex}
+          onOpenById={onOpenById}
+          onOpenEvent={onOpenEvent}
           toolbar={
             <Toolbar {...state}>
               <GroupBySwitch groupBy={state.categorical.groupBy} onChange={state.setGroupBy} />
+              <CategoricalHint />
             </Toolbar>
           }
         />

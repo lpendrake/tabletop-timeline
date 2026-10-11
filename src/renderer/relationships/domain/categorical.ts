@@ -273,9 +273,24 @@ export function deriveCategoricalTable(
   };
 }
 
-/** A copy of `ids` with `id` removed if present, else added: opens or closes a row, folds or unfolds a section. */
+/** A copy of `ids` with `id` removed if present, else added: folds or unfolds a section. */
 export function toggledId(ids: ReadonlySet<string>, id: string): Set<string> {
   const next = new Set(ids);
   if (!next.delete(id)) next.add(id);
   return next;
+}
+
+/** The key a section's fold state is stored under; unique across both groupings. */
+export function sectionFoldKey(section: TableSection): string {
+  return `${section.kind}:${section.id}`;
+}
+
+/** The query to highlight in each cell: the search query where that cell's scope is enabled, else blank. */
+export function highlightQueries(
+  query: string,
+  scopes: ReadonlyArray<{ scope: SearchScope; enabled: boolean }>,
+): Record<'holder' | 'tag' | 'observer', string> {
+  const on = (scope: SearchScope) =>
+    scopes.some((s) => s.scope === scope && s.enabled) ? query : '';
+  return { holder: on('holder'), tag: on('tag'), observer: on('observer') };
 }

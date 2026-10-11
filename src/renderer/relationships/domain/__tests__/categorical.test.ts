@@ -3,7 +3,9 @@ import type { Ledger } from '../../../../shared/relationships';
 import { CalendarProvider } from '../../../timeline/calendar/provider';
 import {
   deriveCategoricalTable,
+  highlightQueries,
   parseGroupBy,
+  sectionFoldKey,
   toggledId,
   type CategoricalGroupBy,
   type CategoricalTable,
@@ -231,5 +233,36 @@ describe('toggledId', () => {
     expect([...toggledId(ids, 'b')]).toEqual(['a', 'b']);
     expect([...toggledId(ids, 'a')]).toEqual([]);
     expect([...ids]).toEqual(['a']);
+  });
+});
+
+describe('sectionFoldKey', () => {
+  const ledgers = [holds('zara', 'guild', 'member'), holds('anna', 'inn', 'customer')];
+
+  it('differs between a holder and a tag section with the same id', () => {
+    const [holder] = table(ledgers).sections;
+    const [tag] = table(ledgers, { groupBy: 'tag' }).sections;
+    expect(sectionFoldKey({ ...holder, id: 'x' })).not.toBe(sectionFoldKey({ ...tag, id: 'x' }));
+  });
+});
+
+describe('highlightQueries', () => {
+  const toggles = (disabled: SearchScope[]) =>
+    ALL.map((scope) => ({ scope, enabled: !disabled.includes(scope) }));
+
+  it('gives the query to every cell whose scope is enabled', () => {
+    expect(highlightQueries('zara', toggles([]))).toEqual({
+      holder: 'zara',
+      tag: 'zara',
+      observer: 'zara',
+    });
+  });
+
+  it('gives a blank query to the cells whose scope is off', () => {
+    expect(highlightQueries('zara', toggles(['holder', 'tag']))).toEqual({
+      holder: '',
+      tag: '',
+      observer: 'zara',
+    });
   });
 });
