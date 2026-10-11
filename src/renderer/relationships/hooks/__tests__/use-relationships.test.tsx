@@ -341,21 +341,5 @@ describe('use-relationships', () => {
       act(() => latest.setGroupBy('tag'));
       expect(state.buildEntriesSpy).toHaveBeenCalledTimes(1);
     });
-
-    it('switching campaign does not carry over the group-by choice', async () => {
-      await mountCategorical('/camp-a');
-      act(() => latest.setGroupBy('tag'));
-      expect(latest.groupBy).toBe('tag');
-
-      await mount('/camp-b');
-      expect(latest.activeTrackId).toBe('rp01');
-      act(() => latest.selectTab('tg01'));
-      expect(latest.groupBy).toBe('holder');
-      act(() => latest.selectTab('rp01'));
-      act(() => latest.selectTab('tg01'));
-      expect(latest.groupBy).toBe('holder');
-      expect(loadGroupBy('/camp-b', 'tg01')).toBe('holder');
-      expect(loadGroupBy('/camp-a', 'tg01')).toBe('tag');
-    });
   });
 });

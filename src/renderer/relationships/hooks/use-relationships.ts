@@ -45,7 +45,6 @@ import {
   toggleDisabledScope,
   withToggledCollapsed,
   withToggledExpanded,
-  groupByChoiceKey,
   groupListKey,
   type CategoricalGroupBy,
   type CategoricalTable,
@@ -138,9 +137,7 @@ export function useRelationships(options: UseRelationshipsOptions): Relationship
   const [now, setNow] = useState<number>(Infinity);
   const [viewOrder, setViewOrder] = useState<ViewOrder>(defaultViewOrder());
 
-  const [tabChoice, setTabChoice] = useState<{ campaignPath: string; id: string | null } | null>(
-    null,
-  );
+  const [tabChoice, setTabChoice] = useState<string | null>(null);
   const [holderChoices, setHolderChoices] = useState<Record<string, string>>({});
   const [groupByChoices, setGroupByChoices] = useState<Record<string, CategoricalGroupBy>>({});
   const [query, setQuery] = useState('');
@@ -228,10 +225,7 @@ export function useRelationships(options: UseRelationshipsOptions): Relationship
     () => buildTabs({ library, ledgers, invalid: problems }),
     [library, ledgers, problems],
   );
-  const savedTab =
-    tabChoice && tabChoice.campaignPath === campaignPath
-      ? tabChoice.id
-      : loadSelectedTab(campaignPath);
+  const savedTab = tabChoice ?? loadSelectedTab(campaignPath);
   const activeTrackId = resolveActiveTab(tabs, savedTab);
   const activeTrack = useMemo(
     () => (activeTrackId ? resolveTrack(activeTrackId, library) : null),
@@ -258,8 +252,7 @@ export function useRelationships(options: UseRelationshipsOptions): Relationship
   const groupBy = useMemo(
     () =>
       activeTrackId
-        ? (groupByChoices[groupByChoiceKey(campaignPath, activeTrackId)] ??
-          loadGroupBy(campaignPath, activeTrackId))
+        ? (groupByChoices[activeTrackId] ?? loadGroupBy(campaignPath, activeTrackId))
         : 'holder',
     [activeTrackId, campaignPath, groupByChoices],
   );
@@ -354,7 +347,7 @@ export function useRelationships(options: UseRelationshipsOptions): Relationship
     activeTrackId,
     activeTrack,
     selectTab: (trackId) => {
-      setTabChoice({ campaignPath, id: trackId });
+      setTabChoice(trackId);
       saveSelectedTab(campaignPath, trackId);
       setQuery('');
       setDisabledScopes(NO_SCOPES);
@@ -366,10 +359,7 @@ export function useRelationships(options: UseRelationshipsOptions): Relationship
     groupBy,
     setGroupBy: (next) => {
       if (!activeTrackId) return;
-      setGroupByChoices((prev) => ({
-        ...prev,
-        [groupByChoiceKey(campaignPath, activeTrackId)]: next,
-      }));
+      setGroupByChoices((prev) => ({ ...prev, [activeTrackId]: next }));
       saveGroupBy(campaignPath, activeTrackId, next);
     },
     selectHolder: (holderId) => {

@@ -43,7 +43,6 @@ export type {
 } from './categorical';
 export {
   parseGroupBy,
-  groupByChoiceKey,
   buildCategoricalEntries,
   deriveCategoricalTable,
   toggledId,
