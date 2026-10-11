@@ -10,7 +10,8 @@ import {
 import { useContextMenuBehavior } from './use-context-menu-behavior';
 import { computeSubmenuPosition } from './submenu-position';
 import type { SubmenuSide } from './submenu-position';
-import { computeCaretPlacement } from './caret-position';
+import { computeCaretPlacement, type CaretPlacement } from './caret-position';
+import { placementStyle } from './placement-style';
 import { itemAtPath, isPathPrefix, pathsEqual } from './menu-navigation';
 import type { FilteredNode } from './menu-search';
 import {
@@ -128,12 +129,7 @@ export function ContextMenu({
     wasSearchingRef.current = isSearching;
   }, [isSearching, menuRef]);
 
-  const [anchorStyle, setAnchorStyle] = useState<{
-    left: number;
-    top?: number;
-    bottom?: number;
-    maxHeight: number;
-  } | null>(null);
+  const [anchorPlacement, setAnchorPlacement] = useState<CaretPlacement | null>(null);
   const anchorMeasuredRef = useRef(false);
 
   useLayoutEffect(() => {
@@ -149,26 +145,15 @@ export function ContextMenu({
       { width: window.innerWidth, height: window.innerHeight },
       anchor.prefer,
     );
-    setAnchorStyle({
-      left: placement.left,
-      top: placement.top,
-      bottom: placement.bottom,
-      maxHeight: placement.maxHeight,
-    });
+    setAnchorPlacement(placement);
     // Re-runs whenever `anchor` changes until measured (guarded by
     // anchorMeasuredRef) and is a no-op forever after, so the side never
     // flips once chosen — even if the panel's height grows while searching.
   }, [anchor, menuRef]);
 
   const style: React.CSSProperties = anchor
-    ? anchorStyle
-      ? {
-          left: anchorStyle.left,
-          top: anchorStyle.top,
-          bottom: anchorStyle.bottom,
-          maxHeight: anchorStyle.maxHeight,
-          overflowY: 'auto',
-        }
+    ? anchorPlacement
+      ? { ...placementStyle(anchorPlacement), overflowY: 'auto' }
       : { visibility: 'hidden' }
     : { left: pos.x, top: pos.y };
 

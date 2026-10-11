@@ -1,5 +1,5 @@
 import type { InvalidDirectiveEntry } from '../../../shared/relationships';
-import { emptyStateParts, tabBodyNotice } from '../domain/tabs';
+import { emptyStateParts, tabBodyNotice, type TabBodyNotice } from '../domain/tabs';
 import type { ViewGroup } from '../domain/view-rows';
 
 function EmptyState({ trackName }: { trackName: string }) {
@@ -13,6 +13,13 @@ function EmptyState({ trackName }: { trackName: string }) {
   );
 }
 
+/** One notice: the empty-track hint or the no-match message; nothing for no notice. */
+export function NoticeView({ notice, trackName }: { notice: TabBodyNotice; trackName: string }) {
+  if (!notice) return null;
+  if (notice.kind === 'empty-track') return <EmptyState trackName={trackName} />;
+  return <div className="rel-empty">{notice.message}</div>;
+}
+
 /** The empty-track hint or the no-match message when a tab body has no rows; nothing otherwise. */
 export function TabNotice(props: {
   groups: readonly ViewGroup[];
@@ -21,9 +28,7 @@ export function TabNotice(props: {
   trackName: string;
 }) {
   const notice = tabBodyNotice(props.groups, props.query, props.emptyMessage);
-  if (!notice) return null;
-  if (notice.kind === 'empty-track') return <EmptyState trackName={props.trackName} />;
-  return <div className="rel-empty">{notice.message}</div>;
+  return <NoticeView notice={notice} trackName={props.trackName} />;
 }
 
 /** Invalid directives declared on the active track. */

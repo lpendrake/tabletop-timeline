@@ -2,6 +2,7 @@
  * Presentation model of an expanded numeric row's history, grouped by year:
  * text, tooltips and plot geometry against the tab's shared axis. Pure — no IO, no React.
  */
+import { basename } from '../../../shared/path';
 import type { NumericTrack } from '../../../shared/relationships';
 import {
   groupHistoryByYear,
@@ -71,10 +72,6 @@ export interface HistoryYearModel {
   dot: number;
   tooltip: string;
   entries: HistoryEntryModel[];
-}
-
-function basename(path: string): string {
-  return path.slice(path.lastIndexOf('/') + 1);
 }
 
 /** `Note` for an undated entry; else the event title, or the filename for an untitled event. */

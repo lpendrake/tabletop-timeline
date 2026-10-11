@@ -1,7 +1,8 @@
+import type { ReactNode } from 'react';
 import type { RelationshipsViewState } from '../hooks/use-relationships';
 import { HolderPicker } from './holder-picker';
 import { SearchBox } from './search-box';
-import { SortControl } from './sort-control';
+import { SegmentedControl } from './segmented-control';
 import './toolbar.css';
 
 export type ToolbarProps = Pick<
@@ -17,9 +18,12 @@ export type ToolbarProps = Pick<
   | 'sortModes'
   | 'sortMode'
   | 'setSortMode'
->;
+> & {
+  /** Extra controls rendered after the sort control. */
+  children?: ReactNode;
+};
 
-/** Holder picker, search and sort on one row. */
+/** Holder picker, search and sort on one row, then any extra controls. */
 export function Toolbar(props: ToolbarProps) {
   return (
     <div className="rel-toolbar">
@@ -35,7 +39,13 @@ export function Toolbar(props: ToolbarProps) {
         scopes={props.scopes}
         onToggleScope={props.toggleScope}
       />
-      <SortControl modes={props.sortModes} active={props.sortMode} onChange={props.setSortMode} />
+      <SegmentedControl
+        label="Sort"
+        options={props.sortModes.map((m) => ({ value: m.mode, label: m.label }))}
+        active={props.sortMode}
+        onChange={props.setSortMode}
+      />
+      {props.children}
     </div>
   );
 }

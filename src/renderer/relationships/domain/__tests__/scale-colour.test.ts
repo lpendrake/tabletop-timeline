@@ -10,6 +10,7 @@ import {
 } from '../../../../shared/relationships';
 import {
   bandColour,
+  optionColour,
   rungColour,
   scaleColourCss,
   valueColour,
@@ -44,6 +45,12 @@ const CSS_VAR_ONLY =
   /^(var\(--[a-z-]+\)|color-mix\(in srgb, var\(--[a-z-]+\) \d+%, var\(--[a-z-]+\)\))$/;
 
 describe('scale-colour', () => {
+  it('optionColour returns accent', () => {
+    const c = optionColour();
+    expect(c.tone).toBe('accent');
+    expect(scaleColourCss(c)).toBe('var(--theme-accent-gold)');
+  });
+
   it('PF2E Reputation: every band gets the expected tone', () => {
     const expected: Record<string, string> = {
       hunted: 'negative',

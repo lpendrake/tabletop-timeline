@@ -111,6 +111,6 @@ describe('search', () => {
     expect(countLabel(3, 15)).toBe('3 of 15');
     expect(emptyMessage('blight', false)).toBe('Nothing matches "blight"');
     expect(emptyMessage('blight', true)).toBe('Nothing matches "blight" in the enabled scopes');
-    expect(scopesForKind('categorical')).toEqual(['name', 'group', 'tag']);
+    expect(scopesForKind('categorical')).toEqual(['holder', 'tag', 'observer']);
   });
 });

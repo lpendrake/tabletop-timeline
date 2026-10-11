@@ -8,7 +8,7 @@ The Relationships view shows relationship values derived from directives, one ta
 
 - `components/top-bar.tsx` — tabs, as-of date, problems badge
 
-The toolbar (`components/toolbar.tsx`) holds the Holder/Toward picker built on `shared/searchable-picker`, scoped search, and sort buttons. The sort buttons serve ordinal and categorical tabs only; numeric tabs have none and sort by clicking column titles (below). The numeric tab places the toolbar in its sticky header; the placeholder layout renders it above the body.
+The toolbar (`components/toolbar.tsx`) holds the Holder/Toward picker built on `shared/searchable-picker`, scoped search, and sort buttons. The sort buttons serve ordinal tabs only; numeric tabs sort by clicking column titles (below) and categorical tabs have no sort control. The holder picker is hidden on categorical tabs, which show every holder. The numeric tab places the toolbar in its sticky header; the placeholder layout renders it above the body.
 
 State comes from `hooks/use-relationships.ts`, which only wires pure `domain/` functions to React.
 
@@ -21,7 +21,10 @@ State comes from `hooks/use-relationships.ts`, which only wires pure `domain/` f
   - Resizing: a grip on each title's right edge (drag, double-click to reset, Left/Right ±8px) wired by `hooks/use-column-resize.ts`. Widths and limits live in `domain/numeric-columns.ts`; `hooks/use-column-widths.ts` remembers them per campaign. The panel is as wide as its columns and the plot takes the rest
   - Every second row of a group is striped across panel and plot, its expanded line included (the stripe is on the row wrapper); bands behind the plot are tinted with their own colour (`color-mix` of theme vars, no new tokens)
   - The axis labels and each row's plot draw into a `.rel-num-layer`, inset by `--rel-inner-pad` on both sides so a dot or label at either end of the range stays inside and nothing overhangs `.rel-view`; a band, line or dot position is a fraction of that inset box
-- Ordinal and categorical tabs: `components/placeholder-tab-body.tsx` is temporary and serves only these until #276–#278 add `components/<kind>-tab/`; it will then be removed
+- Categorical tab: `components/categorical-tab/` — one table, columns Holder | Tag | → / ⇄ | Observer | Reason, so every row reads holder · tag · observer. The Group by switch (Holder | Tag) sets the sections: by holder (A–Z) or by tag (spec order); the table is never reorderable and has no sort control. Model from `domain/categorical.ts`
+  - A section row is a fold button with the holder's name or the tag chip and the row count. A result row is a grid `div` (it holds links): the chevron button is the keyboard toggle, and a click anywhere on the row except its name links toggles its history
+  - One row is open at a time, with its history inline below it (`tag-history.tsx`, model from `domain/categorical-history.ts`, computed for the open row only). Fold and open state are component state, not persisted; the open row closes when the grouping or the query changes, and stays closed when it changes back
+- Ordinal tabs: `components/placeholder-tab-body.tsx` is temporary and serves only these until #276 adds `components/ordinal-tab/`; it will then be removed
 - `relationships-view.tsx` picks the layout from the active track's `kind`
 
 Shared building blocks every tab layout reuses, instead of re-implementing:
@@ -49,7 +52,7 @@ The view is full-bleed: `.rel-view` has no padding, and the top bar's tabs, the 
 
 - No logic in hooks/components — search tokenising and matching, highlight ranges, sort comparators, tab derivation, picker grouping, scale colour are pure `domain/` functions with tests
 - Colours from the theme ramp by position (`scaleNegative/Neutral/Positive`, accent gold when the initial is at the bottom) — specs store no colours, no hex
-- Persistence split: selected tab, holder and numeric column widths in localStorage keyed by campaign (`view-state-persistence.ts`), order/expanded/collapsed in `relationships/view-order.json` keyed by track + holder (`rp01:<holderId>`, `rp01:*`, `tg01:entity-cards`), sparse and advisory (unlisted rows append alphabetically, stale entries ignored and kept)
+- Persistence split: selected tab, holder and numeric column widths in localStorage keyed by campaign (`view-state-persistence.ts`), order/expanded/collapsed in `relationships/view-order.json` keyed by track + holder (`rp01:<holderId>`, `rp01:*`), sparse and advisory (unlisted rows append alphabetically, stale entries ignored and kept)
 - History steps computed only for expanded or search-opened rows
 - Titles from the relationship index's path → title map
 - Problems badge counts only invalid directives (unfinished drafts never reported)

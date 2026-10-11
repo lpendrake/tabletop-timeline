@@ -30,11 +30,6 @@ export function groupListKey(trackId: string): string {
   return `${trackId}:*`;
 }
 
-/** Reserved for the categorical entity-cards ticket. */
-export function entityCardsKey(trackId: string): string {
-  return `${trackId}:entity-cards`;
-}
-
 export function defaultViewOrder(): ViewOrder {
   return { version: 2, order: {}, expanded: {}, collapsed: {} };
 }

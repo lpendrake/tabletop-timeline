@@ -211,7 +211,7 @@ describe('view-rows', () => {
     expect(canDragRows('mine', '')).toBe(true);
     expect(canDragRows('mine', '  ')).toBe(true);
     expect(canDragRows('mine', 'x')).toBe(false);
-    expect(canDragRows('value', '')).toBe(false);
+    expect(canDragRows('alpha', '')).toBe(false);
     expect(deriveViewRows(input({ sortMode: 'recent' })).canDrag).toBe(false);
     expect(deriveViewRows(input()).canDrag).toBe(true);
   });
@@ -225,11 +225,9 @@ describe('view-rows', () => {
   });
 
   it('sorts by value and by recent change', () => {
-    expect(observers(deriveViewRows(input({ sortMode: 'value' })))).toEqual([
-      'cccc',
-      'eeee',
-      'dddd',
-    ]);
+    expect(
+      observers(deriveViewRows(input({ sortMode: { column: 'value', dir: 'desc' } }))),
+    ).toEqual(['cccc', 'eeee', 'dddd']);
     expect(observers(deriveViewRows(input({ sortMode: 'recent' })))[0]).toBe('cccc');
   });
 

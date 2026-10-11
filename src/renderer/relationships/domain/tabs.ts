@@ -11,13 +11,18 @@ export interface TrackTab {
   trackId: string;
   name: string;
   kind: TrackKind;
-  /** Number of relationships (ledgers) on the track. */
+  /** Number of relationships on the track; a mutual pair counts once. */
   count: number;
 }
 
 /** Structural subset of `InvalidDirectiveEntry`; `trackId` is optional. */
 export interface InvalidEntryLike {
   trackId?: string;
+}
+
+/** True for the other side of a mutual relationship: every delta was mirrored from the first side. */
+function isMirroredLedger(ledger: Ledger): boolean {
+  return ledger.deltas.length > 0 && ledger.deltas.every((d) => d.mirrored === true);
 }
 
 /**
@@ -33,7 +38,10 @@ export function buildTabs(input: {
 }): TrackTab[] {
   const disabled = new Set(input.disabledTrackIds ?? []);
   const counts = new Map<string, number>();
-  for (const l of input.ledgers) counts.set(l.track, (counts.get(l.track) ?? 0) + 1);
+  for (const l of input.ledgers) {
+    if (isMirroredLedger(l)) continue;
+    counts.set(l.track, (counts.get(l.track) ?? 0) + 1);
+  }
   const invalidTracks = new Set<string>();
   for (const e of input.invalid) if (e.trackId) invalidTracks.add(e.trackId);
 
@@ -71,18 +79,30 @@ export function emptyStateText(trackName: string): string {
 export type TabBodyNotice = { kind: 'empty-track' } | { kind: 'no-match'; message: string } | null;
 
 /**
- * What a tab body shows in place of rows: the empty-track hint when no row exists
- * and nothing is searched, the no-match message when a search matches nothing, or
- * nothing when any group has rows.
+ * What a tab body shows in place of rows: nothing when there are rows, else the
+ * empty-track hint when nothing is searched, else the no-match message.
  */
+export function bodyNotice(
+  hasRows: boolean,
+  query: string,
+  emptyMessage: string | null,
+): TabBodyNotice {
+  if (hasRows) return null;
+  if (tokenise(query).length === 0) return { kind: 'empty-track' };
+  return { kind: 'no-match', message: emptyMessage ?? '' };
+}
+
+/** `bodyNotice` for a tab whose rows live in groups: it has rows when any group does. */
 export function tabBodyNotice(
   groups: readonly ViewGroup[],
   query: string,
   emptyMessage: string | null,
 ): TabBodyNotice {
-  if (groups.some((g) => g.rows.length > 0)) return null;
-  if (tokenise(query).length === 0) return { kind: 'empty-track' };
-  return { kind: 'no-match', message: emptyMessage ?? '' };
+  return bodyNotice(
+    groups.some((g) => g.rows.length > 0),
+    query,
+    emptyMessage,
+  );
 }
 
 /** The saved tab if still present, else the first tab, else null. */

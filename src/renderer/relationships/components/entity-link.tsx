@@ -1,14 +1,17 @@
+import { HighlightText } from './highlight-text';
 import { openFromWikiLink, closeFromWikiLink } from '../../peek/stack';
 
 export interface EntityLinkProps {
   id: string;
   label: string;
   onOpenById: (id: string) => void;
+  /** Search query whose matches are highlighted in the label. */
+  query?: string;
   className?: string;
 }
 
 /** A holder/observer link: hover peeks the note, a click opens it (as wiki links do). Never toggles the row it sits in. */
-export function EntityLink({ id, label, onOpenById, className }: EntityLinkProps) {
+export function EntityLink({ id, label, onOpenById, query = '', className }: EntityLinkProps) {
   return (
     <span
       className={`rel-entity-link${className ? ` ${className}` : ''}`}
@@ -20,7 +23,7 @@ export function EntityLink({ id, label, onOpenById, className }: EntityLinkProps
         onOpenById(id);
       }}
     >
-      {label}
+      <HighlightText text={label} query={query} />
     </span>
   );
 }
