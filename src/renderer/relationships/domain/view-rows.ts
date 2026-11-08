@@ -17,7 +17,13 @@ import type {
 import { computeValue, currentValue, startingValue } from '../../../shared/relationships';
 import { formatEntryDate } from './entry-date';
 import { ALL_HOLDERS, ledgersForHolder } from './holders';
-import { bandIndexFor, rungColour, scaleColourCss, valueColour } from './scale-colour';
+import {
+  bandIndexFor,
+  optionColour,
+  rungColour,
+  scaleColourCss,
+  valueColour,
+} from './scale-colour';
 import {
   historyEntryText,
   searchRows,
@@ -27,8 +33,6 @@ import {
 } from './search';
 import { entryCount, lastChange, sortRows, type RowSort, type SortableRow } from './sort';
 import { applyOrder, groupListKey, rowListKey, type ViewOrder } from './view-order';
-
-const ACCENT_CSS = 'var(--theme-accent-gold)';
 
 export interface HistoryEntry {
   key: string;
@@ -144,7 +148,7 @@ function rowKey(ledger: Ledger): string {
 function colourFor(track: ResolvedTrack, value: TrackValue): string {
   if (track.kind === 'numeric') return scaleColourCss(valueColour(track, Number(value)));
   if (track.kind === 'ordinal') return scaleColourCss(rungColour(track, String(value)));
-  return ACCENT_CSS;
+  return scaleColourCss(optionColour());
 }
 
 function sortValueFor(track: ResolvedTrack, value: TrackValue): number | null {
@@ -236,11 +240,16 @@ function buildHistory(
   });
 }
 
-function compareLabels(labelFor: (id: string) => string, a: string, b: string): number {
-  const la = labelFor(a).toLowerCase();
-  const lb = labelFor(b).toLowerCase();
-  if (la !== lb) return la < lb ? -1 : 1;
-  return a < b ? -1 : a > b ? 1 : 0;
+/** Orders text case-insensitively. */
+export function compareText(a: string, b: string): number {
+  const la = a.toLowerCase();
+  const lb = b.toLowerCase();
+  return la === lb ? 0 : la < lb ? -1 : 1;
+}
+
+/** Orders entity ids by display label (case-insensitive), then by id. */
+export function compareLabels(labelFor: (id: string) => string, a: string, b: string): number {
+  return compareText(labelFor(a), labelFor(b)) || (a < b ? -1 : a > b ? 1 : 0);
 }
 
 function sortGroupRows(

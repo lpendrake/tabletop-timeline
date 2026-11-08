@@ -320,6 +320,41 @@ describe('RelationshipsView', () => {
     expect(activeTabName()).toContain('PF2E Reputation');
   });
 
+  it('a categorical track renders the table; ordinal still renders the placeholder', async () => {
+    state.ledgers = [
+      ...fixtureLedgers(),
+      ledger('aaaa', 'bbbb', 'tg01', [delta({ op: 'add', key: 'member' } as never)]),
+    ];
+    await mount();
+    await selectTab('Relationship tags');
+    expect($('.rel-cat-tab')).not.toBeNull();
+    expect($$('.rel-cat-table .rel-cat-row')).toHaveLength(1);
+    expect($('.rel-placeholder-body')).toBeNull();
+    expect($('.rel-num-tab')).toBeNull();
+
+    await selectTab('Attitude');
+    expect($('.rel-cat-tab')).toBeNull();
+    expect($('.rel-placeholder-body')).not.toBeNull();
+  });
+
+  it('the tags toolbar shows Holder · Tag · Observer, Group by Holder | Tag and the hint, with no sort control', async () => {
+    state.ledgers = [
+      ledger('aaaa', 'bbbb', 'tg01', [delta({ op: 'add', key: 'member' } as never)]),
+    ];
+    await mount();
+    await selectTab('Relationship tags');
+    expect($$('.rel-scope').map((s) => s.textContent)).toEqual(['Holder', 'Tag', 'Observer']);
+    expect($('.rel-groupby-caption').textContent).toBe('Group by');
+    expect($$('.rel-groupby .rel-segmented-option').map((b) => b.textContent)).toEqual([
+      'Holder',
+      'Tag',
+    ]);
+    expect($('[aria-label="Sort"]')).toBeNull();
+    expect($('.rel-cat-hint').textContent).toBe(
+      'Click a section to fold it · click a row for its history',
+    );
+  });
+
   it("a track with no relationships shows the '/' empty state", async () => {
     await mount();
     await selectTab('Relationship tags');

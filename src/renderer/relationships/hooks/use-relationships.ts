@@ -14,18 +14,22 @@ import { relationshipsData } from '../data';
 import { viewOrderData } from '../view-order-data';
 import { createSaveQueue } from '../view-order-save-queue';
 import {
+  loadGroupBy,
   loadSelectedHolder,
   loadSelectedTab,
+  saveGroupBy,
   saveSelectedHolder,
   saveSelectedTab,
 } from '../view-state-persistence';
 import {
   asOfLabelFor,
   buildBaseRows,
+  buildCategoricalEntries,
   buildHolderPicker,
   buildTabs,
   countLabel,
   defaultViewOrder,
+  deriveCategoricalTable,
   deriveView,
   EMPTY_HOLDER_PICKER,
   emptyMessage,
@@ -42,6 +46,8 @@ import {
   withToggledCollapsed,
   withToggledExpanded,
   groupListKey,
+  type CategoricalGroupBy,
+  type CategoricalTable,
   type HolderPickerModel,
   type RowMove,
   type RowSort,
@@ -76,6 +82,9 @@ export interface RelationshipsViewState {
   /** Entries whose trackId is the active track. */
   trackProblems: InvalidDirectiveEntry[];
   holderPicker: HolderPickerModel;
+  /** How the active categorical track groups its table sections; remembered per track. */
+  groupBy: CategoricalGroupBy;
+  setGroupBy(g: CategoricalGroupBy): void;
   selectHolder(holderId: string): void;
   scopes: Array<{ scope: SearchScope; label: string; enabled: boolean }>;
   toggleScope(scope: SearchScope): void;
@@ -92,6 +101,8 @@ export interface RelationshipsViewState {
   sortByColumn(column: SortColumn): void;
   /** One group (holderId = selected holder) for a single holder; several for All holders. */
   groups: ViewGroup[];
+  /** The table of the active categorical track; null for any other kind. */
+  categorical: CategoricalTable | null;
   /** True under All holders (group headers apply), even when search leaves a single group. */
   grouped: boolean;
   /** The list key ordering the All-holders groups (`<track>:*`); null without an active track. */
@@ -101,6 +112,8 @@ export interface RelationshipsViewState {
   toggleGroup(holderId: string): void;
   moveRow(listKey: string, id: string, to: RowMove): void;
   labelFor(id: string): string;
+  /** Note titles by vault-relative path. */
+  titleByPath: ReadonlyMap<string, string>;
   entityIndex: EntityIndexEntry[] | null;
 }
 
@@ -124,10 +137,9 @@ export function useRelationships(options: UseRelationshipsOptions): Relationship
   const [now, setNow] = useState<number>(Infinity);
   const [viewOrder, setViewOrder] = useState<ViewOrder>(defaultViewOrder());
 
-  const [tabChoice, setTabChoice] = useState<{ campaignPath: string; id: string | null } | null>(
-    null,
-  );
+  const [tabChoice, setTabChoice] = useState<string | null>(null);
   const [holderChoices, setHolderChoices] = useState<Record<string, string>>({});
+  const [groupByChoices, setGroupByChoices] = useState<Record<string, CategoricalGroupBy>>({});
   const [query, setQuery] = useState('');
   const [disabledScopes, setDisabledScopes] = useState<ReadonlySet<SearchScope>>(NO_SCOPES);
   const [sortChoice, setSortChoice] = useState<RowSort | null>(null);
@@ -213,10 +225,7 @@ export function useRelationships(options: UseRelationshipsOptions): Relationship
     () => buildTabs({ library, ledgers, invalid: problems }),
     [library, ledgers, problems],
   );
-  const savedTab =
-    tabChoice && tabChoice.campaignPath === campaignPath
-      ? tabChoice.id
-      : loadSelectedTab(campaignPath);
+  const savedTab = tabChoice ?? loadSelectedTab(campaignPath);
   const activeTrackId = resolveActiveTab(tabs, savedTab);
   const activeTrack = useMemo(
     () => (activeTrackId ? resolveTrack(activeTrackId, library) : null),
@@ -240,6 +249,14 @@ export function useRelationships(options: UseRelationshipsOptions): Relationship
     [activeTrackId, kind, ledgers, defaultHolder, holderChoices, campaignPath, labelFor],
   );
 
+  const groupBy = useMemo(
+    () =>
+      activeTrackId
+        ? (groupByChoices[activeTrackId] ?? loadGroupBy(campaignPath, activeTrackId))
+        : 'holder',
+    [activeTrackId, campaignPath, groupByChoices],
+  );
+
   const sortMode = resolveSortMode(kind ?? 'numeric', sortChoice);
 
   const baseRows = useMemo(
@@ -257,9 +274,33 @@ export function useRelationships(options: UseRelationshipsOptions): Relationship
     [ledgers, activeTrack, activeTrackId, now, titleByPath, labelFor],
   );
 
+  const categoricalTrack = activeTrack?.kind === 'categorical' ? activeTrack : null;
+
+  const categoricalEntries = useMemo(
+    () =>
+      categoricalTrack
+        ? buildCategoricalEntries(baseRows, categoricalTrack, labelFor, now, titleByPath)
+        : [],
+    [baseRows, categoricalTrack, labelFor, now, titleByPath],
+  );
+
+  const categorical = useMemo(
+    () =>
+      categoricalTrack && activeTrackId
+        ? deriveCategoricalTable(categoricalEntries, {
+            track: categoricalTrack,
+            groupBy,
+            query,
+            enabledScopes: enabledScopesFor(categoricalTrack.kind, disabledScopes),
+            labelFor,
+          })
+        : null,
+    [categoricalEntries, categoricalTrack, activeTrackId, groupBy, query, disabledScopes, labelFor],
+  );
+
   const view = useMemo(
     () =>
-      activeTrack && activeTrackId
+      activeTrack && activeTrackId && !categoricalTrack
         ? deriveView(baseRows, {
             track: activeTrack,
             trackId: activeTrackId,
@@ -277,6 +318,7 @@ export function useRelationships(options: UseRelationshipsOptions): Relationship
       baseRows,
       activeTrack,
       activeTrackId,
+      categoricalTrack,
       holderPicker.selectedId,
       now,
       titleByPath,
@@ -291,6 +333,9 @@ export function useRelationships(options: UseRelationshipsOptions): Relationship
   const groupsRef = useRef<ViewGroup[]>(view.groups);
   groupsRef.current = view.groups;
 
+  // The view is empty for categorical tracks, so counts come from the categorical table.
+  const counts = categorical ?? view;
+
   const hasQuery = query.trim() !== '';
   const anyScopeDisabled = disabledScopes.size > 0;
 
@@ -302,7 +347,7 @@ export function useRelationships(options: UseRelationshipsOptions): Relationship
     activeTrackId,
     activeTrack,
     selectTab: (trackId) => {
-      setTabChoice({ campaignPath, id: trackId });
+      setTabChoice(trackId);
       saveSelectedTab(campaignPath, trackId);
       setQuery('');
       setDisabledScopes(NO_SCOPES);
@@ -311,6 +356,12 @@ export function useRelationships(options: UseRelationshipsOptions): Relationship
     problems,
     trackProblems: problemsForTrack(problems, activeTrackId),
     holderPicker,
+    groupBy,
+    setGroupBy: (next) => {
+      if (!activeTrackId) return;
+      setGroupByChoices((prev) => ({ ...prev, [activeTrackId]: next }));
+      saveGroupBy(campaignPath, activeTrackId, next);
+    },
     selectHolder: (holderId) => {
       if (!activeTrackId) return;
       setHolderChoices((prev) => ({ ...prev, [activeTrackId]: holderId }));
@@ -320,9 +371,9 @@ export function useRelationships(options: UseRelationshipsOptions): Relationship
     toggleScope: (scope) => setDisabledScopes((prev) => toggleDisabledScope(prev, scope)),
     query,
     setQuery,
-    countLabel: hasQuery ? countLabel(view.matched, view.total) : null,
+    countLabel: hasQuery ? countLabel(counts.matched, counts.total) : null,
     emptyMessage:
-      hasQuery && view.total > 0 && view.matched === 0
+      hasQuery && counts.total > 0 && counts.matched === 0
         ? emptyMessage(query, anyScopeDisabled)
         : null,
     sortModes: sortModeOptions(kind ?? 'numeric'),
@@ -330,6 +381,7 @@ export function useRelationships(options: UseRelationshipsOptions): Relationship
     setSortMode: setSortChoice,
     sortByColumn: (column) => setSortChoice(nextColumnSort(sortMode, column)),
     groups: view.groups,
+    categorical,
     grouped: view.grouped,
     groupsListKey: activeTrackId ? groupListKey(activeTrackId) : null,
     canDrag: view.canDrag,
@@ -346,6 +398,7 @@ export function useRelationships(options: UseRelationshipsOptions): Relationship
       );
     },
     labelFor,
+    titleByPath,
     entityIndex: getEntityIndex(),
   };
 }

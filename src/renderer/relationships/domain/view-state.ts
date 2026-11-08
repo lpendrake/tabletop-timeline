@@ -37,7 +37,11 @@ export interface HolderPickerModel {
   selectedCount: number;
 }
 
-/** The picker model for one track, resolving the saved selection against the holders present. */
+/**
+ * The picker model for one track, resolving the saved selection against the
+ * holders present. A categorical track shows every holder, so it has no picker
+ * and always selects all holders.
+ */
 export function buildHolderPicker(input: {
   kind: TrackKind;
   trackId: string;
@@ -49,9 +53,12 @@ export function buildHolderPicker(input: {
   const { kind, trackId, ledgers, defaultHolderId, savedHolderId, labelFor } = input;
   const holders = holdersForTrack(ledgers, trackId, labelFor);
   const total = holders.reduce((sum, h) => sum + h.count, 0);
-  const selectedId = resolveSelectedHolder(savedHolderId, holders, defaultHolderId);
+  const categorical = kind === 'categorical';
+  const selectedId = categorical
+    ? ALL_HOLDERS
+    : resolveSelectedHolder(savedHolderId, holders, defaultHolderId);
   return {
-    show: showHolderPicker(holders),
+    show: !categorical && showHolderPicker(holders),
     label: pickerLabel(kind),
     allLabel: allLabel(kind),
     holders,
@@ -112,13 +119,15 @@ export function sortModeOptions(kind: TrackKind): Array<{ mode: SortMode; label:
 /**
  * The chosen sort if the kind offers it, else the kind's default. Numeric
  * tracks accept My order or any column sort and default to My order; other
- * kinds accept their listed modes and default to the first.
+ * kinds accept their listed modes and default to the first. A kind with no
+ * modes (categorical) resolves to My order.
  */
 export function resolveSortMode(kind: TrackKind, chosen: RowSort | null): RowSort {
   const modes = sortModesForKind(kind);
-  if (chosen === null) return kind === 'numeric' ? 'mine' : modes[0];
+  const fallback = modes[0] ?? 'mine';
+  if (chosen === null) return fallback;
   if (kind === 'numeric') return chosen === 'mine' || isColumnSort(chosen) ? chosen : 'mine';
-  return !isColumnSort(chosen) && modes.includes(chosen) ? chosen : modes[0];
+  return !isColumnSort(chosen) && modes.includes(chosen) ? chosen : fallback;
 }
 
 /** Entries whose envelope names `trackId`. */
@@ -134,7 +143,10 @@ export function asOfLabelFor(now: number): string | null {
   return Number.isFinite(now) ? formatEntryDate(now) : null;
 }
 
-/** The ids currently shown for `listKey`: holder ids for a group list, else that group's observer ids. */
+/**
+ * The ids currently shown for `listKey`: holder ids for a group list, else
+ * that group's observer ids.
+ */
 export function visibleIdsForList(
   groups: readonly ViewGroup[],
   trackId: string,

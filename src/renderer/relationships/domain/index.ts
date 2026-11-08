@@ -5,7 +5,6 @@ export type { ViewOrder, RowMove, MoveRow, RowDragPayload, DropTarget } from './
 export {
   rowListKey,
   groupListKey,
-  entityCardsKey,
   defaultViewOrder,
   parseViewOrder,
   serialiseViewOrder,
@@ -32,6 +31,9 @@ export type {
   ViewRowsResult,
 } from './view-rows';
 export { buildBaseRows, deriveView, deriveViewRows, canDragRows, historyKey } from './view-rows';
+
+export type { CategoricalGroupBy, CategoricalTable } from './categorical';
+export { buildCategoricalEntries, deriveCategoricalTable } from './categorical';
 
 export type { PlotRange, BandSpan, PlotTick, PlotScale, TickAlign } from './plot-scale';
 export {

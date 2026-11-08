@@ -1,10 +1,11 @@
+import { parseGroupBy, type CategoricalGroupBy } from './domain/categorical';
 import { parseColumnWidths, type ColumnWidths } from './domain/numeric-columns';
 
-/** Per-campaign selected tab, per-track selected holder and numeric column widths for the Relationships view (localStorage). */
-
+/** Per-campaign selected tab, per-track selected holder and group-by, and numeric column widths for the Relationships view (localStorage). */
 interface Stored {
   tab?: string;
   holders?: Record<string, string>;
+  groupBy?: Record<string, string>;
   columnWidths?: unknown;
 }
 
@@ -59,4 +60,20 @@ export function loadColumnWidths(campaignPath: string): ColumnWidths {
 
 export function saveColumnWidths(campaignPath: string, widths: ColumnWidths): void {
   write(campaignPath, { ...read(campaignPath), columnWidths: widths });
+}
+
+export function loadGroupBy(campaignPath: string, trackId: string): CategoricalGroupBy {
+  const groupBy = read(campaignPath).groupBy;
+  const v = groupBy && typeof groupBy === 'object' ? groupBy[trackId] : undefined;
+  return parseGroupBy(v);
+}
+
+export function saveGroupBy(
+  campaignPath: string,
+  trackId: string,
+  groupBy: CategoricalGroupBy,
+): void {
+  const cur = read(campaignPath);
+  const saved = cur.groupBy && typeof cur.groupBy === 'object' ? cur.groupBy : {};
+  write(campaignPath, { ...cur, groupBy: { ...saved, [trackId]: groupBy } });
 }

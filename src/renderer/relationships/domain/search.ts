@@ -7,7 +7,15 @@ import { NOTE_DEFAULT_REASON } from '../../../shared/relationships';
 import type { RelationshipDelta } from '../../../shared/relationships/model';
 import type { TrackKind } from '../../../shared/relationships/spec';
 
-export type SearchScope = 'name' | 'band' | 'rung' | 'group' | 'tag' | 'event' | 'reason';
+export type SearchScope =
+  | 'name'
+  | 'band'
+  | 'rung'
+  | 'holder'
+  | 'tag'
+  | 'observer'
+  | 'event'
+  | 'reason';
 
 /** One history entry of a row, already reduced to searchable text. */
 export interface SearchableHistoryEntry {
@@ -19,7 +27,14 @@ export interface SearchableHistoryEntry {
 /** A row as the caller describes it for searching. `key` must be unique among rows. */
 export interface SearchableRow {
   key: string;
-  fields: { name?: string; band?: string; rung?: string; group?: string; tag?: string[] };
+  fields: {
+    name?: string;
+    band?: string;
+    rung?: string;
+    holder?: string;
+    tag?: string[];
+    observer?: string;
+  };
   history: SearchableHistoryEntry[];
 }
 
@@ -34,7 +49,7 @@ export interface SearchResult {
 const SCOPES: Record<TrackKind, SearchScope[]> = {
   numeric: ['name', 'band', 'event', 'reason'],
   ordinal: ['name', 'rung', 'event', 'reason'],
-  categorical: ['name', 'group', 'tag'],
+  categorical: ['holder', 'tag', 'observer'],
 };
 
 /** The scopes offered for a track kind, in display order. */
@@ -51,10 +66,12 @@ export function scopeLabel(scope: SearchScope, trackName: string): string {
       return 'Band';
     case 'rung':
       return trackName;
-    case 'group':
-      return 'Group';
+    case 'holder':
+      return 'Holder';
     case 'tag':
       return 'Tag';
+    case 'observer':
+      return 'Observer';
     case 'event':
       return 'Event';
     case 'reason':
@@ -120,7 +137,8 @@ export function searchRows(
     const name = scopes.has('name') ? f.name?.toLowerCase() : undefined;
     const band = scopes.has('band') ? f.band?.toLowerCase() : undefined;
     const rung = scopes.has('rung') ? f.rung?.toLowerCase() : undefined;
-    const group = scopes.has('group') ? f.group?.toLowerCase() : undefined;
+    const holder = scopes.has('holder') ? f.holder?.toLowerCase() : undefined;
+    const observer = scopes.has('observer') ? f.observer?.toLowerCase() : undefined;
     const tags = scopes.has('tag') ? f.tag?.map((t) => t.toLowerCase()) : undefined;
 
     // Bit i set = words[i] still needs a history match.
@@ -132,7 +150,8 @@ export function searchRows(
         has(name, w) ||
         has(band, w) ||
         has(rung, w) ||
-        has(group, w) ||
+        has(holder, w) ||
+        has(observer, w) ||
         tags?.some((t) => t.includes(w))
       ) {
         continue;

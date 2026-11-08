@@ -3,9 +3,11 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { DEFAULT_COLUMN_WIDTHS, resizeColumn } from '../domain/numeric-columns';
 import {
   loadColumnWidths,
+  loadGroupBy,
   loadSelectedHolder,
   loadSelectedTab,
   saveColumnWidths,
+  saveGroupBy,
   saveSelectedHolder,
   saveSelectedTab,
 } from '../view-state-persistence';
@@ -52,5 +54,35 @@ describe('relationships view persistence', () => {
     expect(loadColumnWidths('/c1')).toEqual(DEFAULT_COLUMN_WIDTHS);
     saveColumnWidths('/c1', wide);
     expect(loadColumnWidths('/c1')).toEqual(wide);
+  });
+
+  it('group-by defaults to holder', () => {
+    expect(loadGroupBy('/c1', 'tg01')).toBe('holder');
+  });
+
+  it('group-by round-trips per campaign and per track', () => {
+    saveSelectedTab('/c1', 'at01');
+    saveGroupBy('/c1', 'tg01', 'tag');
+    saveGroupBy('/c1', 'tg02', 'holder');
+    saveGroupBy('/c2', 'tg02', 'tag');
+    expect(loadGroupBy('/c1', 'tg01')).toBe('tag');
+    expect(loadGroupBy('/c1', 'tg02')).toBe('holder');
+    expect(loadGroupBy('/c2', 'tg02')).toBe('tag');
+    expect(loadGroupBy('/c2', 'tg01')).toBe('holder');
+    expect(loadSelectedTab('/c1')).toBe('at01');
+  });
+
+  it('a stored legacy entity group-by loads as holder', () => {
+    saveGroupBy('/c1', 'tg01', 'entity' as never);
+    expect(loadGroupBy('/c1', 'tg01')).toBe('holder');
+  });
+
+  it('corrupt group-by storage falls back to holder', () => {
+    localStorage.setItem('relationships-view:/c1', 'not-json');
+    expect(loadGroupBy('/c1', 'tg01')).toBe('holder');
+    localStorage.setItem('relationships-view:/c1', JSON.stringify({ groupBy: { tg01: 'bogus' } }));
+    expect(loadGroupBy('/c1', 'tg01')).toBe('holder');
+    localStorage.setItem('relationships-view:/c1', JSON.stringify({ groupBy: 'junk' }));
+    expect(loadGroupBy('/c1', 'tg01')).toBe('holder');
   });
 });

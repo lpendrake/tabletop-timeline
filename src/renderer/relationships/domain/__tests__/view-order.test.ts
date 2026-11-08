@@ -5,7 +5,6 @@ import {
   canDrop,
   defaultViewOrder,
   dropPosition,
-  entityCardsKey,
   groupListKey,
   moveAfter,
   moveBefore,
@@ -26,7 +25,6 @@ describe('list keys', () => {
   it('are built from track + holder', () => {
     expect(rowListKey('rp01', 'aaaa')).toBe('rp01:aaaa');
     expect(groupListKey('rp01')).toBe('rp01:*');
-    expect(entityCardsKey('tg01')).toBe('tg01:entity-cards');
   });
 });
 
