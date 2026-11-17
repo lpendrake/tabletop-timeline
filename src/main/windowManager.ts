@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron';
 import * as path from 'node:path';
+import { DEV_SERVER_URL, resolveRendererSource } from './renderer-source.js';
 
 export class WindowManager {
   private mainWindow: BrowserWindow | null = null;
@@ -19,10 +20,8 @@ export class WindowManager {
     this.mainWindow.maximize();
     this.mainWindow.show();
 
-    const isDev = !app.isPackaged;
-
-    if (isDev) {
-      this.mainWindow.loadURL('http://localhost:5173');
+    if (resolveRendererSource(app.isPackaged, process.env) === 'dev-server') {
+      this.mainWindow.loadURL(DEV_SERVER_URL);
     } else {
       this.mainWindow.loadFile(path.join(app.getAppPath(), 'dist/index.html'));
     }

@@ -40,6 +40,9 @@ export interface NumericRowModel {
 /** The part of a row's plot a tooltip describes. */
 export type PlotPart = 'line' | 'dot';
 
+/** Widest a plot tooltip grows, in px: its CSS `max-width` and the width tooltip placement reserves. */
+export const TOOLTIP_MAX_WIDTH = 240;
+
 export function tooltipText(model: NumericRowModel, part: PlotPart): string {
   return part === 'line' ? model.lineTooltip : model.dotTooltip;
 }

@@ -20,14 +20,13 @@ import {
 } from '../../../domain/numeric-columns';
 import { entryYear, formatEntryDate } from '../../../domain/entry-date';
 import { numericHistoryModel } from '../../../domain/numeric-history';
-import { numericTabModel } from '../../../domain/numeric-rows';
+import { numericTabModel, TOOLTIP_MAX_WIDTH } from '../../../domain/numeric-rows';
 import { percent } from '../../../domain/plot-scale';
 import { formatNumber } from '../../../domain/row-display';
 import { defaultViewOrder, rowListKey, groupListKey } from '../../../domain/view-order';
 import type { ViewOrder } from '../../../domain/view-order';
 import { deriveViewRows, type ViewRowsResult } from '../../../domain/view-rows';
 import { noBands, pf2e, tenBands, unbounded } from '../../../domain/__tests__/numeric-fixtures';
-import { TOOLTIP_MAX_WIDTH } from '../../../hooks/use-plot-tooltip';
 import { CalendarProvider } from '../../../../timeline/calendar/provider';
 import { NumericTab, type NumericTabProps } from '../numeric-tab';
 

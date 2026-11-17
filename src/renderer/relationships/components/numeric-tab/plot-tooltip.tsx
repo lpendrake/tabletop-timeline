@@ -1,5 +1,6 @@
 import { createPortal } from 'react-dom';
-import { TOOLTIP_MAX_WIDTH, type PlotTooltip } from '../../hooks/use-plot-tooltip';
+import { TOOLTIP_MAX_WIDTH } from '../../domain/numeric-rows';
+import type { PlotTooltip } from '../../hooks/use-plot-tooltip';
 
 /** The hover tooltip of a plot, or nothing while no target is hovered. */
 export function PlotTooltipPortal<Target>({

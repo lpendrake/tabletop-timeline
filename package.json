@@ -19,14 +19,19 @@
     "rebuild:win": "taskkill /F /IM \"TableTop Timeline.exe\" /T /FI \"STATUS eq RUNNING\" & npm run package:win && start \"\" \"release/TableTop Timeline Installer.exe\"",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint \"src/**/*.{ts,tsx}\"",
-    "lint:fix": "eslint \"src/**/*.{ts,tsx}\" --fix",
+    "e2e": "tsx e2e/with-display.ts playwright test",
+    "app:explore": "tsx e2e/with-display.ts tsx e2e/explore.ts",
+    "e2e:doctor": "tsx e2e/doctor.ts",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" \"e2e/**/*.ts\" playwright.config.ts",
+    "lint:fix": "eslint \"src/**/*.{ts,tsx}\" \"e2e/**/*.ts\" playwright.config.ts --fix",
     "prune-worktrees": "node scripts/prune-worktrees.mjs",
     "preview": "vite preview",
     "prepare": "husky"
   },
   "lint-staged": {
-    "src/**/*.{ts,tsx}": "eslint --fix"
+    "src/**/*.{ts,tsx}": "eslint --fix",
+    "e2e/**/*.ts": "eslint --fix",
+    "playwright.config.ts": "eslint --fix"
   },
   "build": {
     "appId": "com.lpendrake.tabletop-timeline",
@@ -80,6 +85,7 @@
     "react-dom": "19.2.6"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@testing-library/react": "^16.3.2",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "20.19.0",

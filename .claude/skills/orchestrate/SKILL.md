@@ -117,6 +117,7 @@ Before executing, show the user the plan in exactly this structure
 |---|---|
 ## Risks
 ## Verification
+UI tickets: the run-app step (Phase 5), which view and fixture, and what the screenshots and measurements must show.
 ```
 
 Rules for the plan:
@@ -128,6 +129,7 @@ Rules for the plan:
   (same columns).
 - Every issue acceptance criterion maps to at least one task, or is
   marked as dropped with the user's agreement.
+- For tickets that change what the user sees, **Verification** names the run-app step.
 - Each task's model, files and risks go inside the template above (the
   **Technical details** line and **Risks**), not in a separate list.
 
@@ -182,6 +184,11 @@ cases. This prevents the common failure mode where agents write tests
 that mirror the implementation instead of testing behavior. For
 docs-only or config-only tasks, copy the **Checks** table instead. The
 table format is defined in Phase 2 (*Present the plan*).
+
+**UI tasks** — where layout matters (positioning, sizing, fonts,
+overlays, z-order), the task includes an e2e spec in `e2e/specs/` or an
+explore script in `e2e/explore-scripts/` (see the `run-app` skill),
+since unit tests can't see CSS. The orchestrator runs it in Phase 5.
 
 **Don't include**:
 - Instructions about other tasks (the agent doesn't need to know)
@@ -329,6 +336,27 @@ When a cherry-pick does conflict:
    kept, the intended final state, and "resolve the conflict markers,
    run `npm test`, commit." Review the result; re-prompt if wrong.
 
+### Verify UI in the real app (REQUIRED for tickets that change UI)
+
+Run this step ONCE, after the batch that wires the view is merged and
+`npm test` passes (not after every batch). Phase 6 starts only after it
+passes. You run commands and read output yourself; you write no code.
+
+1. `npm run e2e:doctor` — must report ready. If it cannot get there, tell
+   the user what failed, with doctor's fix line. Never skip this step
+   silently or call the UI verified.
+2. `npm run e2e` — all specs pass.
+3. Run the explore script or spec the UI task delivered:
+   `npm run app:explore -- --fixture <name> --script <file>` (or the new
+   spec via `npm run e2e`). If none was delivered, send a task to an
+   implementation agent to write one.
+4. Read the screenshots and check `measurements.json` against the
+   ticket's intent.
+
+Problems go back to an implementation agent with the screenshot path
+and the measurement that is wrong. Re-run this step after the fix.
+Don't ship UI work that only passed unit tests.
+
 ## Phase 6: Ship
 
 1. **Push** the branch:
@@ -360,7 +388,10 @@ When a cherry-pick does conflict:
 4. **Keep the user informed.** State what you're doing at each phase
    transition. Report batch progress. Flag risks early.
 
-5. **One PR per orchestration.** The whole point is unified review.
+5. **Verify UI in the real app.** Tickets that change UI run the Phase 5
+   run-app step before Phase 6; never ship UI on unit tests alone.
+
+6. **One PR per orchestration.** The whole point is unified review.
    Don't split into multiple PRs unless the user asks.
 
 ## Common pitfalls
