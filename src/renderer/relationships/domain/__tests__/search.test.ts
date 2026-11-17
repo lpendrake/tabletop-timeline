@@ -4,6 +4,7 @@ import {
   countLabel,
   emptyMessage,
   highlightRanges,
+  highlightQueries,
   historyEntryText,
   scopesForKind,
   searchRows,
@@ -112,5 +113,34 @@ describe('search', () => {
     expect(emptyMessage('blight', false)).toBe('Nothing matches "blight"');
     expect(emptyMessage('blight', true)).toBe('Nothing matches "blight" in the enabled scopes');
     expect(scopesForKind('categorical')).toEqual(['holder', 'tag', 'observer']);
+  });
+});
+
+describe('highlightQueries', () => {
+  const CELLS = ['holder', 'tag', 'observer'] as const;
+  const toggles = (disabled: SearchScope[]) =>
+    CELLS.map((scope) => ({ scope, enabled: !disabled.includes(scope) }));
+
+  it('highlightQueries returns the query for every requested cell whose scope is enabled', () => {
+    expect(highlightQueries('zara', toggles([]), CELLS)).toEqual({
+      holder: 'zara',
+      tag: 'zara',
+      observer: 'zara',
+    });
+  });
+
+  it('highlightQueries blanks cells whose scope is disabled', () => {
+    expect(highlightQueries('zara', toggles(['holder', 'tag']), CELLS)).toEqual({
+      holder: '',
+      tag: '',
+      observer: 'zara',
+    });
+  });
+
+  it('highlightQueries blanks a requested cell with no matching toggle', () => {
+    expect(highlightQueries('zara', toggles([]), ['observer', 'reason'])).toEqual({
+      observer: 'zara',
+      reason: '',
+    });
   });
 });

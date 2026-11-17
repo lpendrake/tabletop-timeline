@@ -16,6 +16,7 @@ import { cssVars } from '../../../shared/css-vars';
 import { GroupHeader } from '../group-header';
 import { TabNotice, TrackProblems } from '../tab-notices';
 import { NumericColumnHeader } from './numeric-column-header';
+import { highlightQueries, type SearchScope } from '../../domain/search';
 import { NumericRow } from './numeric-row';
 import './numeric-tab.css';
 
@@ -28,6 +29,7 @@ export interface NumericTabProps {
   grouped: boolean;
   canDrag: boolean;
   query: string;
+  scopes: ReadonlyArray<{ scope: SearchScope; enabled: boolean }>;
   now: number;
   entityIndex: EntityIndexEntry[] | null;
   emptyMessage: string | null;
@@ -80,6 +82,7 @@ function AxisLabels({ scale }: { scale: PlotScale }) {
 
 export function NumericTab(props: NumericTabProps) {
   const { track, groups, groupsListKey, grouped, canDrag, query, asOfLabel } = props;
+  const reasonQuery = highlightQueries(query, props.scopes, ['reason']).reason;
   const { scale, rows } = useMemo(
     () => numericTabModel(track, groups, asOfLabel),
     [track, groups, asOfLabel],
@@ -138,6 +141,7 @@ export function NumericTab(props: NumericTabProps) {
                 toggleRow={props.toggleRow}
                 now={props.now}
                 query={query}
+                reasonQuery={reasonQuery}
                 entityIndex={props.entityIndex}
                 onOpenById={props.onOpenById}
                 onOpenEvent={props.onOpenEvent}

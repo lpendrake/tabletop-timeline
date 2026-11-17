@@ -19,7 +19,8 @@ export interface NumericHistoryProps {
   track: NumericTrack;
   scale: PlotScale;
   now: number;
-  query: string;
+  /** The query to highlight in reasons; blank for none. */
+  reasonQuery: string;
   entityIndex: readonly EntityIndexEntry[] | null;
   onOpenEvent: (filename: string) => void;
   onOpenById: (id: string) => void;
@@ -61,7 +62,7 @@ const toneClass = (tone: ChangeTone) => `rel-num-amount is-${tone}`;
  * entries, plotted on the same axis as the rows above.
  */
 export function NumericHistory(props: NumericHistoryProps) {
-  const { history, track, scale, now, query, entityIndex, onOpenEvent, onOpenById } = props;
+  const { history, track, scale, now, reasonQuery, entityIndex, onOpenEvent, onOpenById } = props;
   const years = useMemo(
     () => numericHistoryModel(history, { track, range: scale, now, yearOf: entryYear }),
     [history, track, scale, now],
@@ -118,7 +119,7 @@ export function NumericHistory(props: NumericHistoryProps) {
                         }
                         {...hoverProps(entry.reasonTooltip)}
                       >
-                        <HighlightText text={entry.reason} query={query} />
+                        <HighlightText text={entry.reason} query={reasonQuery} />
                       </button>
                       <span className={`rel-num-entry-amount ${toneClass(entry.tone)}`}>
                         {entry.amount}

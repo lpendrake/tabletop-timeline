@@ -122,6 +122,10 @@ function props(
     grouped: result.grouped,
     canDrag: result.canDrag,
     query: '',
+    scopes: (['name', 'band', 'event', 'reason'] as const).map((scope) => ({
+      scope,
+      enabled: true,
+    })),
     emptyMessage: null,
     asOfLabel: AS_OF,
     trackProblems: [],
@@ -632,9 +636,35 @@ describe('NumericTab', () => {
       expect(tooltipText()).toBe(`Night of Ash: ${reason}`);
     });
 
-    it('a search hit in the reason is highlighted inside the reason button', () => {
+    it('with the Reason scope on, the matching word in the reason is highlighted', () => {
       render(historyProps([adjust(1, inYear(0), { reason: 'Saved the mayor' })], 'mayor'));
       expect($('mark', $('.rel-num-entry-reason')).textContent).toBe('mayor');
+    });
+
+    it('with the Reason scope off, a reason containing the search word has no highlight', () => {
+      const deltas = [
+        adjust(1, inYear(0), {
+          reason: 'Ash everywhere',
+          declaredIn: { path: EVENT_PATH, ordinal: 0 },
+        }),
+      ];
+      const result = derive(pf2e, [ledger('aaaa', 'bbbb', pf2e, deltas)], 'aaaa', expandedAnna(), {
+        query: 'ash',
+        titleByPath: TITLES,
+        enabledScopes: ['name', 'band', 'event'],
+      });
+      render(
+        props(pf2e, result, {
+          query: 'ash',
+          scopes: (['name', 'band', 'event', 'reason'] as const).map((scope) => ({
+            scope,
+            enabled: scope !== 'reason',
+          })),
+        }),
+      );
+      expect($$('.rel-num-row')).toHaveLength(1);
+      expect($('.rel-num-entry-reason').textContent).toContain('Ash everywhere');
+      expect($$('mark', $('.rel-num-entry-reason'))).toHaveLength(0);
     });
 
     it('the history plot uses the rows’ inset layer and backgrounds', () => {

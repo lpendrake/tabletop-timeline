@@ -27,7 +27,10 @@ export interface NumericRowProps {
   moveRow: MoveRow;
   toggleRow: (listKey: string, observerId: string) => void;
   now: number;
+  /** The raw search query; a change resets the history's open years. */
   query: string;
+  /** The query to highlight in history reasons, blank when the Reason scope is off. */
+  reasonQuery: string;
   entityIndex: readonly EntityIndexEntry[] | null;
   onOpenById: (id: string) => void;
   onOpenEvent: (filename: string) => void;
@@ -115,7 +118,7 @@ export function NumericRow(props: NumericRowProps) {
           track={props.track}
           scale={scale}
           now={props.now}
-          query={props.query}
+          reasonQuery={props.reasonQuery}
           entityIndex={props.entityIndex}
           onOpenEvent={props.onOpenEvent}
           onOpenById={props.onOpenById}

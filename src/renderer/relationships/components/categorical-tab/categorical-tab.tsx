@@ -2,14 +2,13 @@ import { Fragment, useState, type ReactNode } from 'react';
 import type { EntityIndexEntry } from '../../../../types/global';
 import type { InvalidDirectiveEntry, TagTrack } from '../../../../shared/relationships';
 import {
-  highlightQueries,
   sectionFoldKey,
   toggledId,
   type CategoricalTable,
   type TableRow,
   type TableSection,
 } from '../../domain/categorical';
-import type { SearchScope } from '../../domain/search';
+import { highlightQueries, type SearchScope } from '../../domain/search';
 import { bodyNotice } from '../../domain/tabs';
 import { EntityLink } from '../entity-link';
 import { NoticeView, TrackProblems } from '../tab-notices';
@@ -72,7 +71,7 @@ function SectionRow(props: { section: TableSection; folded: boolean; onToggle: (
 function ResultRow(props: {
   row: TableRow;
   open: boolean;
-  highlight: ReturnType<typeof highlightQueries>;
+  highlight: Record<'holder' | 'tag' | 'observer', string>;
   onToggle: () => void;
   onOpenById: (id: string) => void;
 }) {
@@ -124,7 +123,7 @@ export function CategoricalTab(props: CategoricalTabProps) {
     setOpenIn(tableKey);
     setOpen(null);
   }
-  const highlight = highlightQueries(query, props.scopes);
+  const highlight = highlightQueries(query, props.scopes, ['holder', 'tag', 'observer']);
   return (
     <div className="rel-cat-tab">
       {props.toolbar}

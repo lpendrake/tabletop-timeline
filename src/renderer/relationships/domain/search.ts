@@ -233,3 +233,16 @@ export function countLabel(matched: number, total: number): string {
 export function emptyMessage(query: string, anyScopeDisabled: boolean): string {
   return `Nothing matches "${query.trim()}"${anyScopeDisabled ? ' in the enabled scopes' : ''}`;
 }
+
+/** For each requested cell, the search query where that cell's scope has an enabled toggle, else blank. */
+export function highlightQueries<S extends SearchScope>(
+  query: string,
+  scopes: ReadonlyArray<{ scope: SearchScope; enabled: boolean }>,
+  cells: readonly S[],
+): Record<S, string> {
+  const highlight = {} as Record<S, string>;
+  for (const cell of cells) {
+    highlight[cell] = scopes.some((s) => s.scope === cell && s.enabled) ? query : '';
+  }
+  return highlight;
+}
