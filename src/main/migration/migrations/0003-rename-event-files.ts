@@ -19,7 +19,7 @@ const OLD_SCHEME_PREFIX_RE = /^(-?\d{4,})-(\d{2})-(\d{2})(?:T(\d{2}):?(\d{2}):?(
 
 const cal = createCalendar(golarionSpec);
 
-function buildNewFilename(epochSeconds: number, slug: string): string {
+export function buildNewFilename(epochSeconds: number, slug: string): string {
   const d = cal.fromEpochSeconds(epochSeconds);
 
   if (d.kind === 'intercalary') {
