@@ -1,5 +1,4 @@
 import { _electron, type ElectronApplication, type Page } from '@playwright/test';
-import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, statSync } from 'node:fs';
 import { rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -9,6 +8,7 @@ import { RENDERER_ENV_DIST, RENDERER_ENV_VAR } from '../src/main/renderer-source
 import { VIEW_SHORTCUT_KEYS } from '../src/renderer/relationships/domain/view-shortcut.js';
 import type { ViewType } from '../src/renderer/components/footer.js';
 import { needsBuild } from './launch-plan.js';
+import { spawnCommandSync } from './spawn-command.js';
 
 export interface Measurement {
   box: { x: number; y: number; width: number; height: number };
@@ -98,11 +98,11 @@ export function buildIfStale(): void {
   if (!needsBuild({ newestSourceMtimeMs, builtMtimesMs })) return;
 
   console.log('e2e: dist is missing or stale, running npm run build');
-  const result = spawnSync('npm run build', { cwd: REPO_ROOT, stdio: 'inherit', shell: true });
+  const result = spawnCommandSync('npm', ['run', 'build'], { cwd: REPO_ROOT, stdio: 'inherit' });
   if (result.status !== 0) throw new Error('npm run build failed');
 }
 
-function availableFixtures(): string[] {
+export function availableFixtures(): string[] {
   return readdirSync(FIXTURES_DIR, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && entry.name !== '__tests__')
     .map((entry) => entry.name);

@@ -20,6 +20,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "tsx e2e/with-display.ts playwright test",
+    "app:explore": "tsx e2e/with-display.ts tsx e2e/explore.ts",
+    "e2e:doctor": "tsx e2e/doctor.ts",
     "lint": "eslint \"src/**/*.{ts,tsx}\" \"e2e/**/*.ts\" playwright.config.ts",
     "lint:fix": "eslint \"src/**/*.{ts,tsx}\" \"e2e/**/*.ts\" playwright.config.ts --fix",
     "prune-worktrees": "node scripts/prune-worktrees.mjs",

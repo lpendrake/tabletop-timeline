@@ -1,5 +1,5 @@
-import { spawn } from 'node:child_process';
-import { displayCommand, quoteForWindowsShell } from './launch-plan.js';
+import { displayCommand } from './launch-plan.js';
+import { killCommand, spawnCommand } from './spawn-command.js';
 
 const command = process.argv.slice(2);
 if (command.length === 0) {
@@ -9,22 +9,14 @@ if (command.length === 0) {
 
 const wrapped = displayCommand({ platform: process.platform, env: process.env, command });
 const [file, ...args] = wrapped ?? command;
-const isWindows = process.platform === 'win32';
+// On POSIX the child leads its own process group so a signal can stop xvfb-run, Xvfb,
+// Playwright and Electron together; on Windows Ctrl+C already reaches every process on the
+// console.
+const child = spawnCommand(file, args, { stdio: 'inherit' });
 
-// On Windows `playwright` is a .cmd shim, which Node refuses to spawn without a shell, and a
-// shell joins arguments unquoted, so the whole command line is quoted into one string.
-// Elsewhere no shell is used and arguments pass through untouched. On POSIX the child leads
-// its own process group so a signal can stop xvfb-run, Xvfb, Playwright and Electron together;
-// on Windows Ctrl+C already reaches every process on the console.
-const child = isWindows
-  ? spawn(quoteForWindowsShell(file, args), { stdio: 'inherit', shell: true })
-  : spawn(file, args, { stdio: 'inherit', detached: true });
-
-if (!isWindows) {
+if (process.platform !== 'win32') {
   for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-    process.on(signal, () => {
-      if (child.pid !== undefined) process.kill(-child.pid, signal);
-    });
+    process.on(signal, () => killCommand(child, signal));
   }
 }
 child.on('error', (error: NodeJS.ErrnoException) => {
