@@ -10,6 +10,11 @@ Prefer npm scripts over calling binaries directly. Check `package.json` first an
 - `npm run build` — build renderer + main
 - `npm run lint` — lint check
 - `npm run lint:fix` — lint and auto-fix
+- `npm run e2e:doctor` — check this machine can run the app; run this first if the app won't launch
+- `npm run e2e` — run the end-to-end specs (Playwright) against the real app
+- `npm run app:explore -- --fixture <name> --script <file>` — drive the real app for screenshots and measurements
+
+After UI changes, see the `run-app` skill.
 
 Only use `npx <tool>` when there is genuinely no npm script for the task.
 
