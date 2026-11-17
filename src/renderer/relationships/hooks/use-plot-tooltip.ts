@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import type { MouseEvent } from 'react';
 import { computeTooltipPosition, type TooltipPosition } from '../../shared/tooltip-position';
-
-export const TOOLTIP_MAX_WIDTH = 240;
+import { TOOLTIP_MAX_WIDTH } from '../domain/numeric-rows';
 
 export interface PlotTooltip<Target> {
   target: Target;

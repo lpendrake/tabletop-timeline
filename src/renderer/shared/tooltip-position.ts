@@ -1,7 +1,7 @@
 /** Fixed-position offsets: `left` or `right` locates the horizontal edge pinned to the pointer, `bottom` the bottom edge. */
 export type TooltipPosition = { left: number; bottom: number } | { right: number; bottom: number };
 
-const VIEWPORT_MARGIN = 8;
+export const VIEWPORT_MARGIN = 8;
 const ANCHOR_GAP = 6;
 
 /**
