@@ -98,7 +98,7 @@ function input(over: Partial<ViewRowsInput> = {}): ViewRowsInput {
     titleByPath: TITLES,
     labelFor,
     query: '',
-    enabledScopes: ['name', 'band', 'event', 'reason'],
+    enabledScopes: ['name', 'band', 'reason'],
     sortMode: 'mine',
     viewOrder: defaultViewOrder(),
     ...over,
@@ -173,7 +173,7 @@ describe('view-rows', () => {
   });
 
   it('a history match auto-opens the row and marks hit entries', () => {
-    const result = deriveViewRows(input({ query: 'battle' }));
+    const result = deriveViewRows(input({ query: 'defended' }));
     expect(observers(result)).toEqual(['cccc']);
     const row = result.groups[0].rows[0];
     expect(row.expanded).toBe(true);

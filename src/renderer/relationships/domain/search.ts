@@ -7,20 +7,11 @@ import { NOTE_DEFAULT_REASON } from '../../../shared/relationships';
 import type { RelationshipDelta } from '../../../shared/relationships/model';
 import type { TrackKind } from '../../../shared/relationships/spec';
 
-export type SearchScope =
-  | 'name'
-  | 'band'
-  | 'rung'
-  | 'holder'
-  | 'tag'
-  | 'observer'
-  | 'event'
-  | 'reason';
+export type SearchScope = 'name' | 'band' | 'rung' | 'holder' | 'tag' | 'observer' | 'reason';
 
 /** One history entry of a row, already reduced to searchable text. */
 export interface SearchableHistoryEntry {
   key: string;
-  event?: string;
   reason?: string;
 }
 
@@ -47,8 +38,8 @@ export interface SearchResult {
 }
 
 const SCOPES: Record<TrackKind, SearchScope[]> = {
-  numeric: ['name', 'band', 'event', 'reason'],
-  ordinal: ['name', 'rung', 'event', 'reason'],
+  numeric: ['name', 'band', 'reason'],
+  ordinal: ['name', 'rung', 'reason'],
   categorical: ['holder', 'tag', 'observer'],
 };
 
@@ -72,8 +63,6 @@ export function scopeLabel(scope: SearchScope, trackName: string): string {
       return 'Tag';
     case 'observer':
       return 'Observer';
-    case 'event':
-      return 'Event';
     case 'reason':
       return 'Reason';
   }
@@ -108,7 +97,7 @@ function has(lowered: string | undefined, word: string): boolean {
 
 /**
  * AND across words: each word must match an enabled row-level field or (with
- * Event/Reason enabled) some history entry. Different words may match
+ * Reason enabled) some history entry. Different words may match
  * different entries. If any word needed history, `historyHits` records every
  * entry matching at least one word. Empty query matches everything.
  */
@@ -127,10 +116,7 @@ export function searchRows(
 
   const scopes: ReadonlySet<SearchScope> =
     enabledScopes instanceof Set ? enabledScopes : new Set(enabledScopes);
-  const eventOn = scopes.has('event');
-  const reasonOn = scopes.has('reason');
-  const historyOn = eventOn || reasonOn;
-  const eventLower = new Map<string, string>();
+  const historyOn = scopes.has('reason');
 
   for (const row of rows) {
     const f = row.fields;
@@ -168,23 +154,9 @@ export function searchRows(
       let hits: Set<string> | undefined;
       let found = 0;
       for (const entry of row.history) {
-        // Event titles repeat across many entries, so their lowercase form is memoised.
-        let event: string | undefined;
-        if (eventOn && entry.event !== undefined) {
-          event = eventLower.get(entry.event);
-          if (event === undefined) {
-            event = entry.event.toLowerCase();
-            eventLower.set(entry.event, event);
-          }
-        }
-        // A reason that fell back to the event title is the same string: lowercase once.
-        const reason = !reasonOn
-          ? undefined
-          : entry.reason === entry.event && eventOn
-            ? event
-            : entry.reason?.toLowerCase();
+        const reason = entry.reason?.toLowerCase();
         for (let i = 0; i < words.length; i++) {
-          if (has(event, words[i]) || has(reason, words[i])) {
+          if (has(reason, words[i])) {
             (hits ??= new Set()).add(entry.key);
             found |= 1 << i;
           }

@@ -122,7 +122,7 @@ function props(
     grouped: result.grouped,
     canDrag: result.canDrag,
     query: '',
-    scopes: (['name', 'band', 'event', 'reason'] as const).map((scope) => ({
+    scopes: (['name', 'band', 'reason'] as const).map((scope) => ({
       scope,
       enabled: true,
     })),
@@ -411,7 +411,7 @@ describe('NumericTab', () => {
       const result = derive(pf2e, [ledger('aaaa', 'bbbb', pf2e, deltas)], 'aaaa', expandedAnna(), {
         query,
         titleByPath: TITLES,
-        enabledScopes: ['name', 'band', 'event', 'reason'],
+        enabledScopes: ['name', 'band', 'reason'],
       });
       return props(pf2e, result, { query, ...over });
     }
@@ -644,26 +644,26 @@ describe('NumericTab', () => {
     it('with the Reason scope off, a reason containing the search word has no highlight', () => {
       const deltas = [
         adjust(1, inYear(0), {
-          reason: 'Ash everywhere',
+          reason: 'Anna saved the mayor',
           declaredIn: { path: EVENT_PATH, ordinal: 0 },
         }),
       ];
       const result = derive(pf2e, [ledger('aaaa', 'bbbb', pf2e, deltas)], 'aaaa', expandedAnna(), {
-        query: 'ash',
+        query: 'anna',
         titleByPath: TITLES,
-        enabledScopes: ['name', 'band', 'event'],
+        enabledScopes: ['name', 'band'],
       });
       render(
         props(pf2e, result, {
-          query: 'ash',
-          scopes: (['name', 'band', 'event', 'reason'] as const).map((scope) => ({
+          query: 'anna',
+          scopes: (['name', 'band', 'reason'] as const).map((scope) => ({
             scope,
             enabled: scope !== 'reason',
           })),
         }),
       );
       expect($$('.rel-num-row')).toHaveLength(1);
-      expect($('.rel-num-entry-reason').textContent).toContain('Ash everywhere');
+      expect($('.rel-num-entry-reason').textContent).toContain('Anna saved the mayor');
       expect($$('mark', $('.rel-num-entry-reason'))).toHaveLength(0);
     });
 

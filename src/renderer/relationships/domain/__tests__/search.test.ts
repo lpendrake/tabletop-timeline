@@ -13,15 +13,15 @@ import {
   type SearchScope,
 } from '../search';
 
-const ALL: SearchScope[] = ['name', 'band', 'event', 'reason'];
+const ALL: SearchScope[] = ['name', 'band', 'reason'];
 
 const rows: SearchableRow[] = [
   {
     key: 'a',
     fields: { name: 'Vanguard Keep', band: 'Friendly' },
     history: [
-      { key: 'h1', event: 'Siege', reason: 'Spread the blight' },
-      { key: 'h2', event: 'Feast', reason: 'Shared bread' },
+      { key: 'h1', reason: 'Spread the blight' },
+      { key: 'h2', reason: 'Shared bread' },
     ],
   },
   { key: 'b', fields: { name: 'Harbor', band: 'Hostile' }, history: [] },
@@ -37,7 +37,40 @@ describe('search', () => {
 
   it('a disabled scope is not searched', () => {
     expect(searchRows(rows, 'friendly', ALL).matched).toBe(1);
-    expect(searchRows(rows, 'friendly', ['name', 'event', 'reason']).matched).toBe(0);
+    expect(searchRows(rows, 'friendly', ['name', 'reason']).matched).toBe(0);
+  });
+
+  it('numeric and ordinal tabs offer no Event scope', () => {
+    expect(scopesForKind('numeric')).toEqual(['name', 'band', 'reason']);
+    expect(scopesForKind('ordinal')).toEqual(['name', 'rung', 'reason']);
+  });
+
+  it('a word found only in an event title does not match when the entry has its own reason', () => {
+    const delta = {
+      op: 'adjust' as const,
+      by: 1,
+      at: 1000,
+      declaredIn: { path: 'e.md', ordinal: 0 },
+      reason: 'Held the gate',
+    };
+    const text = historyEntryText(delta, new Map([['e.md', 'Siege of Vanguard']]));
+    const r: SearchableRow = { key: 'x', fields: {}, history: [{ key: 'h', reason: text.reason }] };
+    const res = searchRows([r], 'siege', ALL);
+    expect(res.matched).toBe(0);
+    expect(res.historyHits.size).toBe(0);
+  });
+
+  it('an entry with no reason is found by its event title through the Reason scope', () => {
+    const delta = {
+      op: 'adjust' as const,
+      by: 1,
+      at: 1000,
+      declaredIn: { path: 'e.md', ordinal: 0 },
+    };
+    const text = historyEntryText(delta, new Map([['e.md', 'Siege of Vanguard']]));
+    const r: SearchableRow = { key: 'x', fields: {}, history: [{ key: 'h', reason: text.reason }] };
+    expect(searchRows([r], 'siege', ['reason']).historyHits.get('x')).toEqual(new Set(['h']));
+    expect(searchRows([r], 'siege', ['name']).matched).toBe(0);
   });
 
   it('reason falls back to the event title when empty', () => {
@@ -50,7 +83,7 @@ describe('search', () => {
     };
     const text = historyEntryText(delta, new Map([['e.md', 'Siege of Vanguard']]));
     expect(text).toEqual({ event: 'Siege of Vanguard', reason: 'Siege of Vanguard' });
-    const r: SearchableRow = { key: 'x', fields: {}, history: [{ key: 'h', ...text }] };
+    const r: SearchableRow = { key: 'x', fields: {}, history: [{ key: 'h', reason: text.reason }] };
     expect(searchRows([r], 'siege', ['reason']).matched).toBe(1);
     expect(searchRows([r], 'siege', ['name']).matched).toBe(0);
   });
@@ -77,9 +110,9 @@ describe('search', () => {
     };
     const text = historyEntryText(delta, new Map([['notes/x.md', 'Elara']]));
     expect(text).toEqual({ event: 'Elara', reason: NOTE_DEFAULT_REASON });
-    const r: SearchableRow = { key: 'x', fields: {}, history: [{ key: 'h', ...text }] };
+    const r: SearchableRow = { key: 'x', fields: {}, history: [{ key: 'h', reason: text.reason }] };
     expect(searchRows([r], 'unspecified', ['reason']).matched).toBe(1);
-    expect(searchRows([r], 'unspecified', ['event']).matched).toBe(0);
+    expect(searchRows([r], 'unspecified', ['name']).matched).toBe(0);
   });
 
   it('matches through history report the matching entries', () => {

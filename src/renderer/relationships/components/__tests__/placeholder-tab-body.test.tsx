@@ -31,7 +31,12 @@ afterEach(() => {
   container.remove();
 });
 
-function entry(key: string, hit: boolean | null, title: string): HistoryEntry {
+function entry(
+  key: string,
+  hit: boolean | null,
+  title: string,
+  reason = 'Unspecified',
+): HistoryEntry {
   return {
     key,
     at: 1,
@@ -48,7 +53,7 @@ function entry(key: string, hit: boolean | null, title: string): HistoryEntry {
     applied: true,
     mirrored: false,
     eventTitle: title,
-    reason: 'Unspecified',
+    reason,
     hit,
   };
 }
@@ -137,7 +142,9 @@ describe('PlaceholderTabBody', () => {
       props({
         query: 'siege',
         groups: [
-          group([makeRow('a', [entry('1', true, 'Siege of Ash'), entry('2', false, 'Parade')])]),
+          group([
+            makeRow('a', [entry('1', true, 'Battle', 'Siege of Ash'), entry('2', false, 'Parade')]),
+          ]),
         ],
       }),
     );

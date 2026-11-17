@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { Ledger, RelationshipDelta } from '../../../../shared/relationships/model';
 import { historyEntryText, searchRows, type SearchableRow, type SearchScope } from '../search';
 
-const SCOPES: SearchScope[] = ['name', 'band', 'event', 'reason'];
+const SCOPES: SearchScope[] = ['name', 'band', 'reason'];
 
 function buildLedger(seed: number): Ledger {
   const deltas: RelationshipDelta[] = [];
@@ -30,7 +30,7 @@ describe('PERF: searching 1,000 ledgers × 50 deltas with a title map finishes w
       fields: { name: `Observer ${i}`, band: 'Friendly' },
       history: l.deltas.map((d, j) => {
         const text = historyEntryText(d, titleByPath);
-        return { key: String(j), event: text.event, reason: text.reason };
+        return { key: String(j), reason: text.reason };
       }),
     }));
 
