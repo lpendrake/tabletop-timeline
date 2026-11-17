@@ -82,7 +82,11 @@ function AxisLabels({ scale }: { scale: PlotScale }) {
 
 export function NumericTab(props: NumericTabProps) {
   const { track, groups, groupsListKey, grouped, canDrag, query, asOfLabel } = props;
-  const reasonQuery = highlightQueries(query, props.scopes, ['reason']).reason;
+  const {
+    name: nameQuery,
+    band: bandQuery,
+    reason: reasonQuery,
+  } = highlightQueries(query, props.scopes, ['name', 'band', 'reason']);
   const { scale, rows } = useMemo(
     () => numericTabModel(track, groups, asOfLabel),
     [track, groups, asOfLabel],
@@ -141,6 +145,8 @@ export function NumericTab(props: NumericTabProps) {
                 toggleRow={props.toggleRow}
                 now={props.now}
                 query={query}
+                nameQuery={nameQuery}
+                bandQuery={bandQuery}
                 reasonQuery={reasonQuery}
                 entityIndex={props.entityIndex}
                 onOpenById={props.onOpenById}

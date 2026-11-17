@@ -120,6 +120,41 @@ describe('search', () => {
     expect(res.historyHits.get('a')).toEqual(new Set(['h1']));
   });
 
+  it('a row matched by name still reports history hits for reasons containing a query word', () => {
+    const res = searchRows(
+      [
+        {
+          key: 'n',
+          fields: { name: 'House of Storms' },
+          history: [
+            { key: 'h1', reason: 'Weathered a storm' },
+            { key: 'h2', reason: 'Paid a debt' },
+          ],
+        },
+      ],
+      'storm',
+      ALL,
+    );
+    expect(res.matched).toBe(1);
+    expect(res.historyHits.get('n')).toEqual(new Set(['h1']));
+  });
+
+  it('with the Reason scope off, a name-matched row reports no history hits', () => {
+    const res = searchRows(
+      [
+        {
+          key: 'n',
+          fields: { name: 'House of Storms' },
+          history: [{ key: 'h1', reason: 'Weathered a storm' }],
+        },
+      ],
+      'storm',
+      ['name', 'band'],
+    );
+    expect(res.matched).toBe(1);
+    expect(res.historyHits.size).toBe(0);
+  });
+
   it('row-level match without history yields no history hits', () => {
     const res = searchRows(rows, 'vanguard', ALL);
     expect(res.matched).toBe(1);

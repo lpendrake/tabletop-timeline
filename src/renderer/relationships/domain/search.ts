@@ -31,7 +31,7 @@ export interface SearchableRow {
 
 export interface SearchResult {
   matchedKeys: Set<string>;
-  /** Only rows whose match needed history appear; values are the entries matching at least one word. */
+  /** With the Reason scope on, matched rows with a matching reason appear; values are the entries matching at least one word. */
   historyHits: Map<string, Set<string>>;
   total: number;
   matched: number;
@@ -98,8 +98,10 @@ function has(lowered: string | undefined, word: string): boolean {
 /**
  * AND across words: each word must match an enabled row-level field or (with
  * Reason enabled) some history entry. Different words may match
- * different entries. If any word needed history, `historyHits` records every
- * entry matching at least one word. Empty query matches everything.
+ * different entries. With Reason enabled, `historyHits` records, for every
+ * matched row, each entry whose reason contains at least one word, whether or
+ * not the row's own fields already matched; a row with no such entry has no
+ * record. Empty query matches everything.
  */
 export function searchRows(
   rows: readonly SearchableRow[],
@@ -150,7 +152,7 @@ export function searchRows(
     }
     if (!ok) continue;
 
-    if (needed !== 0) {
+    if (historyOn) {
       let hits: Set<string> | undefined;
       let found = 0;
       for (const entry of row.history) {
@@ -163,7 +165,7 @@ export function searchRows(
         }
       }
       if ((needed & ~found) !== 0) continue;
-      historyHits.set(row.key, hits ?? new Set());
+      if (hits) historyHits.set(row.key, hits);
     }
     matchedKeys.add(row.key);
   }
