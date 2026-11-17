@@ -22,9 +22,22 @@ describe('displayCommand', () => {
 });
 
 describe('quoteForWindowsShell', () => {
+  it('leaves the command name and plain arguments unquoted so Windows batch shims find their own folder', () => {
+    expect(quoteForWindowsShell('npm', ['run', 'build'])).toBe('npm run build');
+    expect(quoteForWindowsShell('npm', ['install', '-g', '@scope/pkg'])).toBe(
+      'npm install -g @scope/pkg',
+    );
+  });
+
   it('quotes arguments with spaces and quotes for the Windows shell', () => {
     expect(quoteForWindowsShell('playwright', ['test', '-g', 'sticky header', 'say "hi"'])).toBe(
-      '"playwright" "test" "-g" "sticky header" "say \\"hi\\""',
+      'playwright test -g "sticky header" "say \\"hi\\""',
+    );
+  });
+
+  it('quotes arguments containing cmd.exe metacharacters', () => {
+    expect(quoteForWindowsShell('tool', ['a&b', '50%', 'x|y', ''])).toBe(
+      'tool "a&b" "50%" "x|y" ""',
     );
   });
 });

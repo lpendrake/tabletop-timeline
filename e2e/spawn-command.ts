@@ -13,7 +13,7 @@ const isWindows = process.platform === 'win32';
 /**
  * Starts `file args...`. On Windows tools such as `npm` and `playwright` are .cmd shims, which
  * Node refuses to spawn without a shell, and a shell joins arguments unquoted, so the whole
- * command line is quoted into one string. Elsewhere no shell is used and arguments pass through
+ * command line is built into one string, quoting only the parts that need it. Elsewhere no shell is used and arguments pass through
  * untouched, and the child leads its own process group so `killCommand` can stop everything it
  * started.
  */
