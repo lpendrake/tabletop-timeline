@@ -64,4 +64,11 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    files: ['e2e/**/*.ts'],
+    rules: {
+      // Playwright fixtures are destructured from the first parameter: `async ({}, testInfo) =>`.
+      'no-empty-pattern': ['error', { allowObjectPatternsAsParameters: true }],
+    },
+  },
 );

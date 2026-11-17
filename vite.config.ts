@@ -29,6 +29,8 @@ export default defineConfig({
       // excludes dist by default, and `npm run build` emits test copies there).
       'dist/**',
       '.claude/worktrees/**',
+      // Playwright specs run through `npm run e2e`, not vitest.
+      'e2e/specs/**',
       ...(electronInstalled ? [] : electronOnlyTests),
     ],
   },

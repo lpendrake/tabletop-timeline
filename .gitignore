@@ -12,3 +12,6 @@ release/
 !.claude/skills/
 !.claude/settings.json
 !.claude/hooks/
+
+# end-to-end run artefacts (screenshots, Playwright results)
+e2e/output/
