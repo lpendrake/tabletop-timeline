@@ -122,6 +122,10 @@ function props(
     grouped: result.grouped,
     canDrag: result.canDrag,
     query: '',
+    scopes: (['name', 'band', 'reason'] as const).map((scope) => ({
+      scope,
+      enabled: true,
+    })),
     emptyMessage: null,
     asOfLabel: AS_OF,
     trackProblems: [],
@@ -407,7 +411,7 @@ describe('NumericTab', () => {
       const result = derive(pf2e, [ledger('aaaa', 'bbbb', pf2e, deltas)], 'aaaa', expandedAnna(), {
         query,
         titleByPath: TITLES,
-        enabledScopes: ['name', 'band', 'event', 'reason'],
+        enabledScopes: ['name', 'band', 'reason'],
       });
       return props(pf2e, result, { query, ...over });
     }
@@ -632,9 +636,50 @@ describe('NumericTab', () => {
       expect(tooltipText()).toBe(`Night of Ash: ${reason}`);
     });
 
-    it('a search hit in the reason is highlighted inside the reason button', () => {
+    it('with the Reason scope on, the matching word in the reason is highlighted', () => {
       render(historyProps([adjust(1, inYear(0), { reason: 'Saved the mayor' })], 'mayor'));
       expect($('mark', $('.rel-num-entry-reason')).textContent).toBe('mayor');
+    });
+
+    it('with the Reason scope off, a reason containing the search word has no highlight', () => {
+      const deltas = [
+        adjust(1, inYear(0), {
+          reason: 'Anna saved the mayor',
+          declaredIn: { path: EVENT_PATH, ordinal: 0 },
+        }),
+      ];
+      const result = derive(pf2e, [ledger('aaaa', 'bbbb', pf2e, deltas)], 'aaaa', expandedAnna(), {
+        query: 'anna',
+        titleByPath: TITLES,
+        enabledScopes: ['name', 'band'],
+      });
+      render(
+        props(pf2e, result, {
+          query: 'anna',
+          scopes: (['name', 'band', 'reason'] as const).map((scope) => ({
+            scope,
+            enabled: scope !== 'reason',
+          })),
+        }),
+      );
+      expect($$('.rel-num-row')).toHaveLength(1);
+      expect($('.rel-num-entry-reason').textContent).toContain('Anna saved the mayor');
+      expect($$('mark', $('.rel-num-entry-reason'))).toHaveLength(0);
+    });
+
+    it('a name-matched row with a matching reason opens with hit and dimmed entries', () => {
+      const deltas = [
+        adjust(1, inYear(0), { reason: 'Anna saved the mayor' }),
+        adjust(1, inYear(0), { reason: 'Paid a debt' }),
+      ];
+      const result = derive(pf2e, [ledger('aaaa', 'bbbb', pf2e, deltas)], 'aaaa', undefined, {
+        query: 'anna',
+        enabledScopes: ['name', 'band', 'reason'],
+      });
+      render(props(pf2e, result, { query: 'anna' }));
+      expect(rowFor('Anna').getAttribute('aria-expanded')).toBe('true');
+      expect($$('.rel-num-entry.is-hit')).toHaveLength(1);
+      expect($$('.rel-num-entry.is-dim')).toHaveLength(1);
     });
 
     it('the history plot uses the rows’ inset layer and backgrounds', () => {
@@ -645,6 +690,40 @@ describe('NumericTab', () => {
         expect((plot.children[0] as HTMLElement).className).toBe('rel-num-layer');
         expect($$('.rel-num-band', plot)).toHaveLength(7);
       });
+    });
+  });
+
+  describe('search highlighting of name and band', () => {
+    function searched(enabled: Array<'name' | 'band' | 'reason'>, query: string) {
+      const result = derive(pf2e, pf2eLedgers(), 'aaaa', undefined, {
+        query,
+        enabledScopes: enabled,
+      });
+      render(
+        props(pf2e, result, {
+          query,
+          scopes: (['name', 'band', 'reason'] as const).map((scope) => ({
+            scope,
+            enabled: enabled.includes(scope),
+          })),
+        }),
+      );
+    }
+
+    it('the matching part of the entity name is highlighted when the Name scope is on', () => {
+      searched(['name'], 'ann');
+      expect($('mark', $('.rel-num-name')).textContent).toBe('Ann');
+    });
+
+    it('the entity name is not highlighted when the Name scope is off', () => {
+      searched(['band'], 'a');
+      expect($$('.rel-num-name').length).toBeGreaterThan(0);
+      expect($$('mark', $('.rel-num-name'))).toHaveLength(0);
+    });
+
+    it('the matching part of the band label is highlighted when the Band scope is on', () => {
+      searched(['band'], 'dmir');
+      expect($('mark', $('.rel-num-band-label')).textContent).toBe('dmir');
     });
   });
 

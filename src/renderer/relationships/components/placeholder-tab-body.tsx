@@ -67,7 +67,7 @@ function EntryItem(props: {
       </span>
       {entry.eventTitle && (
         <span className="rel-entry-event" onClick={openTitle}>
-          <HighlightText text={entry.eventTitle} query={query} />
+          {entry.eventTitle}
         </span>
       )}
       <span className="rel-entry-reason">

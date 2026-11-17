@@ -10,6 +10,7 @@ import type { ViewRow } from '../../domain/view-rows';
 import { useRowReorder } from '../../hooks/use-row-drag';
 import { cssVars } from '../../../shared/css-vars';
 import { EntityLink } from '../entity-link';
+import { HighlightText } from '../highlight-text';
 import { activateOnKey, DragHandle, dropTargetProps, openRowMoveMenu } from '../row-controls';
 import { NumericHistory } from './numeric-history';
 import { NumericPlot } from './numeric-plot';
@@ -27,7 +28,14 @@ export interface NumericRowProps {
   moveRow: MoveRow;
   toggleRow: (listKey: string, observerId: string) => void;
   now: number;
+  /** The raw search query; a change resets the history's open years. */
   query: string;
+  /** The query to highlight in the entity name, blank when the Name scope is off. */
+  nameQuery: string;
+  /** The query to highlight in the band label, blank when the Band scope is off. */
+  bandQuery: string;
+  /** The query to highlight in history reasons, blank when the Reason scope is off. */
+  reasonQuery: string;
   entityIndex: readonly EntityIndexEntry[] | null;
   onOpenById: (id: string) => void;
   onOpenEvent: (filename: string) => void;
@@ -66,12 +74,13 @@ export function NumericRow(props: NumericRowProps) {
         id={row.observerId}
         label={row.label}
         onOpenById={props.onOpenById}
+        query={props.nameQuery}
         className="rel-num-name"
       />
     ),
     band: (
       <span className="rel-num-band-label" title={model.bandLabel ?? undefined}>
-        {model.bandLabel}
+        {model.bandLabel && <HighlightText text={model.bandLabel} query={props.bandQuery} />}
       </span>
     ),
     value: (
@@ -115,7 +124,7 @@ export function NumericRow(props: NumericRowProps) {
           track={props.track}
           scale={scale}
           now={props.now}
-          query={props.query}
+          reasonQuery={props.reasonQuery}
           entityIndex={props.entityIndex}
           onOpenEvent={props.onOpenEvent}
           onOpenById={props.onOpenById}

@@ -284,13 +284,3 @@ export function toggledId(ids: ReadonlySet<string>, id: string): Set<string> {
 export function sectionFoldKey(section: TableSection): string {
   return `${section.kind}:${section.id}`;
 }
-
-/** The query to highlight in each cell: the search query where that cell's scope is enabled, else blank. */
-export function highlightQueries(
-  query: string,
-  scopes: ReadonlyArray<{ scope: SearchScope; enabled: boolean }>,
-): Record<'holder' | 'tag' | 'observer', string> {
-  const on = (scope: SearchScope) =>
-    scopes.some((s) => s.scope === scope && s.enabled) ? query : '';
-  return { holder: on('holder'), tag: on('tag'), observer: on('observer') };
-}

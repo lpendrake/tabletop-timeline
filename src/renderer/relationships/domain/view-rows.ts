@@ -174,7 +174,7 @@ function searchableFor(
     fields,
     history: base.ledger.deltas.map((d) => {
       const text = historyEntryText(d, titleByPath);
-      return { key: historyKey(d), event: text.event, reason: text.reason };
+      return { key: historyKey(d), reason: text.reason };
     }),
   };
 }

@@ -7,20 +7,11 @@ import { NOTE_DEFAULT_REASON } from '../../../shared/relationships';
 import type { RelationshipDelta } from '../../../shared/relationships/model';
 import type { TrackKind } from '../../../shared/relationships/spec';
 
-export type SearchScope =
-  | 'name'
-  | 'band'
-  | 'rung'
-  | 'holder'
-  | 'tag'
-  | 'observer'
-  | 'event'
-  | 'reason';
+export type SearchScope = 'name' | 'band' | 'rung' | 'holder' | 'tag' | 'observer' | 'reason';
 
 /** One history entry of a row, already reduced to searchable text. */
 export interface SearchableHistoryEntry {
   key: string;
-  event?: string;
   reason?: string;
 }
 
@@ -40,15 +31,15 @@ export interface SearchableRow {
 
 export interface SearchResult {
   matchedKeys: Set<string>;
-  /** Only rows whose match needed history appear; values are the entries matching at least one word. */
+  /** With the Reason scope on, matched rows with a matching reason appear; values are the entries matching at least one word. */
   historyHits: Map<string, Set<string>>;
   total: number;
   matched: number;
 }
 
 const SCOPES: Record<TrackKind, SearchScope[]> = {
-  numeric: ['name', 'band', 'event', 'reason'],
-  ordinal: ['name', 'rung', 'event', 'reason'],
+  numeric: ['name', 'band', 'reason'],
+  ordinal: ['name', 'rung', 'reason'],
   categorical: ['holder', 'tag', 'observer'],
 };
 
@@ -72,8 +63,6 @@ export function scopeLabel(scope: SearchScope, trackName: string): string {
       return 'Tag';
     case 'observer':
       return 'Observer';
-    case 'event':
-      return 'Event';
     case 'reason':
       return 'Reason';
   }
@@ -108,9 +97,11 @@ function has(lowered: string | undefined, word: string): boolean {
 
 /**
  * AND across words: each word must match an enabled row-level field or (with
- * Event/Reason enabled) some history entry. Different words may match
- * different entries. If any word needed history, `historyHits` records every
- * entry matching at least one word. Empty query matches everything.
+ * Reason enabled) some history entry. Different words may match
+ * different entries. With Reason enabled, `historyHits` records, for every
+ * matched row, each entry whose reason contains at least one word, whether or
+ * not the row's own fields already matched; a row with no such entry has no
+ * record. Empty query matches everything.
  */
 export function searchRows(
   rows: readonly SearchableRow[],
@@ -127,10 +118,7 @@ export function searchRows(
 
   const scopes: ReadonlySet<SearchScope> =
     enabledScopes instanceof Set ? enabledScopes : new Set(enabledScopes);
-  const eventOn = scopes.has('event');
-  const reasonOn = scopes.has('reason');
-  const historyOn = eventOn || reasonOn;
-  const eventLower = new Map<string, string>();
+  const historyOn = scopes.has('reason');
 
   for (const row of rows) {
     const f = row.fields;
@@ -164,34 +152,20 @@ export function searchRows(
     }
     if (!ok) continue;
 
-    if (needed !== 0) {
+    if (historyOn) {
       let hits: Set<string> | undefined;
       let found = 0;
       for (const entry of row.history) {
-        // Event titles repeat across many entries, so their lowercase form is memoised.
-        let event: string | undefined;
-        if (eventOn && entry.event !== undefined) {
-          event = eventLower.get(entry.event);
-          if (event === undefined) {
-            event = entry.event.toLowerCase();
-            eventLower.set(entry.event, event);
-          }
-        }
-        // A reason that fell back to the event title is the same string: lowercase once.
-        const reason = !reasonOn
-          ? undefined
-          : entry.reason === entry.event && eventOn
-            ? event
-            : entry.reason?.toLowerCase();
+        const reason = entry.reason?.toLowerCase();
         for (let i = 0; i < words.length; i++) {
-          if (has(event, words[i]) || has(reason, words[i])) {
+          if (has(reason, words[i])) {
             (hits ??= new Set()).add(entry.key);
             found |= 1 << i;
           }
         }
       }
       if ((needed & ~found) !== 0) continue;
-      historyHits.set(row.key, hits ?? new Set());
+      if (hits) historyHits.set(row.key, hits);
     }
     matchedKeys.add(row.key);
   }
@@ -232,4 +206,17 @@ export function countLabel(matched: number, total: number): string {
 /** `Nothing matches "blight"`, plus ` in the enabled scopes` when any scope toggle is off. */
 export function emptyMessage(query: string, anyScopeDisabled: boolean): string {
   return `Nothing matches "${query.trim()}"${anyScopeDisabled ? ' in the enabled scopes' : ''}`;
+}
+
+/** For each requested cell, the search query where that cell's scope has an enabled toggle, else blank. */
+export function highlightQueries<S extends SearchScope>(
+  query: string,
+  scopes: ReadonlyArray<{ scope: SearchScope; enabled: boolean }>,
+  cells: readonly S[],
+): Record<S, string> {
+  const highlight = {} as Record<S, string>;
+  for (const cell of cells) {
+    highlight[cell] = scopes.some((s) => s.scope === cell && s.enabled) ? query : '';
+  }
+  return highlight;
 }
