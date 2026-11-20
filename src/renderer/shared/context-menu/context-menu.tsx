@@ -34,11 +34,16 @@ export interface ContextMenuProps {
   items: ContextMenuItem[];
   x: number;
   y: number;
-  onClose: (reason?: ContextMenuCloseReason) => void;
+  /** `query` is the search text at close time (`''` when not searching). */
+  onClose: (reason: ContextMenuCloseReason, query: string) => void;
   /** Called instead of refocusing the pre-open `document.activeElement` on close. */
   restoreFocus?: () => void;
   /** When true, Backspace with no search open closes the menu (reason 'backspace'). */
   backspaceCloses?: boolean;
+  /** When false, Escape while searching closes the menu (reason 'escape') instead of leaving search. Default true. */
+  escapeLeavesSearch?: boolean;
+  /** When true, a space before any search starts closes the menu (reason 'space'). */
+  spaceCloses?: boolean;
   /** Anchors the panel to a text caret's line instead of the fixed x/y point. */
   anchor?: CaretAnchor;
 }
@@ -53,6 +58,8 @@ export function ContextMenu({
   onClose,
   restoreFocus,
   backspaceCloses,
+  escapeLeavesSearch,
+  spaceCloses,
   anchor,
 }: ContextMenuProps) {
   const [state, setState] = useState<MenuKeyState>(() => initialMenuKeyStateFor(items));
@@ -75,13 +82,19 @@ export function ContextMenu({
   // (e.g. the peek stack) can subscribe instead of watching the DOM.
   useEffect(() => registerContextMenuOpen(), []);
 
+  // Every close path (keyboard, select, outside click) reports the live query.
+  const closeWithQuery = useCallback(
+    (reason: ContextMenuCloseReason) => onClose(reason, stateRef.current.query),
+    [onClose],
+  );
+
   const selectAction = useCallback(
     (item: ActionItem) => {
       restoreFocusNowRef.current();
       item.onSelect();
-      onClose('select');
+      closeWithQuery('select');
     },
-    [onClose],
+    [closeWithQuery],
   );
 
   const handleKeyDown = useCallback(
@@ -90,7 +103,7 @@ export function ContextMenu({
         stateRef.current,
         { key: e.key, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey },
         items,
-        { backspaceCloses },
+        { backspaceCloses, escapeLeavesSearch, spaceCloses },
       );
       setState(result.state);
       if (result.effect) {
@@ -99,15 +112,15 @@ export function ContextMenu({
           if (item && item.kind === 'action') selectAction(item);
         } else {
           restoreFocusNowRef.current();
-          onClose('backspace');
+          closeWithQuery(result.effect.reason);
         }
       }
       return result.handled;
     },
-    [items, backspaceCloses, onClose, selectAction],
+    [items, backspaceCloses, escapeLeavesSearch, spaceCloses, closeWithQuery, selectAction],
   );
 
-  const { menuRef, pos, restoreFocusNow } = useContextMenuBehavior(x, y, onClose, {
+  const { menuRef, pos, restoreFocusNow } = useContextMenuBehavior(x, y, closeWithQuery, {
     restoreFocus,
     onKeyDown: handleKeyDown,
   });
