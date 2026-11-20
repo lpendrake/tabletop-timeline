@@ -104,6 +104,6 @@ describe('showContextMenu', () => {
 
     expect(restoreFocus).toHaveBeenCalledTimes(1);
     expect(onSelect).toHaveBeenCalledTimes(1);
-    expect(onClose).toHaveBeenCalledWith('select');
+    expect(onClose).toHaveBeenCalledWith('select', '');
   });
 });

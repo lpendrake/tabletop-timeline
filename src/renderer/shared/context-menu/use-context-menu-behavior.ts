@@ -29,7 +29,7 @@ export interface ContextMenuBehaviorOptions {
 export function useContextMenuBehavior(
   x: number,
   y: number,
-  onClose: (reason?: ContextMenuCloseReason) => void,
+  onClose: (reason: ContextMenuCloseReason) => void,
   options?: ContextMenuBehaviorOptions,
 ) {
   const menuRef = useRef<HTMLDivElement>(null);

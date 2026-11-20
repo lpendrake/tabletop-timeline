@@ -3,7 +3,7 @@
  * `context-menu.tsx` holds this as a single `useState<MenuKeyState>` and
  * wires `menuKeyDown`/`menuQueryChange`/`menuHover`/`menuSearchHover` to
  * React state and to the two side effects a keystroke can request
- * (`MenuEffect`: run an action, or close the menu on Backspace).
+ * (`MenuEffect`: run an action, or close the menu on Backspace, Escape or space).
  */
 import { wrapIndex } from '../search/wrap-index';
 import {
@@ -68,7 +68,7 @@ export interface KeyInput {
 /** A side effect a keystroke requests, for the component to carry out. */
 export type MenuEffect =
   | { type: 'select'; path: number[] }
-  | { type: 'close'; reason: 'backspace' };
+  | { type: 'close'; reason: 'backspace' | 'escape' | 'space' };
 
 export interface MenuKeyResult {
   state: MenuKeyState;
@@ -190,17 +190,23 @@ function activateCurrentTarget(
  * while searching, arrows move the target and Enter activates it; otherwise
  * arrows move the highlight and Enter activates/enters it. Printable keys
  * (outside search) start a search; Backspace (outside search) only produces
- * a `close` effect when `opts.backspaceCloses` is set.
+ * a `close` effect when `opts.backspaceCloses` is set. Escape while searching
+ * leaves search unless `opts.escapeLeavesSearch` is `false`, in which case it
+ * closes the menu; a space before any search starts closes the menu when
+ * `opts.spaceCloses` is set.
  */
 export function menuKeyDown(
   state: MenuKeyState,
   key: KeyInput,
   items: readonly ContextMenuItem[],
-  opts: { backspaceCloses?: boolean },
+  opts: { backspaceCloses?: boolean; escapeLeavesSearch?: boolean; spaceCloses?: boolean },
 ): MenuKeyResult {
   if (state.isSearching) {
     switch (key.key) {
       case 'Escape':
+        if (opts.escapeLeavesSearch === false) {
+          return { state, handled: true, effect: { type: 'close', reason: 'escape' } };
+        }
         return { state: exitSearch(state), handled: true };
       case 'ArrowDown':
         return { state: moveTarget(state, 1), handled: true };
@@ -238,6 +244,12 @@ export function menuKeyDown(
         return { state, handled: true, effect: { type: 'close', reason: 'backspace' } };
       }
       return { state, handled: false };
+    case ' ':
+      if (!isPrintableKey(key)) return { state, handled: false };
+      if (opts.spaceCloses) {
+        return { state, handled: true, effect: { type: 'close', reason: 'space' } };
+      }
+      return { state: startSearch(state, key.key, items), handled: true };
     default:
       if (isPrintableKey(key)) {
         return { state: startSearch(state, key.key, items), handled: true };

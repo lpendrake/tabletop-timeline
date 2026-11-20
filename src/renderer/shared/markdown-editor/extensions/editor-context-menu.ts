@@ -44,7 +44,7 @@ import {
   toggleHeadingLevel2Command,
   toggleHeadingLevel3Command,
 } from '../commands';
-import { shouldOpenSlashMenu } from './slash-trigger';
+import { isCaretMenuTrigger } from './slash-trigger';
 
 export interface EditorMenuContext {
   view: EditorView;
@@ -284,14 +284,44 @@ export function getCaretRect(view: EditorView, pos: number): CaretRect | null {
   return { left, right: left, top, bottom };
 }
 
-/** Opens the menu anchored at the caret (shared by the `/` trigger and Shift+F10/ContextMenu). */
-function openCaretMenu(
+/** Change and caret that type `text` at `pos`, caret after it. */
+export function typedTextChange(pos: number, text: string) {
+  return {
+    changes: { from: pos, insert: text },
+    selection: { anchor: pos + text.length },
+  };
+}
+
+/**
+ * Change and selection that put a held-back `trigger` (plus the `query`
+ * typed into the menu's search) back at `pos`: the query is selected so typing
+ * replaces it; with no query the caret sits after the trigger.
+ */
+export function triggerReinsertChange(pos: number, trigger: string, query: string) {
+  if (!query) return typedTextChange(pos, trigger);
+  const start = pos + trigger.length;
+  return {
+    changes: { from: pos, insert: trigger + query },
+    selection: { anchor: start, head: start + query.length },
+  };
+}
+
+/** Options for a caret-anchored menu beyond its items. */
+export interface CaretMenuOptions {
+  backspaceCloses?: boolean;
+  escapeLeavesSearch?: boolean;
+  spaceCloses?: boolean;
+  onClose?: (reason: ContextMenuCloseReason | undefined, query: string) => void;
+}
+
+/** Shows `items` in a context menu anchored at the caret rect of `pos`. False when no rect can be measured. */
+export function openCaretMenu(
   view: EditorView,
-  range: { from: number; to: number },
-  config: EditorContextMenuConfig,
-  extraOptions: { backspaceCloses?: boolean; onClose?: (reason?: ContextMenuCloseReason) => void },
+  pos: number,
+  items: ContextMenuItem[],
+  options: CaretMenuOptions,
 ): boolean {
-  const coords = getCaretRect(view, range.from);
+  const coords = getCaretRect(view, pos);
   if (!coords) return false;
 
   const lineRect = {
@@ -302,16 +332,25 @@ function openCaretMenu(
     width: coords.right - coords.left,
     height: coords.bottom - coords.top,
   };
-  const items = buildEditorMenuItems(view, range, config.getExtraItems?.());
 
   showContextMenu(items, coords.left, coords.bottom, {
     anchor: { lineRect, prefer: 'below' },
     restoreFocus: () => view.focus(),
-    backspaceCloses: extraOptions.backspaceCloses,
-    onClose: extraOptions.onClose,
+    ...options,
   });
 
   return true;
+}
+
+/** Opens the standard editor menu at the caret (shared by the `/` trigger and Shift+F10/ContextMenu). */
+function openEditorMenu(
+  view: EditorView,
+  range: { from: number; to: number },
+  config: EditorContextMenuConfig,
+  extraOptions: { backspaceCloses?: boolean; onClose?: (reason?: ContextMenuCloseReason) => void },
+): boolean {
+  const items = buildEditorMenuItems(view, range, config.getExtraItems?.());
+  return openCaretMenu(view, range.from, items, extraOptions);
 }
 
 function isEditable(view: EditorView, config: EditorContextMenuConfig): boolean {
@@ -323,20 +362,16 @@ function makeSlashInputHandler(config: EditorContextMenuConfig): Extension {
     if (text !== '/') return false;
     if (from !== to) return false;
     if (!isEditable(view, config)) return false;
-    if (!shouldOpenSlashMenu(view.state, from)) return false;
+    if (!isCaretMenuTrigger(view.state, from)) return false;
 
-    const opened = openCaretMenu(view, { from, to: from }, config, {
+    const opened = openEditorMenu(view, { from, to: from }, config, {
       backspaceCloses: true,
       onClose: (reason) => {
         if (!view.dom.isConnected) return;
         if (reason === 'escape' || reason === 'outside') {
+          // The menu has already restored focus to the view.
           const pos = view.state.selection.main.head;
-          view.dispatch({
-            changes: { from: pos, insert: '/' },
-            selection: { anchor: pos + 1 },
-            userEvent: 'input.type',
-          });
-          if (reason === 'escape') view.focus();
+          view.dispatch({ ...triggerReinsertChange(pos, '/', ''), userEvent: 'input.type' });
         }
         // 'backspace': the '/' was never inserted — nothing to do.
         // 'select': the chosen action already ran in place of the '/'.
@@ -355,7 +390,7 @@ function makeCaretMenuKeymap(config: EditorContextMenuConfig): Extension {
   const run: Command = (view) => {
     if (!isEditable(view, config)) return false;
     const range = view.state.selection.main;
-    return openCaretMenu(view, { from: range.from, to: range.to }, config, {});
+    return openEditorMenu(view, { from: range.from, to: range.to }, config, {});
   };
 
   return Prec.high(

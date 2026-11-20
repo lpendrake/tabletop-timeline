@@ -38,6 +38,17 @@ and keyboard navigation for free, with no call-site changes.
   opener passed `backspaceCloses: true` (reason `'backspace'`); otherwise it
   does nothing. An outside `mousedown` closes with reason `'outside'`, a
   selection closes with reason `'select'`.
+- `onClose(reason, query)` also receives the search text at close time
+  (`''` when not searching). Two opt-in options change how a search ends
+  (both threaded `showContextMenu` options → `<ContextMenu>` → `menuKeyDown`):
+  `escapeLeavesSearch: false` makes Escape while searching close the whole
+  menu with reason `'escape'` (default `true`: it only leaves search), and
+  `spaceCloses: true` makes a space pressed before any search starts close
+  the menu with reason `'space'`; once searching, space is typed into the
+  search. Ctrl/Cmd/Alt+Space is never handled by the menu. Both are off by
+  default. The query is supplied by `<ContextMenu>` for every close path,
+  including an outside click; the programmatic `close()` handle reports
+  no reason and `''`.
 - Closing a menu returns focus exactly where it was: the caller can pass
   `restoreFocus?: () => void` (e.g. an editor host passes `() => view.focus()`
   so a CodeMirror selection comes back); without it, whatever had
@@ -94,14 +105,14 @@ and keyboard navigation for free, with no call-site changes.
 - `caret-position.ts` — pure helper: line rect + popup size + viewport +
   preferred side → `{left, top|bottom, maxHeight}`.
 - `context-menu.tsx` — `<ContextMenu items x y onClose restoreFocus
-  backspaceCloses anchor>`, the declarative component. Renders rows
-  recursively; a `submenu` row opens a child panel on hover, positioned via
+  backspaceCloses escapeLeavesSearch spaceCloses anchor>`, the declarative
+  component. Renders rows recursively; a `submenu` row opens a child panel on hover, positioned via
   `submenu-position.ts`. Wires the pure search/navigation helpers to React
   state — it doesn't reimplement their logic.
 - `show.ts` — imperative `showContextMenu(items, x, y, options?)` for callers
   outside a React tree (e.g. a CodeMirror span's native `contextmenu`
-  handler). `options` (`anchor`, `onClose`, `restoreFocus`, `backspaceCloses`)
-  is optional — existing 3-arg calls are unchanged.
+  handler). `options` (`anchor`, `onClose`, `restoreFocus`, `backspaceCloses`,
+  `escapeLeavesSearch`, `spaceCloses`) is optional — existing 3-arg calls are unchanged.
 - `context-menu.css` — panel, item, separator, header, disabled, submenu and
   search-row/highlight styles.
 

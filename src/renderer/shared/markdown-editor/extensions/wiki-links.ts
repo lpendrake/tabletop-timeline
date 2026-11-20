@@ -38,18 +38,11 @@ import {
   resetLocalLabelChange,
   resolveDisplayLabel,
 } from './wiki-link-context-menu';
+import { atLinkInputHandler } from './at-link-menu';
+import { buildWikiLinkInsert, type WikiLinkSuggestion } from './wiki-link-insert';
 import { WIKI_LINK_QUERY_RE } from './wiki-link-query';
 
 export type WikiLinkStatus = 'resolved' | 'loading' | 'missing' | 'unresolved';
-
-export interface WikiLinkSuggestion {
-  id: string;
-  label: string;
-  detail?: string;
-  boost?: number;
-  /** Present for image assets — causes insertion of ![label](notes-asset://...) instead of [[label|id]] */
-  assetPath?: string;
-}
 
 export interface WikiLinksConfig {
   suggest?: (query: string) => Promise<WikiLinkSuggestion[]>;
@@ -95,16 +88,6 @@ export const entityLabelMapField = StateField.define<Map<string, string>>({
     return value;
   },
 });
-
-export interface TriggerMatch {
-  prefixLen: number;
-  query: string;
-}
-
-export function parseTrigger(matchText: string): TriggerMatch {
-  const prefixLen = matchText.startsWith('@') ? 1 : 2;
-  return { prefixLen, query: matchText.slice(prefixLen) };
-}
 
 class WikiLinkWidget extends WidgetType {
   constructor(
@@ -159,6 +142,7 @@ export function wikiLinks(config: WikiLinksConfig = {}): Extension {
     wikiLinkCompletions(config),
     makeWikiLinkClickHandler(config),
     makeWikiLinkContextMenuHandler(config),
+    config.suggest ? atLinkInputHandler(config.suggest) : [],
   ];
 }
 
@@ -204,33 +188,8 @@ function wikiLinkEditKeymap(config: WikiLinksConfig): Extension {
   );
 }
 
-export interface WikiLinkApplyResult {
-  insert: string;
-  replaceFrom: number;
-  replaceTo: number;
-}
-
-export function buildWikiLinkInsert(
-  s: WikiLinkSuggestion,
-  prefixLen: number,
-  from: number,
-  to: number,
-  nextTwo: string,
-): WikiLinkApplyResult {
-  const replaceFrom = from - prefixLen;
-  if (s.assetPath) {
-    return {
-      insert: `![${s.label}](notes-asset://current/${s.assetPath})`,
-      replaceFrom,
-      replaceTo: to,
-    };
-  }
-  return {
-    insert: `[[${s.id}]]`,
-    replaceFrom,
-    replaceTo: nextTwo === ']]' ? to + 2 : to,
-  };
-}
+/** Length of the `[[` that opens a link query. */
+const OPEN_BRACKETS_LEN = 2;
 
 function wikiLinkCompletions(config: WikiLinksConfig): Extension {
   if (!config.suggest) return [];
@@ -241,12 +200,12 @@ function wikiLinkCompletions(config: WikiLinksConfig): Extension {
       const match = context.matchBefore(WIKI_LINK_QUERY_RE);
       if (!match || (match.from === match.to && !context.explicit)) return null;
 
-      const { prefixLen, query } = parseTrigger(match.text);
+      const query = match.text.slice(OPEN_BRACKETS_LEN);
       const suggestions = await config.suggest!(query);
       if (context.aborted) return null;
 
       return {
-        from: match.from + prefixLen,
+        from: match.from + OPEN_BRACKETS_LEN,
         to: context.pos,
         options: suggestions.map((s) => ({
           label: s.label,
@@ -255,8 +214,7 @@ function wikiLinkCompletions(config: WikiLinksConfig): Extension {
             const nextTwo = view.state.doc.sliceString(to, to + 2);
             const { insert, replaceFrom, replaceTo } = buildWikiLinkInsert(
               s,
-              prefixLen,
-              from,
+              from - OPEN_BRACKETS_LEN,
               to,
               nextTwo,
             );
@@ -266,7 +224,7 @@ function wikiLinkCompletions(config: WikiLinksConfig): Extension {
             });
           },
         })),
-        validFor: /^[^\]\n|@]*$/,
+        validFor: /^[^\]\n|]*$/,
       };
     }),
   ];

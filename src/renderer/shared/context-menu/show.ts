@@ -9,9 +9,12 @@ export interface ContextMenuHandle {
 
 export interface ShowContextMenuOptions {
   anchor?: CaretAnchor;
-  onClose?(reason?: ContextMenuCloseReason): void;
+  /** `query` is the search text at close time (`''` when not searching). */
+  onClose?(reason: ContextMenuCloseReason | undefined, query: string): void;
   restoreFocus?: () => void;
   backspaceCloses?: boolean;
+  escapeLeavesSearch?: boolean;
+  spaceCloses?: boolean;
 }
 
 /**
@@ -36,14 +39,14 @@ export function showContextMenu(
   const root = createRoot(host);
 
   let destroyed = false;
-  function destroy(reason?: ContextMenuCloseReason) {
+  function destroy(reason?: ContextMenuCloseReason, query = '') {
     if (destroyed) return;
     destroyed = true;
     queueMicrotask(() => {
       root.unmount();
       host.remove();
     });
-    options?.onClose?.(reason);
+    options?.onClose?.(reason, query);
   }
 
   root.render(
@@ -54,7 +57,9 @@ export function showContextMenu(
       anchor: options?.anchor,
       restoreFocus: options?.restoreFocus,
       backspaceCloses: options?.backspaceCloses,
-      onClose: (reason?: ContextMenuCloseReason) => destroy(reason),
+      escapeLeavesSearch: options?.escapeLeavesSearch,
+      spaceCloses: options?.spaceCloses,
+      onClose: destroy,
     }),
   );
 

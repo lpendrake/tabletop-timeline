@@ -25,9 +25,10 @@ function teardown() {
 function renderMenu(
   items: ContextMenuItem[],
   props: Partial<{
-    onClose: (reason?: ContextMenuCloseReason) => void;
+    onClose: (reason: ContextMenuCloseReason, query: string) => void;
     restoreFocus: () => void;
     backspaceCloses: boolean;
+    escapeLeavesSearch: boolean;
   }> = {},
 ) {
   const onClose = props.onClose ?? vi.fn();
@@ -40,6 +41,7 @@ function renderMenu(
         onClose={onClose}
         restoreFocus={props.restoreFocus}
         backspaceCloses={props.backspaceCloses}
+        escapeLeavesSearch={props.escapeLeavesSearch}
       />,
     );
   });
@@ -121,7 +123,7 @@ describe('ContextMenu — focus and search', () => {
     pressKey('Enter');
 
     expect(onSelectAlpha).toHaveBeenCalledTimes(1);
-    expect(onClose).toHaveBeenCalledWith('select');
+    expect(onClose).toHaveBeenCalledWith('select', expect.any(String));
   });
 
   it('a leading danger item is not pre-highlighted', () => {
@@ -189,7 +191,7 @@ describe('ContextMenu — focus and search', () => {
     pressKey('Enter');
 
     expect(onSelectHeading1).toHaveBeenCalledTimes(1);
-    expect(onClose).toHaveBeenCalledWith('select');
+    expect(onClose).toHaveBeenCalledWith('select', expect.any(String));
   });
 
   it('Down moves the target through the matches', () => {
@@ -261,7 +263,7 @@ describe('ContextMenu — focus and search', () => {
     expect(onClose).not.toHaveBeenCalled();
 
     pressKey('Escape');
-    expect(onClose).toHaveBeenCalledWith('escape');
+    expect(onClose).toHaveBeenCalledWith('escape', '');
   });
 
   it('backspacing the search to empty restores the pre-search highlight', () => {
@@ -322,7 +324,7 @@ describe('ContextMenu — focus and search', () => {
     expect(document.activeElement).not.toBe(input);
 
     pressKey('Escape');
-    expect(onClose).toHaveBeenCalledWith('escape');
+    expect(onClose).toHaveBeenCalledWith('escape', '');
     teardown();
     setup();
     expect(document.activeElement).toBe(input);
@@ -361,7 +363,7 @@ describe('ContextMenu — focus and search', () => {
       backspaceCloses: true,
     });
     pressKey('Backspace');
-    expect(onCloseWithOpt).toHaveBeenCalledWith('backspace');
+    expect(onCloseWithOpt).toHaveBeenCalledWith('backspace', '');
   });
 
   it('Escape inside the menu (with or without search) never reaches a document capture listener', () => {
@@ -375,7 +377,7 @@ describe('ContextMenu — focus and search', () => {
     expect(documentCaptureListener).not.toHaveBeenCalled();
 
     pressKey('Escape'); // closes the menu
-    expect(onClose).toHaveBeenCalledWith('escape');
+    expect(onClose).toHaveBeenCalledWith('escape', '');
     expect(documentCaptureListener).not.toHaveBeenCalled();
 
     document.removeEventListener('keydown', documentCaptureListener, true);
@@ -388,6 +390,55 @@ describe('ContextMenu — focus and search', () => {
       Object.defineProperty(event, 'target', { value: document.body, writable: false });
       document.body.dispatchEvent(event);
     });
-    expect(onClose).toHaveBeenCalledWith('outside');
+    expect(onClose).toHaveBeenCalledWith('outside', '');
+  });
+
+  it('outside click while searching passes the typed query', () => {
+    const onClose = renderMenu([{ kind: 'action', label: 'Alpha', onSelect: vi.fn() }]);
+    typeChar('a');
+    typeChar('l');
+    act(() => {
+      fireEvent.change(searchInput()!, { target: { value: 'al' } });
+    });
+    act(() => {
+      const event = new MouseEvent('mousedown', { bubbles: true });
+      Object.defineProperty(event, 'target', { value: document.body, writable: false });
+      document.body.dispatchEvent(event);
+    });
+    expect(onClose).toHaveBeenCalledWith('outside', 'al');
+  });
+
+  it('onClose receives the search text typed before Escape', () => {
+    const onClose = renderMenu([{ kind: 'action', label: 'Alpha', onSelect: vi.fn() }], {
+      escapeLeavesSearch: false,
+    });
+    typeChar('a');
+    typeChar('l');
+    // The search <input> owns the typed text; mirror a real edit to it.
+    const input = searchInput()!;
+    act(() => {
+      fireEvent.change(input, { target: { value: 'alp' } });
+    });
+    pressKey('Escape');
+    expect(onClose).toHaveBeenCalledWith('escape', 'alp');
+  });
+
+  it('Escape while searching only leaves search by default', () => {
+    const onClose = renderMenu([{ kind: 'action', label: 'Alpha', onSelect: vi.fn() }]);
+    typeChar('a');
+    expect(searchInput()).not.toBeNull();
+    pressKey('Escape');
+    expect(searchInput()).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('Escape while searching closes the menu when escapeLeavesSearch is false', () => {
+    const onClose = renderMenu([{ kind: 'action', label: 'Alpha', onSelect: vi.fn() }], {
+      escapeLeavesSearch: false,
+    });
+    typeChar('a');
+    pressKey('Escape');
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledWith('escape', 'a');
   });
 });

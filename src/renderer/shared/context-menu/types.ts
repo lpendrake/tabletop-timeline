@@ -24,7 +24,7 @@ export type ContextMenuItem =
   | { kind: 'header'; label: string };
 
 /** Why a context menu closed. */
-export type ContextMenuCloseReason = 'select' | 'escape' | 'backspace' | 'outside';
+export type ContextMenuCloseReason = 'select' | 'escape' | 'backspace' | 'space' | 'outside';
 
 /**
  * Anchors the menu to a text caret's line (e.g. a slash-command menu) rather

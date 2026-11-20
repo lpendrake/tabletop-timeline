@@ -205,6 +205,49 @@ describe('menuKeyDown', () => {
   });
 });
 
+describe('menuKeyDown — space', () => {
+  it("a leading space closes the menu with reason 'space' when spaceCloses is set", () => {
+    const result = menuKeyDown(initialMenuKeyState, key(' '), formattingMenu(), {
+      spaceCloses: true,
+    });
+    expect(result.handled).toBe(true);
+    expect(result.effect).toEqual({ type: 'close', reason: 'space' });
+    expect(result.state.isSearching).toBe(false);
+  });
+
+  it('a space after search has started is typed into the search', () => {
+    const items = formattingMenu();
+    const searching = menuKeyDown(initialMenuKeyState, key('d'), items, {
+      spaceCloses: true,
+    }).state;
+    const result = menuKeyDown(searching, key(' '), items, { spaceCloses: true });
+    expect(result.handled).toBe(false);
+    expect(result.effect).toBeUndefined();
+  });
+
+  it('Ctrl+Space is not handled by the menu', () => {
+    for (const opts of [{}, { spaceCloses: true }]) {
+      const result = menuKeyDown(
+        initialMenuKeyState,
+        { key: ' ', ctrlKey: true, metaKey: false, altKey: false },
+        formattingMenu(),
+        opts,
+      );
+      expect(result.handled).toBe(false);
+      expect(result.effect).toBeUndefined();
+      expect(result.state.isSearching).toBe(false);
+    }
+  });
+
+  it('a leading space starts a search when spaceCloses is not set', () => {
+    const result = menuKeyDown(initialMenuKeyState, key(' '), formattingMenu(), {});
+    expect(result.handled).toBe(true);
+    expect(result.effect).toBeUndefined();
+    expect(result.state.isSearching).toBe(true);
+    expect(result.state.query).toBe(' ');
+  });
+});
+
 describe('initialMenuKeyStateFor', () => {
   it('initial state skips separators, headers and disabled items', () => {
     const items: ContextMenuItem[] = [

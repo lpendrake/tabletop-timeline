@@ -395,8 +395,8 @@ export function EventEditorModal({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        // An open completion list (a relationship blank's choices, or an
-        // `@` link search) closes on this Escape — the modal must not also
+        // An open completion list (a relationship blank's choices, or a
+        // `[[` link search) closes on this Escape — the modal must not also
         // close on the same keypress.
         if (isEditorPopupOpen(e.target)) return;
         e.stopPropagation();

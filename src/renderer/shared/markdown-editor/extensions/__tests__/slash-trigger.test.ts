@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { EditorState } from '@codemirror/state';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { ensureSyntaxTree } from '@codemirror/language';
-import { shouldOpenSlashMenu } from '../slash-trigger';
+import { isCaretMenuTrigger } from '../slash-trigger';
 import { embeddedRanges } from '../embedded-ranges';
 
 function makeState(doc: string) {
@@ -12,10 +12,10 @@ function makeState(doc: string) {
   return state;
 }
 
-describe('shouldOpenSlashMenu', () => {
+describe('isCaretMenuTrigger', () => {
   it('opens at the start of a line', () => {
     const state = makeState('');
-    expect(shouldOpenSlashMenu(state, 0)).toBe(true);
+    expect(isCaretMenuTrigger(state, 0)).toBe(true);
   });
 
   it('slash menu is blocked inside an embedded range and opens just after it', () => {
@@ -26,92 +26,96 @@ describe('shouldOpenSlashMenu', () => {
     ];
     const inside = EditorState.create({ doc: `${embedded} `, extensions });
     ensureSyntaxTree(inside, inside.doc.length);
-    expect(shouldOpenSlashMenu(inside, embedded.indexOf('space ') + 6)).toBe(false);
-    expect(shouldOpenSlashMenu(inside, inside.doc.length)).toBe(true);
+    expect(isCaretMenuTrigger(inside, embedded.indexOf('space ') + 6)).toBe(false);
+    expect(isCaretMenuTrigger(inside, inside.doc.length)).toBe(true);
   });
 
   it('opens after a space', () => {
     const state = makeState('hello ');
-    expect(shouldOpenSlashMenu(state, state.doc.length)).toBe(true);
+    expect(isCaretMenuTrigger(state, state.doc.length)).toBe(true);
   });
 
   it('opens at the start of a later line', () => {
     const state = makeState('first\n');
-    expect(shouldOpenSlashMenu(state, state.doc.length)).toBe(true);
+    expect(isCaretMenuTrigger(state, state.doc.length)).toBe(true);
   });
 
   it('opens at the start of an empty line between paragraphs', () => {
     const state = makeState('first\n\nsecond');
     const emptyLine = state.doc.line(2);
-    expect(shouldOpenSlashMenu(state, emptyLine.from)).toBe(true);
+    expect(isCaretMenuTrigger(state, emptyLine.from)).toBe(true);
   });
 
   it('opens after a list marker and a blockquote marker', () => {
     const listItem = makeState('- ');
-    expect(shouldOpenSlashMenu(listItem, listItem.doc.length)).toBe(true);
+    expect(isCaretMenuTrigger(listItem, listItem.doc.length)).toBe(true);
 
     const blockquote = makeState('> ');
-    expect(shouldOpenSlashMenu(blockquote, blockquote.doc.length)).toBe(true);
+    expect(isCaretMenuTrigger(blockquote, blockquote.doc.length)).toBe(true);
   });
 
   it('opens on the line after a closed fenced code block, not inside one', () => {
     const afterFence = makeState('```\ncode\n```\n');
-    expect(shouldOpenSlashMenu(afterFence, afterFence.doc.length)).toBe(true);
+    expect(isCaretMenuTrigger(afterFence, afterFence.doc.length)).toBe(true);
 
     const insideFence = makeState('```\n\ncode\n```');
     const emptyLineInFence = insideFence.doc.line(2);
-    expect(shouldOpenSlashMenu(insideFence, emptyLineInFence.from)).toBe(false);
+    expect(isCaretMenuTrigger(insideFence, emptyLineInFence.from)).toBe(false);
   });
 
   it('does not open in and/or or 1/2', () => {
     const andOr = makeState('and');
-    expect(shouldOpenSlashMenu(andOr, andOr.doc.length)).toBe(false);
+    expect(isCaretMenuTrigger(andOr, andOr.doc.length)).toBe(false);
 
     const fraction = makeState('1');
-    expect(shouldOpenSlashMenu(fraction, fraction.doc.length)).toBe(false);
+    expect(isCaretMenuTrigger(fraction, fraction.doc.length)).toBe(false);
   });
 
   it('does not open after a URL scheme', () => {
     const scheme = makeState('http:');
-    expect(shouldOpenSlashMenu(scheme, scheme.doc.length)).toBe(false);
+    expect(isCaretMenuTrigger(scheme, scheme.doc.length)).toBe(false);
 
     const schemeSlash = makeState('http:/');
-    expect(shouldOpenSlashMenu(schemeSlash, schemeSlash.doc.length)).toBe(false);
+    expect(isCaretMenuTrigger(schemeSlash, schemeSlash.doc.length)).toBe(false);
   });
 
   it('does not open inside inline code', () => {
     const state = makeState('`a `');
     // Position right after "a " and before the closing backtick — inside InlineCode.
     const pos = state.doc.toString().indexOf(' `') + 1;
-    expect(shouldOpenSlashMenu(state, pos)).toBe(false);
+    expect(isCaretMenuTrigger(state, pos)).toBe(false);
   });
 
   it('does not open inside a fenced code block', () => {
     const state = makeState('```\na \n```');
     const pos = state.doc.toString().indexOf('a ') + 2;
-    expect(shouldOpenSlashMenu(state, pos)).toBe(false);
+    expect(isCaretMenuTrigger(state, pos)).toBe(false);
   });
 
-  it('does not open inside an @ link query', () => {
-    const state = makeState('@cap /');
-    expect(shouldOpenSlashMenu(state, state.doc.length)).toBe(false);
+  it('an open `[[` query still blocks `/` until `]]`', () => {
+    const open = makeState('[[cap ');
+    expect(isCaretMenuTrigger(open, open.doc.length)).toBe(false);
+    const closed = makeState('[[abcd]] ');
+    expect(isCaretMenuTrigger(closed, closed.doc.length)).toBe(true);
   });
 
-  it('does not open inside a [[ link query', () => {
-    const state = makeState('[[cap /');
-    expect(shouldOpenSlashMenu(state, state.doc.length)).toBe(false);
+  it('an email address earlier on the line is not a link query', () => {
+    const state = makeState('me@example.com ');
+    expect(isCaretMenuTrigger(state, state.doc.length)).toBe(true);
+  });
+
+  it('`@` followed by a space is not a link query', () => {
+    const state = makeState('Meet @ the inn ');
+    expect(isCaretMenuTrigger(state, state.doc.length)).toBe(true);
+  });
+
+  it('an `@` several words back does not block `/`', () => {
+    const state = makeState('see @ the old inn and then ');
+    expect(isCaretMenuTrigger(state, state.doc.length)).toBe(true);
   });
 
   it('opens after a completed link', () => {
     const closedBrackets = makeState('[[abcd]] ');
-    expect(shouldOpenSlashMenu(closedBrackets, closedBrackets.doc.length)).toBe(true);
-
-    // An `@` query has no closing delimiter, so per WIKI_LINK_QUERY_RE a
-    // trailing space (and anything after it, short of `]`, a newline, `|`,
-    // or another `@`) is still "inside" the query — matching how the wiki
-    // link completion source itself treats it (it would still offer
-    // suggestions here). The slash menu stays closed for consistency.
-    const openAtQuery = makeState('@done ');
-    expect(shouldOpenSlashMenu(openAtQuery, openAtQuery.doc.length)).toBe(false);
+    expect(isCaretMenuTrigger(closedBrackets, closedBrackets.doc.length)).toBe(true);
   });
 });
