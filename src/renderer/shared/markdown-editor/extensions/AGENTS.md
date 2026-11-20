@@ -116,14 +116,16 @@ The notes editor wires this up via `makePeekWikiLinksConfig()` in `editor-bindin
 
 ## Key files
 
-| File                                      | Role                                                                                                                                                               |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------- |
-| `extensions/wiki-links.ts`                | Parser, `WikiLinkWidget`, StateFields (`knownIdsField`, `entityLabelMapField`), StateEffects (`setKnownIds`, `setEntityLabels`), completions, click/hover handlers |
-| `extensions/__tests__/wiki-links.test.ts` | Unit tests for parsing, decoration modes, label resolution, completion insertion, hover callbacks                                                                  |
-| `src/renderer/shared/suggest-links.ts`    | `suggestLinks(entityIndex, query)` — pure filter used as `config.suggest`                                                                                          |
-| `src/renderer/notes/editor-bindings.ts`   | `makePeekWikiLinksConfig()` — wires `onHover`/`onHoverEnd` to peek stack; `makeDropLinkConfig()` — generates `[[label                                              | id]]` inserts on sidebar drag-drop |
-| `src/renderer/peek/resolve.ts`            | `resolvePeekTarget(href, baseDir, entityIndex)` — resolves a wiki-link id or plain href to a peekable file path                                                    |
-| `src/renderer/peek/stack.ts`              | Peek open/close scheduling; `openFromWikiLink` / `closeFromWikiLink` consumed by `WikiLinksConfig`                                                                 |
+| File                                            | Role                                                                                                                                                               |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------- |
+| `extensions/wiki-link-insert.ts`                | Leaf module: `WikiLinkSuggestion` type and pure `buildWikiLinkInsert` (shared by completion and the `@` menu)                                                      |
+| `extensions/wiki-links.ts`                      | Parser, `WikiLinkWidget`, StateFields (`knownIdsField`, `entityLabelMapField`), StateEffects (`setKnownIds`, `setEntityLabels`), completions, click/hover handlers |
+| `extensions/__tests__/wiki-link-insert.test.ts` | Unit tests for `buildWikiLinkInsert`                                                                                                                               |
+| `extensions/__tests__/wiki-links.test.ts`       | Unit tests for parsing, decoration modes, label resolution, completion insertion, hover callbacks                                                                  |
+| `src/renderer/shared/suggest-links.ts`          | `suggestLinks(entityIndex, query)` — pure filter used as `config.suggest`                                                                                          |
+| `src/renderer/notes/editor-bindings.ts`         | `makePeekWikiLinksConfig()` — wires `onHover`/`onHoverEnd` to peek stack; `makeDropLinkConfig()` — generates `[[label                                              | id]]` inserts on sidebar drag-drop |
+| `src/renderer/peek/resolve.ts`                  | `resolvePeekTarget(href, baseDir, entityIndex)` — resolves a wiki-link id or plain href to a peekable file path                                                    |
+| `src/renderer/peek/stack.ts`                    | Peek open/close scheduling; `openFromWikiLink` / `closeFromWikiLink` consumed by `WikiLinksConfig`                                                                 |
 
 ## Common pitfalls
 
@@ -136,3 +138,7 @@ The notes editor wires this up via `makePeekWikiLinksConfig()` in `editor-bindin
 ## Embedded host syntax
 
 Wiki links and the `/` menu stay out of text a host declares through the `embeddedRanges` facet (`embedded-ranges.ts`; see the parent `AGENTS.md`). The one current host syntax, relationship directives, is documented in `src/renderer/relationships/editor/AGENTS.md`.
+
+## at-link-menu.ts
+
+`atLinkInputHandler(suggest)` holds back a typed `@` when `isCaretMenuTrigger` (shared with the `/` menu in `editor-context-menu.ts`) holds, then opens `openCaretMenu` with `linkMenuItems(suggestions, onPick)`. Options: `backspaceCloses`, `spaceCloses`, and `escapeLeavesSearch: false` so Escape closes straight from search. Enter inserts via `buildWikiLinkInsert` (`wiki-link-insert.ts`); Escape/outside dispatch `triggerReinsertChange(pos, '@', query)` from `editor-context-menu.ts` (`@query` with the query selected, or a bare `@` caret when empty); space inserts `@ `; Backspace leaves nothing. When `suggest('')` returns nothing or rejects, the text or selection changed before it resolved, or the menu cannot be anchored, a literal `@` is typed at the caret instead. Registered from `wikiLinks()` whenever `config.suggest` is set; hosts that pass a `suggest` with no linkable notes therefore get a plain `@`. The insert position is the caret at the time the menu resolves/closes, not the keypress position.

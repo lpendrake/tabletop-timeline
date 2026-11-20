@@ -18,9 +18,11 @@ A CodeMirror 6 wrapper for editing and previewing markdown. Used by notes and th
 - `extensions/wiki-links.ts` — `[[name|id]]` parsing, completion, click handler. Activated via `props.wikiLinks`.
 - `extensions/editor-completions.ts` — the one autocompletion host every completion source registers on (`completionSources`, with `editorAutocompletion` and `completionReactivates`).
 - `extensions/embedded-ranges.ts` — the `embeddedRanges` facet; see "Embedded ranges and host extensions" below.
+- `extensions/wiki-link-insert.ts` — leaf module: the `WikiLinkSuggestion` type and pure `buildWikiLinkInsert`, shared by `wiki-links.ts` and `at-link-menu.ts`.
 - `extensions/wiki-link-query.ts` — pure `WIKI_LINK_QUERY_RE` / `isInWikiLinkQuery(textBeforeCaret)`: detects an open `[[...` link query. Shared by `wiki-links.ts` (completion source) and `slash-trigger.ts` (to suppress the `/` menu mid-query) so the two definitions can't drift.
-- `extensions/editor-context-menu.ts` — the editor's own menu (Copy / Paste / Delete / Formatting, plus any host `contextMenu.extraItems`) on plain editor text. Opens on right-click, on typing `/` at the caret (see `extensions/slash-trigger.ts`), and on Shift+F10 / the ContextMenu key. Registered unconditionally, after the mode compartment so the wiki-link contextmenu handler (live mode only) gets first refusal on `.cm-note-link` clicks.
-- `extensions/slash-trigger.ts` — pure `isCaretMenuTrigger(state, pos)`: decides whether a typed trigger character (`/`) should open a caret menu instead of inserting a character. Never opens inside an embedded range.
+- `extensions/editor-context-menu.ts` — the editor's own menu (Copy / Paste / Delete / Formatting, plus any host `contextMenu.extraItems`) on plain editor text. Opens on right-click, on typing `/` at the caret (see `extensions/slash-trigger.ts`), and on Shift+F10 / the ContextMenu key. Exports `openCaretMenu`, which the `@` link search reuses, and the pure `triggerReinsertChange(pos, trigger, query)` / `typedTextChange(pos, text)` helpers that put a held-back trigger (or typed text) back into the document; `/` and `@` both use them. Registered unconditionally, after the mode compartment so the wiki-link contextmenu handler (live mode only) gets first refusal on `.cm-note-link` clicks.
+- `extensions/at-link-menu.ts` — the `@` link search: pure `linkMenuItems`, plus `atLinkInputHandler(suggest)`, registered by `wikiLinks()` whenever `suggest` is configured (live mode). See "`@` link search" below.
+- `extensions/slash-trigger.ts` — pure `isCaretMenuTrigger(state, pos)`: decides whether a typed trigger character (`/` or `@`) should open a caret menu instead of inserting a character. Never opens inside an embedded range.
 - `extensions/decorations.ts` — markdown visual decorations (headings, bold, etc).
 - `extensions/image-decorations.ts` — renders `![alt](url)` as an inline image widget. Accepts `resolveSrc` to transform raw image paths (e.g. relative paths → `notes-asset://`).
 - `extensions/image-paste.ts` — clipboard paste. Calls `props.imagePaste.onImagePaste(blob, mime)` and inserts the returned URL.
@@ -72,6 +74,7 @@ CodeMirror standard extensions (history, keymaps, bracket matching, closeBracket
 
 - **Right-click** — at the pointer, acting on the selection if the click landed inside it, otherwise a caret at the click point.
 - **Typing `/`** — held back (not inserted) and the menu opens anchored at the caret's line, when `isCaretMenuTrigger` (`extensions/slash-trigger.ts`) says the caret is at a word boundary — the start of its line (any line, including an empty one, or right after a list/blockquote marker's space) or after whitespace — and not inside code, an open wiki-link `[[...` query (`extensions/wiki-link-query.ts`), or a URL/Link — this is what keeps `and/or`, `1/2`, and `http://` from ever triggering it. Escape (or clicking outside) re-inserts a literal `/`; Backspace drops it entirely; choosing an action runs it in place of the `/`. Typing `/` while there's a selection just types `/` normally (replacing the selection), it never opens the menu.
+- **Typing `@`** — see "`@` link search" below; it shares `isCaretMenuTrigger` with `/`.
 - **Shift+F10 / the ContextMenu key** — opens the same menu anchored at the caret, acting on the current selection, without the `/` bookkeeping (no re-insertion on Escape, Backspace doesn't close it).
 
 **Mode compartment (hot-swappable via `Compartment`):**
@@ -122,3 +125,12 @@ The editor is a shared rendering primitive. Hosts are responsible for wiring beh
 - **Don't add a sidebar drag MIME type here.** Add a `dropMimeType` + `decodeDrop` config instead.
 - **The compartment and its state are paired.** Never share a compartment instance across editor mounts unless you also share the saved state it belongs to.
 - **`wikiLinks.knownIds` drives broken-link highlighting.** An empty set means "don't highlight any links as broken yet" — pass `undefined` if the index hasn't loaded yet.
+
+## `@` link search
+
+Typing `@` where wiki links are configured (live mode) is held back and opens a caret-anchored menu of linkable notes and assets (`suggest('')`, filtered by the menu's own type-to-search on title, id and path). It opens under the same rule as `/` (`isCaretMenuTrigger`), so `me@example.com`, code, URLs, links, embedded ranges and an open `[[` query just type `@`.
+
+- **Enter** inserts `[[id]]` (or image markdown for an asset) at the caret.
+- **Escape** or **clicking outside** types `@<query>` with the query selected, so typing replaces it; with an empty query it leaves a plain `@` with the caret after it.
+- **Space** straight after `@` types a literal `@ `.
+- **Backspace** before any search closes the menu and leaves nothing.

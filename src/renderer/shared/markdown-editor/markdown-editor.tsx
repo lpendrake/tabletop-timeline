@@ -23,12 +23,8 @@ import { lintKeymap } from '@codemirror/lint';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { lastGaspThemeExtensions } from './theme';
-import {
-  wikiLinks,
-  setKnownIds,
-  setEntityLabels,
-  type WikiLinkSuggestion,
-} from './extensions/wiki-links';
+import { wikiLinks, setKnownIds, setEntityLabels } from './extensions/wiki-links';
+import type { WikiLinkSuggestion } from './extensions/wiki-link-insert';
 import { markdownLinkClick, type MarkdownLinkClickConfig } from './extensions/markdown-link-click';
 import { markdownDecorations } from './extensions/decorations';
 import { imagePaste, type ImagePasteConfig } from './extensions/image-paste';

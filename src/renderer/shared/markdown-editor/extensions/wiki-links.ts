@@ -38,18 +38,11 @@ import {
   resetLocalLabelChange,
   resolveDisplayLabel,
 } from './wiki-link-context-menu';
+import { atLinkInputHandler } from './at-link-menu';
+import { buildWikiLinkInsert, type WikiLinkSuggestion } from './wiki-link-insert';
 import { WIKI_LINK_QUERY_RE } from './wiki-link-query';
 
 export type WikiLinkStatus = 'resolved' | 'loading' | 'missing' | 'unresolved';
-
-export interface WikiLinkSuggestion {
-  id: string;
-  label: string;
-  detail?: string;
-  boost?: number;
-  /** Present for image assets — causes insertion of ![label](notes-asset://...) instead of [[label|id]] */
-  assetPath?: string;
-}
 
 export interface WikiLinksConfig {
   suggest?: (query: string) => Promise<WikiLinkSuggestion[]>;
@@ -149,6 +142,7 @@ export function wikiLinks(config: WikiLinksConfig = {}): Extension {
     wikiLinkCompletions(config),
     makeWikiLinkClickHandler(config),
     makeWikiLinkContextMenuHandler(config),
+    config.suggest ? atLinkInputHandler(config.suggest) : [],
   ];
 }
 
@@ -196,39 +190,6 @@ function wikiLinkEditKeymap(config: WikiLinksConfig): Extension {
 
 /** Length of the `[[` that opens a link query. */
 const OPEN_BRACKETS_LEN = 2;
-
-export interface WikiLinkApplyResult {
-  insert: string;
-  replaceFrom: number;
-  replaceTo: number;
-}
-
-/**
- * Builds the text and replacement range for inserting a link to `s`.
- * `replaceFrom`/`replaceTo` is the range to overwrite: the `[[query` for
- * completion, or an empty range at the caret for a bare insert. `nextTwo` is
- * the two characters after `replaceTo`; a `]]` there is absorbed into the
- * replacement so an existing closing bracket pair is not duplicated.
- */
-export function buildWikiLinkInsert(
-  s: WikiLinkSuggestion,
-  replaceFrom: number,
-  replaceTo: number,
-  nextTwo: string,
-): WikiLinkApplyResult {
-  if (s.assetPath) {
-    return {
-      insert: `![${s.label}](notes-asset://current/${s.assetPath})`,
-      replaceFrom,
-      replaceTo,
-    };
-  }
-  return {
-    insert: `[[${s.id}]]`,
-    replaceFrom,
-    replaceTo: nextTwo === ']]' ? replaceTo + 2 : replaceTo,
-  };
-}
 
 function wikiLinkCompletions(config: WikiLinksConfig): Extension {
   if (!config.suggest) return [];
