@@ -6,29 +6,34 @@ describe('isInWikiLinkQuery', () => {
     expect(isInWikiLinkQuery('[[cap')).toBe(true);
   });
 
-  it('is true inside an open @ query', () => {
-    expect(isInWikiLinkQuery('@cap')).toBe(true);
-  });
-
   it('is true across a space within an unterminated query', () => {
-    expect(isInWikiLinkQuery('@done ')).toBe(true);
+    expect(isInWikiLinkQuery('[[cap ')).toBe(true);
   });
 
-  it('is false once a [[ query is closed with ]]', () => {
+  it('an open `[[` query still blocks `/` until `]]`', () => {
+    expect(isInWikiLinkQuery('[[cap ')).toBe(true);
     expect(isInWikiLinkQuery('[[abcd]] ')).toBe(false);
   });
 
-  it('is false with no trigger character on the line', () => {
+  it('is false with no trigger on the line', () => {
     expect(isInWikiLinkQuery('hello world')).toBe(false);
   });
 
-  it('is false once the query hits a newline, |, or another @', () => {
-    expect(isInWikiLinkQuery('@foo\n')).toBe(false);
-    expect(isInWikiLinkQuery('@foo|')).toBe(false);
-    expect(isInWikiLinkQuery('@foo@')).toBe(true); // the second @ restarts the query
+  it('an email address earlier on the line is not a link query', () => {
+    expect(isInWikiLinkQuery('me@example.com ')).toBe(false);
+  });
+
+  it('`@` followed by a space is not a link query', () => {
+    expect(isInWikiLinkQuery('Meet @ the inn ')).toBe(false);
+    expect(isInWikiLinkQuery('@cap')).toBe(false);
+  });
+
+  it('is false once the query hits a newline or |', () => {
+    expect(isInWikiLinkQuery('[[foo\n')).toBe(false);
+    expect(isInWikiLinkQuery('[[foo|')).toBe(false);
   });
 
   it('exposes the shared regex', () => {
-    expect(WIKI_LINK_QUERY_RE.test('@foo')).toBe(true);
+    expect(WIKI_LINK_QUERY_RE.test('[[foo')).toBe(true);
   });
 });

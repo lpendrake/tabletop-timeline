@@ -96,16 +96,6 @@ export const entityLabelMapField = StateField.define<Map<string, string>>({
   },
 });
 
-export interface TriggerMatch {
-  prefixLen: number;
-  query: string;
-}
-
-export function parseTrigger(matchText: string): TriggerMatch {
-  const prefixLen = matchText.startsWith('@') ? 1 : 2;
-  return { prefixLen, query: matchText.slice(prefixLen) };
-}
-
 class WikiLinkWidget extends WidgetType {
   constructor(
     private readonly id: string,
@@ -204,31 +194,39 @@ function wikiLinkEditKeymap(config: WikiLinksConfig): Extension {
   );
 }
 
+/** Length of the `[[` that opens a link query. */
+const OPEN_BRACKETS_LEN = 2;
+
 export interface WikiLinkApplyResult {
   insert: string;
   replaceFrom: number;
   replaceTo: number;
 }
 
+/**
+ * Builds the text and replacement range for inserting a link to `s`.
+ * `replaceFrom`/`replaceTo` is the range to overwrite: the `[[query` for
+ * completion, or an empty range at the caret for a bare insert. `nextTwo` is
+ * the two characters after `replaceTo`; a `]]` there is absorbed into the
+ * replacement so an existing closing bracket pair is not duplicated.
+ */
 export function buildWikiLinkInsert(
   s: WikiLinkSuggestion,
-  prefixLen: number,
-  from: number,
-  to: number,
+  replaceFrom: number,
+  replaceTo: number,
   nextTwo: string,
 ): WikiLinkApplyResult {
-  const replaceFrom = from - prefixLen;
   if (s.assetPath) {
     return {
       insert: `![${s.label}](notes-asset://current/${s.assetPath})`,
       replaceFrom,
-      replaceTo: to,
+      replaceTo,
     };
   }
   return {
     insert: `[[${s.id}]]`,
     replaceFrom,
-    replaceTo: nextTwo === ']]' ? to + 2 : to,
+    replaceTo: nextTwo === ']]' ? replaceTo + 2 : replaceTo,
   };
 }
 
@@ -241,12 +239,12 @@ function wikiLinkCompletions(config: WikiLinksConfig): Extension {
       const match = context.matchBefore(WIKI_LINK_QUERY_RE);
       if (!match || (match.from === match.to && !context.explicit)) return null;
 
-      const { prefixLen, query } = parseTrigger(match.text);
+      const query = match.text.slice(OPEN_BRACKETS_LEN);
       const suggestions = await config.suggest!(query);
       if (context.aborted) return null;
 
       return {
-        from: match.from + prefixLen,
+        from: match.from + OPEN_BRACKETS_LEN,
         to: context.pos,
         options: suggestions.map((s) => ({
           label: s.label,
@@ -255,8 +253,7 @@ function wikiLinkCompletions(config: WikiLinksConfig): Extension {
             const nextTwo = view.state.doc.sliceString(to, to + 2);
             const { insert, replaceFrom, replaceTo } = buildWikiLinkInsert(
               s,
-              prefixLen,
-              from,
+              from - OPEN_BRACKETS_LEN,
               to,
               nextTwo,
             );
@@ -266,7 +263,7 @@ function wikiLinkCompletions(config: WikiLinksConfig): Extension {
             });
           },
         })),
-        validFor: /^[^\]\n|@]*$/,
+        validFor: /^[^\]\n|]*$/,
       };
     }),
   ];

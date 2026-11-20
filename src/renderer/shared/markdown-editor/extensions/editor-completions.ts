@@ -8,7 +8,7 @@
  *
  * Sources are asked in precedence order and the first non-null result wins,
  * so a more specific host source (such as an embedded syntax's fields) can be
- * registered with a higher `Prec` than a general one (`[[` / `@` links).
+ * registered with a higher `Prec` than a general one (`[[` links).
  */
 import {
   autocompletion,

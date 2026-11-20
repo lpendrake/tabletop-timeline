@@ -44,7 +44,7 @@ import {
   toggleHeadingLevel2Command,
   toggleHeadingLevel3Command,
 } from '../commands';
-import { shouldOpenSlashMenu } from './slash-trigger';
+import { isCaretMenuTrigger } from './slash-trigger';
 
 export interface EditorMenuContext {
   view: EditorView;
@@ -323,7 +323,7 @@ function makeSlashInputHandler(config: EditorContextMenuConfig): Extension {
     if (text !== '/') return false;
     if (from !== to) return false;
     if (!isEditable(view, config)) return false;
-    if (!shouldOpenSlashMenu(view.state, from)) return false;
+    if (!isCaretMenuTrigger(view.state, from)) return false;
 
     const opened = openCaretMenu(view, { from, to: from }, config, {
       backspaceCloses: true,

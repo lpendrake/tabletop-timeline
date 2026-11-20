@@ -83,13 +83,13 @@ Both StateFields replace their entire value on each matching effect — they do 
 
 ## Completions — `wikiLinkCompletions`
 
-Activated when `config.suggest` is provided. Registered on the shared `completionSources` facet (see `editor-completions.ts`), not its own `autocompletion({ override })`, so it can coexist with completion sources a host adds through `liveExtensions`. Matches the regex `/(?:\[\[|@)[^\]\n|@]*$/` at the cursor — so both `[[query` and `@query` trigger the completion menu (`@` is a shorthand alias).
+Activated when `config.suggest` is provided. Registered on the shared `completionSources` facet (see `editor-completions.ts`), not its own `autocompletion({ override })`, so it can coexist with completion sources a host adds through `liveExtensions`. Matches `WIKI_LINK_QUERY_RE` (`/\[\[[^\]\n|]*$/`) at the cursor, so only an open `[[query` triggers the completion menu; an `@` in the text has no effect.
 
 Flow:
 
-1. `parseTrigger` extracts the trigger prefix length (2 for `[[`, 1 for `@`) and the raw query string.
+1. The raw query is the matched text after the `[[`.
 2. `config.suggest(query)` is called (async); returns `WikiLinkSuggestion[]`.
-3. Each suggestion's `apply` callback calls `buildWikiLinkInsert`, which:
+3. Each suggestion's `apply` callback calls `buildWikiLinkInsert(s, replaceFrom, replaceTo, nextTwo)` with the range starting at the `[[`; the helper takes the replace range directly so a caller can also insert at a bare caret. It:
    - For normal entities: inserts `[[id]]` (label-free format), absorbing a trailing `]]` if already present.
    - For image assets (`suggestion.assetPath` set): inserts `![label](notes-asset://current/{assetPath})` instead.
 

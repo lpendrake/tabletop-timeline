@@ -2,8 +2,9 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
+import { CompletionContext, type Completion } from '@codemirror/autocomplete';
+import { completionSources } from '../editor-completions';
 import {
-  parseTrigger,
   findWikiLinksInLine,
   wikiLinks,
   buildDecorations,
@@ -14,21 +15,6 @@ import {
   type WikiLinksConfig,
   type WikiLinkSuggestion,
 } from '../wiki-links';
-
-describe('parseTrigger', () => {
-  it('treats [[ as a 2-char prefix', () => {
-    expect(parseTrigger('[[hello')).toEqual({ prefixLen: 2, query: 'hello' });
-  });
-
-  it('treats @ as a 1-char prefix', () => {
-    expect(parseTrigger('@hello')).toEqual({ prefixLen: 1, query: 'hello' });
-  });
-
-  it('returns empty query for bare trigger', () => {
-    expect(parseTrigger('[[')).toEqual({ prefixLen: 2, query: '' });
-    expect(parseTrigger('@')).toEqual({ prefixLen: 1, query: '' });
-  });
-});
 
 describe('findWikiLinksInLine', () => {
   it('parses a link with label and id', () => {
@@ -195,35 +181,31 @@ describe('buildWikiLinkInsert', () => {
   const note: WikiLinkSuggestion = { id: 'abc1', label: 'Alice' };
 
   it('inserts [[id]] format (not [[label|id]])', () => {
-    const { insert } = buildWikiLinkInsert(note, 2, 10, 15, 'xx');
+    const { insert } = buildWikiLinkInsert(note, 8, 15, 'xx');
     expect(insert).toBe('[[abc1]]');
   });
 
-  it('replaceFrom accounts for the [[ prefix', () => {
-    const { replaceFrom } = buildWikiLinkInsert(note, 2, 10, 15, 'xx');
-    expect(replaceFrom).toBe(8);
+  it('inserting at a bare caret replaces nothing before it', () => {
+    const { replaceFrom, replaceTo } = buildWikiLinkInsert(note, 12, 12, 'xx');
+    expect(replaceFrom).toBe(12);
+    expect(replaceTo).toBe(12);
   });
 
   it('does not absorb trailing ]] when not present', () => {
-    const { replaceTo } = buildWikiLinkInsert(note, 2, 10, 15, 'xx');
+    const { replaceTo } = buildWikiLinkInsert(note, 8, 15, 'xx');
     expect(replaceTo).toBe(15);
   });
 
   it('absorbs trailing ]] when already present', () => {
-    const { replaceTo } = buildWikiLinkInsert(note, 2, 10, 15, ']]');
+    const { replaceTo } = buildWikiLinkInsert(note, 8, 15, ']]');
     expect(replaceTo).toBe(17);
   });
 
   it('inserts image markdown for asset suggestions', () => {
     const img: WikiLinkSuggestion = { id: 'img1', label: 'photo', assetPath: 'images/photo.png' };
-    const { insert, replaceTo } = buildWikiLinkInsert(img, 1, 5, 10, ']]');
+    const { insert, replaceTo } = buildWikiLinkInsert(img, 3, 10, ']]');
     expect(insert).toBe('![photo](notes-asset://current/images/photo.png)');
     expect(replaceTo).toBe(10);
-  });
-
-  it('uses @ prefix length of 1 correctly', () => {
-    const { replaceFrom } = buildWikiLinkInsert(note, 1, 8, 12, 'xx');
-    expect(replaceFrom).toBe(7);
   });
 });
 
@@ -416,5 +398,40 @@ describe('entity label resolution', () => {
     views.push(view);
     view.dispatch({ effects: setEntityLabels.of(new Map([['abc1', 'Alice the Wizard']])) });
     expect(view.state.field(entityLabelMapField)).toEqual(new Map([['abc1', 'Alice the Wizard']]));
+  });
+});
+
+describe('wiki-link completion source', () => {
+  const note: WikiLinkSuggestion = { id: 'abc1', label: 'Alice' };
+
+  function setup(doc: string) {
+    const suggest = vi.fn(async () => [note]);
+    const state = EditorState.create({ doc, extensions: [wikiLinks({ suggest })] });
+    const source = state.facet(completionSources)[0];
+    return { state, source, suggest };
+  }
+
+  it('typing after `@` in the document does not open link completion', async () => {
+    const { state, source, suggest } = setup('@foo');
+    const result = await source(new CompletionContext(state, state.doc.length, false));
+    expect(result).toBeNull();
+    expect(suggest).not.toHaveBeenCalled();
+  });
+
+  it('completion replaces from the start of the `[[`', async () => {
+    const { state, source } = setup('see [[ali');
+    const result = await source(new CompletionContext(state, state.doc.length, false));
+    expect(result).not.toBeNull();
+    expect(result!.from).toBe(6);
+    const view = new EditorView({ state });
+    const option = result!.options[0];
+    (option.apply as (v: EditorView, c: Completion, from: number, to: number) => void)(
+      view,
+      option,
+      result!.from,
+      result!.to ?? state.doc.length,
+    );
+    expect(view.state.doc.toString()).toBe('see [[abc1]]');
+    view.destroy();
   });
 });
